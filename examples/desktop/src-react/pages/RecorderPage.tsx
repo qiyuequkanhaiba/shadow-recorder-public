@@ -21,6 +21,7 @@ import { useTheme } from '../hooks/useTheme';
 import {
   createRecorderRuntimeInput,
   createTuningAdvisorInput,
+  isSemanticRecordingEnabled,
 } from '../lib/recorder-page-bindings';
 import { DEFAULT_CONFIG } from '../lib/tuning-advisor';
 import { toUiErrorMessage } from '../lib/ui-error';
@@ -115,7 +116,7 @@ export function RecorderPage() {
     streams: dashboard.videoStreams,
     segments: dashboard.recentSegments,
   });
-  const semanticRecordingEnabled = config.semanticRecordingEnabled ?? !!config.defectEvidenceEnabled;
+  const semanticRecordingEnabled = isSemanticRecordingEnabled(config);
   const elapsedMsRef = useRef(0);
   const lastElapsedTickRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);

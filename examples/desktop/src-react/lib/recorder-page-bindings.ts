@@ -9,6 +9,10 @@ type BaseUiInput = {
   setError: Dispatch<SetStateAction<string>>;
 };
 
+export function isSemanticRecordingEnabled(config: RecorderConfigPayload): boolean {
+  return !!config.semanticRecordingEnabled || !!config.defectEvidenceEnabled;
+}
+
 export function createRecorderRuntimeInput(
   input: BaseUiInput & {
     config: RecorderConfigPayload;

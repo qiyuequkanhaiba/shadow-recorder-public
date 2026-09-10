@@ -219,7 +219,12 @@ function assertPrivacyFirstCaptureBoundaries(): void {
   );
   assert.match(
     privacyPanelSource,
-    /const semanticRecordingEnabled\s*=\s*!!props\.config\.semanticRecordingEnabled \|\| !!props\.config\.defectEvidenceEnabled;/,
+    /import \{ isSemanticRecordingEnabled \} from '\.\.\/\.\.\/lib\/recorder-page-bindings';/,
+    'privacy panel must use the shared semantic-recording compatibility resolver',
+  );
+  assert.match(
+    privacyPanelSource,
+    /const semanticRecordingEnabled = isSemanticRecordingEnabled\(props\.config\);/,
     'plaintext consent must be available whenever either semantic recording flag is enabled',
   );
 }

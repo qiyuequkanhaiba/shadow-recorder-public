@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
 
 import type { RecorderConfigPayload, SemanticProfileImportRecord } from '../../../types/contracts';
+import { isSemanticRecordingEnabled } from '../../lib/recorder-page-bindings';
 import {
   SemanticProfileEditor,
   type EditableSemanticProfile,
@@ -61,7 +62,7 @@ function tabSubLabel(item: ProfileLibraryItem): string {
 }
 
 export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelProps) {
-  const enabled = props.config.semanticRecordingEnabled ?? !!props.config.defectEvidenceEnabled;
+  const enabled = isSemanticRecordingEnabled(props.config);
   const pre = props.config.defectPreWindowSeconds ?? 60;
   const post = props.config.defectPostWindowSeconds ?? 20;
 

@@ -1,6 +1,7 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
 
 import type { RecorderConfigPayload, RecorderMaskRegionPayload } from '../../../types/contracts';
+import { isSemanticRecordingEnabled } from '../../lib/recorder-page-bindings';
 
 type PrivacySettingsPanelProps = {
   config: RecorderConfigPayload;
@@ -39,8 +40,7 @@ function resolveMaskRegion(config: RecorderConfigPayload): RecorderMaskRegionPay
 
 export function PrivacySettingsPanel(props: PrivacySettingsPanelProps) {
   const maskRegion = resolveMaskRegion(props.config);
-  const semanticRecordingEnabled =
-    !!props.config.semanticRecordingEnabled || !!props.config.defectEvidenceEnabled;
+  const semanticRecordingEnabled = isSemanticRecordingEnabled(props.config);
 
   function updateKeywords(
     key: 'excludedWindowTitleKeywords' | 'excludedProcessNames',

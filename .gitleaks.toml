@@ -1,0 +1,15 @@
+title = "Shadow Recorder secret scanning policy"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic values used by redaction tests only"
+regexTarget = "secret"
+regexes = [
+  '''^SENTINEL_STORE_SECRET$''',
+  '''^SENTINEL_SECRET_VALUE_42$''',
+  '''^example-secret-value$''',
+  '''^token-plaintext$''',
+  '''^local-key$'''
+]

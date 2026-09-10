@@ -493,7 +493,7 @@ mod tests {
             "value": "draft@example.invalid",
             "valueText": "draft@example.invalid",
             "selectedNames": ["Production"],
-            "path": "C:/Users/example/Documents/draft.txt",
+            "path": "C:/workspace/draft.txt",
             "clipboardText": "copied draft"
         }));
         event.event_id = "sem-plaintext-disabled-export".to_string();

@@ -39,6 +39,8 @@ function resolveMaskRegion(config: RecorderConfigPayload): RecorderMaskRegionPay
 
 export function PrivacySettingsPanel(props: PrivacySettingsPanelProps) {
   const maskRegion = resolveMaskRegion(props.config);
+  const semanticRecordingEnabled =
+    !!props.config.semanticRecordingEnabled || !!props.config.defectEvidenceEnabled;
 
   function updateKeywords(
     key: 'excludedWindowTitleKeywords' | 'excludedProcessNames',
@@ -93,10 +95,27 @@ export function PrivacySettingsPanel(props: PrivacySettingsPanelProps) {
             <small>仅影响新帧，不回溯修改缓存。</small>
           </span>
         </label>
+
+        <label className="settings-toggle">
+          <input
+            type="checkbox"
+            checked={!!props.config.semanticPlaintextInputEnabled}
+            disabled={!semanticRecordingEnabled}
+            onChange={(event) => props.setConfig((current) => ({
+              ...current,
+              semanticPlaintextInputEnabled: event.target.checked,
+            }))}
+          />
+          <span>
+            <strong>允许采集非密码文本</strong>
+            <small>关闭时只记录非文本语义元数据。开启后，输入内容、选项名称或路径可能出现在本地会话和导出文件中；密码字段仍不记录文本。</small>
+          </span>
+        </label>
       </section>
 
       <section className="settings-section">
         <h3 className="settings-section-title">排除规则</h3>
+        <p className="settings-section-desc">遮罩和排除规则仅影响后续采集，不会修改已写入的视频或导出文件。</p>
         <div className="settings-fields settings-fields-2">
           <label className="settings-field settings-field-area">
             <span className="settings-field-label">排除进程名</span>

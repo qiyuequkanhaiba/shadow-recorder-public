@@ -1747,6 +1747,23 @@ mod tests {
     }
 
     #[test]
+    fn config_mapping_defaults_semantic_plaintext_capture_to_opt_in() {
+        let default_config: crate::config::RecorderConfig = JsRecorderConfig {
+            semantic_plaintext_input_enabled: None,
+            ..JsRecorderConfig::default()
+        }
+        .into();
+        assert!(!default_config.semantic_plaintext_input_enabled);
+
+        let opt_in_config: crate::config::RecorderConfig = JsRecorderConfig {
+            semantic_plaintext_input_enabled: Some(true),
+            ..JsRecorderConfig::default()
+        }
+        .into();
+        assert!(opt_in_config.semantic_plaintext_input_enabled);
+    }
+
+    #[test]
     fn config_mapping_respects_capture_reuse_override() {
         let config: crate::config::RecorderConfig = JsRecorderConfig {
             capture_reuse_enabled: Some(false),

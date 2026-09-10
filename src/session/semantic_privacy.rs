@@ -24,8 +24,10 @@ const TEXT_VALUE_KEYS: &[&str] = &[
     "candidates",
     "pathValue",
     "filePath",
+    "path",
+    "clipboardText",
 ];
-/// Selection/option labels (not keystroke plaintext); keep unless app-sensitive/password.
+/// Selection/option labels require the plaintext opt-in outside sensitive/password contexts.
 const SELECTION_LABEL_KEYS: &[&str] = &["selectedNames", "selectedName", "selectionLabel"];
 
 const TEXT_LENGTH_KEYS: &[&str] = &["valueLength", "textLength", "candidateLength"];
@@ -212,12 +214,18 @@ fn sanitize_object(
         }
 
         if is_selection_label_key(&key) {
-            // Option names / path labels for repro — only strip for password/sensitive apps.
-            if matches!(mode, PayloadMode::Password | PayloadMode::Sensitive) {
-                remove_keys.push(key);
-                if mode == PayloadMode::Password {
+            match mode {
+                PayloadMode::PlaintextAllowed => {}
+                PayloadMode::TextLengthOnly => {
+                    remove_keys.push(key);
+                    report.text_length_only = true;
+                }
+                PayloadMode::Password => {
+                    remove_keys.push(key);
                     report.password_redacted = true;
-                } else {
+                }
+                PayloadMode::Sensitive => {
+                    remove_keys.push(key);
                     report.sensitive_redacted = true;
                 }
             }
@@ -476,6 +484,36 @@ mod tests {
             sanitized.payload["valueLength"],
             SENTINEL_SECRET.chars().count()
         );
+    }
+
+    #[test]
+    fn semantic_privacy_disabled_plaintext_removes_non_password_export_fields() {
+        let mut event = sample_event(json!({
+            "controlType": "Edit",
+            "value": "draft@example.invalid",
+            "valueText": "draft@example.invalid",
+            "selectedNames": ["Production"],
+            "path": "C:/Users/example/Documents/draft.txt",
+            "clipboardText": "copied draft"
+        }));
+        event.event_id = "sem-plaintext-disabled-export".to_string();
+        event.occurred_at_ms = 1_710_000_000_123;
+        event.privacy_class = PrivacyClass::NotSensitive;
+
+        let (sanitized, report) =
+            sanitize_semantic_event_with_options(&event, &SemanticPrivacyOptions::default());
+
+        assert!(report.text_length_only);
+        assert!(sanitized.payload.get("value").is_none());
+        assert!(sanitized.payload.get("valueText").is_none());
+        assert!(sanitized.payload.get("selectedNames").is_none());
+        assert!(sanitized.payload.get("path").is_none());
+        assert!(sanitized.payload.get("clipboardText").is_none());
+        assert_eq!(sanitized.event_id, "sem-plaintext-disabled-export");
+        assert_eq!(sanitized.occurred_at_ms, 1_710_000_000_123);
+        assert_eq!(sanitized.payload["controlType"], "Edit");
+        assert_eq!(sanitized.privacy_class, PrivacyClass::TextLengthOnly);
+        assert_eq!(sanitized.payload["privacyClass"], "text-length-only");
     }
 
     #[test]

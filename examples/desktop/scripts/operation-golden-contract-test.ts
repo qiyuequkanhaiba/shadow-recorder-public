@@ -142,6 +142,88 @@ function assertPasswordPayloadIsRedacted(event: GoldenEvent, caseId: string): vo
   }
 }
 
+function readRepoSource(relativePath: string): string {
+  return readFileSync(path.resolve(__dirname, '../../..', relativePath), 'utf8');
+}
+
+function extractRustTestSource(source: string, testName: string): string {
+  const start = source.indexOf(`fn ${testName}()`);
+  assert(start >= 0, `native sanitizer regression test not found: ${testName}`);
+  const nextTest = source.indexOf('\n    #[test]', start + testName.length);
+  return source.slice(start, nextTest >= 0 ? nextTest : undefined);
+}
+
+function assertPrivacyFirstCaptureBoundaries(): void {
+  const configSource = readRepoSource('src/config.rs');
+  const recorderSource = readRepoSource('src/recorder.rs');
+  const ipcSource = readRepoSource('examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc.ts');
+  const privacyPanelSource = readRepoSource('examples/desktop/src-react/features/privacy/PrivacySettingsPanel.tsx');
+  const semanticPrivacySource = readRepoSource('src/session/semantic_privacy.rs');
+  const nativeRegressionSource = extractRustTestSource(
+    semanticPrivacySource,
+    'semantic_privacy_disabled_plaintext_removes_non_password_export_fields',
+  );
+
+  assert.match(
+    configSource,
+    /pub const DEFAULT_SEMANTIC_PLAINTEXT_INPUT_ENABLED: bool = false;/,
+    'plaintext capture must default to opt-in',
+  );
+  assert.match(
+    recorderSource,
+    /let semantic_plaintext_input_enabled\s*=\s*semantic_recording_enabled && config\.semantic_plaintext_input_enabled;/,
+    'plaintext capture must require semantic recording and explicit opt-in',
+  );
+  assert.match(
+    ipcSource,
+    /privacyEnabled: true,[\s\S]*semanticPlaintextInputEnabled: false,/,
+    'Electron baseline must enable privacy and disable plaintext capture',
+  );
+  assert.match(
+    semanticPrivacySource,
+    /"path",\s*"clipboardText",/,
+    'native sanitizer must classify path and clipboardText as plaintext values',
+  );
+  for (const plaintextField of ['value', 'valueText', 'selectedNames', 'path', 'clipboardText']) {
+    assert.match(
+      nativeRegressionSource,
+      new RegExp(`"${plaintextField}":`),
+      `native sanitizer regression must start with ${plaintextField}`,
+    );
+    assert.match(
+      nativeRegressionSource,
+      new RegExp(`get\\("${plaintextField}"\\)\\.is_none\\(\\)`),
+      `native sanitizer regression must remove ${plaintextField}`,
+    );
+  }
+  assert.match(
+    nativeRegressionSource,
+    /event\.event_id = [\s\S]*event\.occurred_at_ms = [\s\S]*"controlType": "Edit"|"controlType": "Edit"[\s\S]*event\.event_id = [\s\S]*event\.occurred_at_ms = /,
+    'native sanitizer regression must use stable identity, timestamp, and control metadata',
+  );
+  assert.match(
+    nativeRegressionSource,
+    /sanitize_semantic_event_with_options\(&event, &SemanticPrivacyOptions::default\(\)\)[\s\S]*sanitized\.event_id[\s\S]*sanitized\.occurred_at_ms[\s\S]*payload\["controlType"\][\s\S]*PrivacyClass::TextLengthOnly/,
+    'native sanitizer regression must retain metadata and classify disabled plaintext as text-length-only',
+  );
+  assert.match(privacyPanelSource, /允许采集非密码文本/, 'privacy panel must provide plaintext consent');
+  assert.match(
+    privacyPanelSource,
+    /关闭时只记录非文本语义元数据。开启后，输入内容、选项名称或路径可能出现在本地会话和导出文件中；密码字段仍不记录文本。/,
+    'privacy panel must explain plaintext capture consequences',
+  );
+  assert.match(
+    privacyPanelSource,
+    /遮罩和排除规则仅影响后续采集，不会修改已写入的视频或导出文件。/,
+    'privacy panel must explain the non-retroactive scope of masking and exclusion',
+  );
+  assert.match(
+    privacyPanelSource,
+    /const semanticRecordingEnabled\s*=\s*!!props\.config\.semanticRecordingEnabled \|\| !!props\.config\.defectEvidenceEnabled;/,
+    'plaintext consent must be available whenever either semantic recording flag is enabled',
+  );
+}
+
 function assertManifest(value: unknown): GoldenManifest {
   const manifest = asRecord(value, 'manifest') as unknown as GoldenManifest;
   assert.equal(manifest.schemaVersion, 1, 'manifest schemaVersion');
@@ -268,6 +350,7 @@ function assertCase(value: unknown, manifest: GoldenManifest): GoldenCase {
 }
 
 function run(): void {
+  assertPrivacyFirstCaptureBoundaries();
   const fixtureRoot = resolveFixtureRoot();
   const manifestPath = path.join(fixtureRoot, 'manifest.json');
   const manifest = assertManifest(readJson<unknown>(manifestPath));

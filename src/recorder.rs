@@ -1083,11 +1083,10 @@ impl Recorder {
         // builder default to false and were not forwarded from Electron, so clicks stayed L1.
         let uia_observer_enabled = semantic_recording_enabled;
         let operation_builder_enabled = semantic_recording_enabled;
-        // Product rule: semantic steps should include concrete content (typed text,
-        // selected option names, path results). Password values remain redacted.
-        // Desktop currently exposes a single semantic switch; couple content capture
-        // to it so defect-evidence repro steps are useful by default.
-        let semantic_plaintext_input_enabled = semantic_recording_enabled;
+        // Product rule: plaintext semantic content requires explicit opt-in. Password values
+        // remain redacted even when the user opts in.
+        let semantic_plaintext_input_enabled =
+            semantic_recording_enabled && config.semantic_plaintext_input_enabled;
         crate::session::set_semantic_feature_flags(
             semantic_recording_enabled,
             uia_observer_enabled,

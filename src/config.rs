@@ -26,9 +26,8 @@ pub const DEFAULT_SEMANTIC_RECORDING_ENABLED: bool = false;
 pub const DEFAULT_UIA_OBSERVER_ENABLED: bool = false;
 pub const DEFAULT_OPERATION_BUILDER_ENABLED: bool = false;
 pub const DEFAULT_OPERATION_REVIEW_V2_ENABLED: bool = false;
-/// Default on for defect-evidence: record typed text / selection labels / paths
-/// when semantic recording is enabled. Password controls are still never stored.
-pub const DEFAULT_SEMANTIC_PLAINTEXT_INPUT_ENABLED: bool = true;
+/// Plaintext semantic input capture requires an explicit opt-in. Password controls are never stored.
+pub const DEFAULT_SEMANTIC_PLAINTEXT_INPUT_ENABLED: bool = false;
 pub const DEFAULT_UIA_OBSERVER_DEDUP_MS: u64 = 50;
 pub const DEFAULT_UIA_OBSERVER_EVENT_BUDGET_PER_SECOND: u32 = 240;
 pub const DEFAULT_UIA_OBSERVER_LOW_PRIORITY_EVENT_BUDGET_PER_SECOND: u32 = 80;

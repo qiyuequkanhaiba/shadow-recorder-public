@@ -1,0 +1,24 @@
+# Third-Party Notices
+
+The source code in this repository is licensed under the MIT License in
+`LICENSE`. Third-party dependencies and release-bundled tools are separately
+licensed; the MIT License does not replace their licenses or notices.
+
+## FFmpeg
+
+No FFmpeg binary is committed to this repository. Windows release installers
+may bundle the pinned `ffmpeg 9.0 essentials` archive obtained by the build
+workflow from Gyan.dev or its Gyan GitHub mirror. The build verifies the
+archive SHA-256 before extraction.
+
+Every release that bundles FFmpeg must include the license and notice files
+shipped in the exact FFmpeg archive used for that release, together with its
+source URL, version, and archive SHA-256. The release attestation records
+these values; see `tools/ffmpeg/README.md` and
+`docs/release-artifact-attestation-template.md`.
+
+## Dependencies
+
+Rust crates, npm packages, Electron, WiX, and other build-time or runtime
+dependencies retain their own copyright and license terms. The release owner
+must preserve any notices required by the exact dependency artifacts shipped.

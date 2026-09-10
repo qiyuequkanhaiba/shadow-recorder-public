@@ -3,6 +3,7 @@
   "version": "0.1.10",
   "private": true,
   "author": "ReqCase",
+  "license": "MIT",
   "description": "Electron + React demo for shadow_recorder napi plugin",
   "main": "dist-electron/src-electron/main.js",
   "scripts": {

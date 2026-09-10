@@ -1,68 +1,82 @@
-# Shadow Recorder (Rust + NAPI-RS)
+# ReqCase Shadow Recorder
 
-本仓库包含：
+ReqCase Shadow Recorder is a Windows desktop recorder for local screen capture,
+operation and system-event capture, playback, and local evidence export. The
+repository contains a Rust + NAPI-RS native addon and an Electron + React
+desktop application.
 
-- Rust + NAPI-RS 的 `Shadow Recorder` 插件（Windows 全局点击事件记录 + 截图缓冲）
-- 一个 `Electron + React + TypeScript` 桌面示例（可作为 ReqCaseIntelligence 子模块嵌入）
+## Scope And Status
 
-## Rust 导出接口
+- Supported platform: Windows. The capture backend uses Windows APIs and the
+  desktop installers target Windows x64.
+- Data stays on the local machine unless the operator exports it. The project
+  does not provide a hosted recording or evidence service.
+- Recordings and exported evidence can contain sensitive information. Use the
+  privacy controls before capture and handle exported files as sensitive data.
+- This software is provided as-is. It does not make an evidence bundle a
+  business-correctness determination.
 
-- `start_recording()`
-- `stop_recording()`
-- `get_buffer()`
-- `get_buffer_since(last_id)`
-- `set_config(config)`
-- `get_metrics()`
-- `subscribe_steps(callback)`
-- `unsubscribe_steps()`
+## Privacy
 
-## Desktop 示例
+- Semantic plaintext capture is disabled by default and requires the explicit
+  `允许采集非密码文本` opt-in in the desktop privacy settings.
+- Password controls are redacted even when plaintext capture is enabled.
+- Exclusion and masking rules apply to future capture only; they do not rewrite
+  video or exports already written to disk.
+- Do not commit recordings, evidence exports, diagnostics bundles, clipboard
+  content, local paths, credentials, or personal data. The public boundary
+  audit and Gitleaks scan enforce this policy in CI.
 
-请查看 `examples/desktop/README.md`，已包含：
+## Build On Windows
 
-- 统一 IPC 命名：`reqcase:shadow-recorder:*`
-- Node 侧 `index.js / index.ts` 调用示例
-- React 时间线数据契约（含红点标注坐标）
-- 监控开始后最小化到系统托盘
-- 报告导出按钮 + Mock AI 重现步骤接口
+Install a current Rust toolchain, Node.js, and the Visual Studio C++ build
+tools. For the native environment check and addon build:
 
-## Windows 构建环境问题
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-env-check.ps1
+powershell -ExecutionPolicy Bypass -File .\scripts\windows-build-native.ps1
+```
 
-若出现 `link.exe` 或 `kernel32.lib` 缺失，请先处理本机工具链：
+Run the desktop application:
 
-- 文档：`docs/windows-build-env.md`
+```powershell
+cd examples/desktop
+npm install
+npm run dev
+```
 
-## Windows 快速自检与构建
+See [examples/desktop/README.md](examples/desktop/README.md) for Electron
+commands, packaging, and the supported FFmpeg workflow.
 
-仓库提供了两个 PowerShell 脚本，方便快速定位和修复本机构建问题：
+## Existing Installers
 
-1. 环境自检（检查 `cargo/rustup/link/cl`、目标架构、已安装 target、`.node` 产物）  
-   `powershell -ExecutionPolicy Bypass -File .\scripts\windows-env-check.ps1`
-2. 一键构建原生插件（默认按 Node 架构自动选择 target）  
-   `powershell -ExecutionPolicy Bypass -File .\scripts\windows-build-native.ps1`
+Windows EXE and MSI installers are distributed through GitHub Releases rather
+than committed to this repository. Before downloading, verify the release's
+`SHA256SUMS.txt`, public source commit, FFmpeg attribution, signing status, and
+artifact attestation. Existing installers may only be reused when their runtime
+and build source files match a public source commit.
 
-可选参数：
+## Documentation
 
-- 指定架构：`-TargetArch x64` 或 `-TargetArch arm64`
-- Release 构建：`-Release`
-- 跳过环境检查（已在 VS Native Tools shell 内时可用）：`-SkipEnvCheck`
+- [Architecture](docs/architecture.md)
+- [Windows build environment](docs/windows-build-env.md)
+- [Release checklist](docs/release-checklist.md)
+- [Release artifact attestation](docs/release-artifact-attestation-template.md)
+- [v0.1.10 existing installer attestation](docs/releases/v0.1.10-artifact-attestation.md)
+- [FFmpeg attribution](tools/ffmpeg/README.md)
+- [Security policy](SECURITY.md)
 
-## 一键安全清理
+## Security
 
-仓库提供了一个可重复执行的安全清理脚本，只删除可再生成的构建产物、测试录制产物、WiX 中间目录和下载缓存，不会动源码、`examples/desktop/node_modules`、最终安装包和 `tools/ffmpeg/bin/ffmpeg.exe`。
+Report vulnerabilities through the repository's private GitHub vulnerability
+reporting flow after it is enabled. Do not create a public issue containing a
+recording, export, diagnostic bundle, or any captured sensitive data. Details
+are in [SECURITY.md](SECURITY.md).
 
-- 预览将清理什么：  
-  `powershell -ExecutionPolicy Bypass -File .\scripts\safe-clean-workspace.ps1 -DryRun`
-- 直接清理：  
-  `powershell -ExecutionPolicy Bypass -File .\scripts\safe-clean-workspace.ps1`
+## License And Brand
 
-桌面示例目录也提供了快捷命令：
-
-- `cd examples/desktop && npm run clean:safe:dry-run`
-- `cd examples/desktop && npm run clean:safe`
-
-构建完成后，脚本会确保兼容路径存在：
-
-- `target/debug/shadow_recorder.node`（或 `target/release/shadow_recorder.node`）
-
-这样 `examples/desktop/src-electron/native-binding.ts` 可以直接加载插件。
+Copyright (c) 2026 ReqCase. The source code is available under the
+[MIT License](LICENSE). The ReqCase name, the `com.reqcase.shadowrecorder` app
+ID, and the `reqcase:shadow-recorder:*` IPC namespace are retained project
+identifiers. Third-party dependencies and any bundled FFmpeg binary keep their
+own licenses; see [NOTICE](NOTICE).

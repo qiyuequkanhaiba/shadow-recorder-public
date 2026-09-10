@@ -1,6 +1,12 @@
-# ReqCaseIntelligence Shadow Recorder Desktop Demo
+# ReqCase Shadow Recorder Desktop
 
-This directory contains the current Electron + React desktop demo for the shadow recorder native module.
+This directory contains the Electron + React desktop application for the
+ReqCase Shadow Recorder native module.
+
+The application is Windows-only. It stores recordings and evidence locally,
+where they may contain sensitive data. Review the root [privacy guidance](../../README.md#privacy),
+[security policy](../../SECURITY.md), [MIT License](../../LICENSE), and
+[third-party notices](../../NOTICE) before distributing a build.
 
 ## Current scope
 
@@ -110,6 +116,11 @@ npm run prepare:ffmpeg
 npm run pack
 npm run dist
 ```
+
+The GitHub source repository never commits the FFmpeg binary or generated EXE
+and MSI installers. Every published installer needs a public-source commit,
+SHA-256 checksum, and the FFmpeg license material from the exact bundled
+archive. See `../../docs/release-artifact-attestation-template.md`.
 
 Windows installers:
 

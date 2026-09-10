@@ -6,6 +6,19 @@
 - Confirm user-facing release notes include recorder, AI, privacy, and compatibility changes.
 - Confirm rollback target tag and installer artifact are available before publishing.
 
+## Public Source And Artifact Provenance
+
+- Confirm `LICENSE`, `NOTICE`, `SECURITY.md`, Cargo metadata, and desktop
+  package metadata pass `pwsh -NoProfile -File .\scripts\public-release-metadata-audit.ps1`.
+- Complete `docs/release-artifact-attestation-template.md` with a public source
+  commit, artifact SHA-256 values, FFmpeg attribution, signing state, and
+  manual smoke result.
+- Existing installers may be reused only when their runtime and build source
+  files match a public commit. The public release must name that public commit,
+  never the private build commit or a private filesystem path.
+- Upload `SHA256SUMS.txt` generated from the exact EXE and MSI files attached
+  to the GitHub Release.
+
 ## Native Build
 
 - Run the Windows native release build with `npm run build:native:release` from `examples/desktop`.
@@ -16,7 +29,8 @@
 
 - Run `npm run prepare:ffmpeg` from `examples/desktop`.
 - Confirm `examples/desktop/build-resources/ffmpeg/ffmpeg.exe` exists.
-- Confirm FFmpeg source, version, and checksum are documented in release notes when the binary changes.
+- Confirm FFmpeg source, version, archive checksum, and the exact archive's
+  license and notice files are attached or linked in the release attestation.
 
 ## Quality Gate
 

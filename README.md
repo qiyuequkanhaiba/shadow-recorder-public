@@ -1,5 +1,7 @@
 # ReqCase Shadow Recorder
 
+[简体中文](README.zh-CN.md)
+
 ReqCase Shadow Recorder is a Windows desktop recorder for local screen capture,
 operation and system-event capture, playback, and local evidence export. The
 repository contains a Rust + NAPI-RS native addon and an Electron + React

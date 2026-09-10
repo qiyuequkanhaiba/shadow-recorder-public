@@ -1,0 +1,184 @@
+/* bento.css — light glass polish (no layout wars) */
+
+.panel,
+.recorder-toolbar-panel,
+.recorder-playback-stage,
+.recorder-log-panel {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(15, 23, 42, 0.32);
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.panel {
+  border-radius: var(--radius-xl);
+  padding: var(--space-4);
+}
+
+.recorder-toolbar-panel:hover,
+.panel:hover {
+  border-color: var(--border-glass-strong);
+  background: rgba(15, 23, 42, 0.72);
+}
+
+/* Playback stage composition */
+.recorder-playback-stage {
+  display: grid;
+  gap: var(--space-3);
+  height: 100%;
+  min-height: 0;
+  padding: var(--space-4);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.recorder-stage-player-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.72fr);
+  gap: var(--space-3);
+  min-height: 0;
+}
+
+.recorder-stage-screen {
+  min-height: 280px;
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(circle at 20% 0%, rgba(56, 189, 248, 0.08), transparent 40%),
+    rgba(2, 6, 23, 0.55);
+}
+
+.recorder-stage-status.live, .recorder-stage-surface.live {
+  border-color: rgba(34, 197, 94, 0.35);
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.12);
+}
+
+.recorder-stage-stream-chip {
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.recorder-stage-stream-chip:hover,
+.recorder-stage-stream-chip.is-active {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.recorder-stage-segment-chip {
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.recorder-stage-segment-chip.is-active {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.14);
+}
+
+/* Log panel */
+.recorder-log-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  min-height: 0;
+  height: 100%;
+  padding: var(--space-3);
+  border-radius: var(--radius-xl);
+}
+
+.recorder-log-row {
+  cursor: pointer;
+  transition: var(--transition-fast);
+  border-left: 2px solid transparent;
+}
+
+.recorder-log-row:hover {
+  background: rgba(56, 189, 248, 0.06);
+}
+
+.recorder-log-row.is-active {
+  background: rgba(56, 189, 248, 0.1);
+  border-left-color: var(--accent-primary);
+}
+
+.recorder-log-table-head {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-sticky);
+  background: rgba(2, 6, 23, 0.92);
+  backdrop-filter: blur(8px);
+}
+
+/* Settings form density */
+.control-panel {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.control-panel-section-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-lg);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.control-panel-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.preset-panel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-glass);
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.preset-actions button.recommended,
+.preset-actions .btn.recommended {
+  box-shadow: var(--shadow-glow-success);
+  border-color: rgba(34, 197, 94, 0.45);
+}
+
+.quality-grid {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.control-row.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+
+/* Success toast */
+.success-toast {
+  animation: slideIn 0.2s var(--ease-out) forwards;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 1100px) {
+  .recorder-stage-player-shell {
+    grid-template-columns: 1fr;
+  }
+}

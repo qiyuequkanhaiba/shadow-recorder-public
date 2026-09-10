@@ -1,0 +1,8 @@
+/target
+*.mp4
+/.vscode
+/.cargo
+*.txt
+/logs
+ffmpeg.exe
+audio.wav

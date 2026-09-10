@@ -1,0 +1,36 @@
+{
+  "profileId": "cc3-mini",
+  "name": "CC3 mini (qttimer-compatible)",
+  "description": "Minimal qttimer-style profile for import/golden tests.",
+  "targetProcessName": "QtApp.exe",
+  "aliasRules": [
+    {
+      "ruleId": "rule_confirm",
+      "alias": "新建项目_确认按钮",
+      "automationId": "btn.CreateNewProject.Confirm",
+      "controlType": "Button",
+      "priority": 8,
+      "moduleName": "新建项目",
+      "actionType": "CLICK"
+    },
+    {
+      "ruleId": "rule_notify_ok",
+      "alias": "通知弹窗_确定按钮",
+      "automationId": "btn.Notify.Ok",
+      "controlType": "Button",
+      "priority": 8,
+      "actionType": "CLICK"
+    }
+  ],
+  "scenarioRules": [
+    {
+      "ruleId": "scenario_confirm_popup",
+      "name": "确认后等待通知弹窗",
+      "triggerActionAlias": "新建项目_确认按钮",
+      "primaryTargetAlias": "通知弹窗_确定按钮",
+      "timeoutMs": 3000,
+      "transitionType": "popup_transition",
+      "completionMode": "semantic_only"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[package]
+name = "windows-record-poc"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+env_logger = "0.11"
+log = "0.4"
+windows-record = { path = "../windows-record-fork" }
+windows-sys = { version = "0.61", features = ["Win32_Graphics_Gdi"] }

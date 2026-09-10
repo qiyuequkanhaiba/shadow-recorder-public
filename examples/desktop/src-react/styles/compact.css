@@ -1,0 +1,588 @@
+
+/* ===== Compact meta tags (replace bulky status cards) ===== */
+.meta-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.meta-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.45);
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.meta-tag strong {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.meta-tag span {
+  color: var(--text-primary);
+  font-weight: 550;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 18ch;
+}
+
+.meta-tag.is-live {
+  border-color: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.1);
+}
+.meta-tag.is-live span { color: #86efac; }
+
+.meta-tag.is-paused {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.1);
+}
+.meta-tag.is-paused span { color: #fcd34d; }
+
+.meta-tag.is-idle span { color: var(--text-secondary); }
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.4);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.meta-chip:hover {
+  border-color: rgba(56, 189, 248, 0.35);
+  color: var(--text-primary);
+  background: rgba(56, 189, 248, 0.08);
+}
+
+.meta-chip.is-active {
+  border-color: rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.14);
+  color: #e0f2fe;
+}
+
+.meta-chip.segment-chip {
+  display: grid;
+  gap: 1px;
+  justify-items: start;
+  min-height: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  width: 100%;
+  text-align: left;
+}
+
+.meta-chip.segment-chip strong {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.meta-chip.segment-chip span,
+.meta-chip.segment-chip small {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+/* Slim toolbar */
+.recorder-toolbar-panel-slim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  padding: 8px 12px !important;
+  margin-bottom: 0 !important;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-glass);
+  background: rgba(15, 23, 42, 0.55);
+  box-shadow: none;
+}
+
+.recorder-toolbar-panel-slim:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(15, 23, 42, 0.65);
+}
+
+.recorder-toolbar-meta {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.recorder-toolbar-actions-primary {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  gap: 6px;
+}
+
+.recorder-toolbar-actions-primary .btn {
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+/* Slim playback header */
+.recorder-stage-header-slim {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.recorder-stage-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recorder-stage-title-row h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.recorder-playback-stage {
+  padding: 12px !important;
+  gap: 10px !important;
+}
+
+.recorder-stage-metrics-tags {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.recorder-stage-video-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.recorder-stage-video-meta strong {
+  font-size: 12px;
+}
+
+.recorder-stage-video-meta small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.recorder-stage-screen-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.recorder-stage-segment-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.recorder-stage-segment-header strong {
+  font-size: 12px;
+}
+
+.recorder-stage-segment-list {
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+
+/* Slim log header */
+.recorder-log-header-slim {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.recorder-log-header-slim h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.recorder-log-summary {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.recorder-log-panel {
+  padding: 10px !important;
+  gap: 8px !important;
+}
+
+.recorder-log-toolbar {
+  gap: 8px;
+}
+
+.recorder-log-filters {
+  gap: 6px;
+}
+
+.recorder-log-select,
+.recorder-log-search {
+  min-height: 32px;
+  font-size: 12px;
+}
+
+.recorder-log-row {
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+
+.recorder-log-time {
+  font-size: 11px;
+}
+
+.recorder-log-level {
+  font-size: 11px;
+  min-height: 20px;
+  padding: 0 6px;
+}
+
+.recorder-log-copy strong {
+  font-size: 12px;
+}
+
+.recorder-log-copy small {
+  font-size: 11px;
+}
+
+/* Hide legacy bulky status cards if still referenced */
+.recorder-stage-status,
+.recorder-toolbar-stat,
+.recorder-stage-metric,
+.workspace-status-pill-card,
+.recorder-log-pill {
+  /* kept for safety but visual weight reduced when used */
+}
+
+.workspace-status-pill-card {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+/* Settings slightly tighter */
+.control-panel {
+  gap: 12px;
+}
+
+.control-panel-section-title {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.panel {
+  padding: 12px 14px;
+}
+
+@media (max-width: 1280px) {
+  .recorder-toolbar-panel-slim {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .recorder-toolbar-actions-primary {
+    justify-content: flex-start;
+  }
+}
+
+
+/* ===== Mainstream flat app tabs (no nested card chrome) ===== */
+.app-shell {
+  display: grid;
+  gap: 0;
+  min-height: 0;
+}
+
+.app-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0;
+  padding: 0 2px 0 0;
+  border: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  min-height: 40px;
+}
+
+.app-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  width: auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-tab {
+  position: relative;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1;
+  box-shadow: none !important;
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+  filter: none !important;
+  transform: none !important;
+}
+
+.app-tab:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(148, 163, 184, 0.08) !important;
+  filter: none !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+.app-tab.active,
+.app-tab[aria-selected="true"] {
+  color: var(--text-primary);
+  background: transparent !important;
+  font-weight: 650;
+  box-shadow: none !important;
+}
+
+.app-tab.active::after,
+.app-tab[aria-selected="true"]::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 2px;
+  border-radius: 2px 2px 0 0;
+  background: var(--accent-primary);
+}
+
+.app-tab:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.45) !important;
+}
+
+.app-tabbar-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 4px 0;
+}
+
+.app-tab-panels {
+  display: grid;
+  gap: 0;
+  min-height: 0;
+  padding-top: 12px;
+}
+
+.app-tab-panel {
+  display: grid;
+  gap: 10px;
+  min-height: 0;
+}
+
+/* Main tab: less nested framing */
+.app-tab-panel-main .recorder-main-shell-mvp {
+  gap: 0;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  grid-template-rows: minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-tab-panel-main .recorder-toolbar-panel-slim {
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.4);
+  border-color: rgba(148, 163, 184, 0.12);
+}
+
+.app-tab-panel-main .recorder-primary-stack {
+  border-radius: 12px;
+  box-shadow: none;
+  background: rgba(2, 6, 23, 0.28);
+}
+
+.app-tab-panel-main .recorder-playback-stage,
+.app-tab-panel-main .recorder-log-panel {
+  box-shadow: none;
+  backdrop-filter: none;
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.12);
+}
+
+.app-tab-panel-main .recorder-playback-stage {
+  border: 0;
+  padding: 10px 12px !important;
+}
+
+.app-tab-panel-main .recorder-log-panel {
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.35);
+}
+
+/* Settings tab: flat form surface, not card-in-card */
+.app-tab-panel-settings {
+  gap: 12px;
+  width: 100%;
+  max-width: none;
+}
+
+.app-tab-panel-settings .panel.control-panel {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.32);
+  box-shadow: none;
+  backdrop-filter: none;
+  padding: 14px 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.app-tab-panel-settings .panel.control-panel:hover {
+  transform: none;
+  box-shadow: none;
+  background: rgba(15, 23, 42, 0.38);
+}
+
+.app-tab-panel-settings .control-panel-section-title h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.app-tab-panel-settings .control-panel-section-title p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.app-tab-panel-settings .preset-panel {
+  border-radius: 10px;
+  border-color: rgba(148, 163, 184, 0.12);
+  background: rgba(2, 6, 23, 0.25);
+  padding: 12px;
+}
+
+.app-tab-panel-settings .control-disclosure {
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.2);
+  padding: 8px 10px;
+}
+
+.app-tab-panel-settings label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.app-tab-panel-settings input,
+.app-tab-panel-settings select,
+.app-tab-panel-settings textarea {
+  min-height: 32px;
+  font-size: 13px;
+}
+
+/* Override legacy pill tab chrome from layout.css */
+.main-tabs-wrapper,
+.tab-nav-container,
+.tab-nav,
+.tab-btn,
+.tab-content,
+.tab-page {
+  /* legacy class names kept harmless if any remain */
+}
+
+.tab-nav-container {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16) !important;
+  padding: 0 !important;
+}
+
+.tab-nav {
+  border: 0 !important;
+  background: transparent !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  gap: 0 !important;
+}
+
+.tab-btn {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  min-height: 40px;
+}
+
+.tab-btn.active {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+

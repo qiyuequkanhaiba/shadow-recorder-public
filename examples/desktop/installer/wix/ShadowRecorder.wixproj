@@ -1,0 +1,23 @@
+<Project Sdk="WixToolset.Sdk/6.0.0">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <Cultures>zh-CN</Cultures>
+    <OutputName Condition="'$(OutputName)' == ''">影子录制器</OutputName>
+    <ProductName Condition="'$(ProductName)' == ''">影子录制器</ProductName>
+    <Manufacturer Condition="'$(Manufacturer)' == ''">ReqCase</Manufacturer>
+    <ProductVersion Condition="'$(ProductVersion)' == ''">0.1.1</ProductVersion>
+    <AppExeName Condition="'$(AppExeName)' == ''">影子录制器.exe</AppExeName>
+    <IconPath Condition="'$(IconPath)' == ''">$(MSBuildThisFileDirectory)..\..\..\..\ico.ico</IconPath>
+    <LicensePath Condition="'$(LicensePath)' == ''">$(MSBuildThisFileDirectory)license.rtf</LicensePath>
+    <DefineConstants>ProductName=$(ProductName);Manufacturer=$(Manufacturer);ProductVersion=$(ProductVersion);AppExeName=$(AppExeName);IconPath=$(IconPath);LicensePath=$(LicensePath)</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="WixToolset.UI.wixext" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(AppPayloadDir)' != ''">
+    <BindPath Include="$(AppPayloadDir)" BindName="AppPayload" />
+  </ItemGroup>
+</Project>

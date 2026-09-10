@@ -1,0 +1,886 @@
+/* Settings form: full-width on large windows, comfortable field size */
+
+.app-tab-panel-settings,
+.settings-page {
+  width: 100% !important;
+  max-width: none !important;
+  gap: 0 !important;
+  align-items: stretch !important;
+  align-self: stretch !important;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0 8px 24px;
+  box-sizing: border-box;
+}
+
+/* Prevent settings content from pinching to a left column */
+.app-tab-panel-settings > *,
+.settings-page > * {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
+
+/* Fill available width — do not pin content to a narrow left column */
+.settings-form {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0;
+  padding: 0 4px 12px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  box-sizing: border-box;
+}
+
+.settings-form + .settings-form {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.settings-form-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px 20px;
+  margin-bottom: 2px;
+  padding-bottom: 12px;
+}
+
+.settings-form-header-copy {
+  flex: 1 1 280px;
+  min-width: 0;
+}
+
+.settings-form-header-copy h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.settings-form-header-copy h2::before {
+  display: none !important;
+}
+
+.settings-form-header-copy p {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 72ch;
+  line-height: 1.5;
+}
+
+.settings-form-status {
+  justify-content: flex-end;
+  flex: 0 1 auto;
+}
+
+/* Section blocks — divider only */
+.settings-section {
+  margin: 0;
+  padding: 14px 0 16px;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  background: transparent;
+  box-shadow: none;
+}
+
+.settings-section:first-of-type {
+  border-top: 0;
+  padding-top: 6px;
+}
+
+.settings-section-title {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-section-desc {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/*
+ * Field grid fills the row:
+ * - medium: 2 columns
+ * - wide: 3 columns
+ * - fullscreen/ultrawide: 4 columns
+ * Each field grows with its column (no 280px cap).
+ */
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px 20px;
+  align-items: start;
+  justify-items: stretch;
+  width: 100%;
+}
+
+.settings-fields-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-fields-mask {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.settings-fields-advanced {
+  margin-top: 12px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  width: 100% !important;
+  max-width: none !important;
+  height: auto !important;
+  min-height: 0 !important;
+  margin: 0;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  align-self: start !important;
+}
+
+.settings-field-sm {
+  max-width: none !important;
+}
+
+.settings-field-grow,
+.settings-field-span,
+.settings-field-area {
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.settings-field-span {
+  grid-column: 1 / -1;
+}
+
+.settings-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.3;
+}
+
+/* Comfortable control size — theme tokens so light mode stays light */
+.settings-field input,
+.settings-field select,
+.settings-field textarea,
+.settings-form input[type='text'],
+.settings-form input[type='number'],
+.settings-form input[type='password'],
+.settings-form input[type='search'],
+.settings-form select,
+.settings-form textarea,
+.settings-form-panel input[type='text'],
+.settings-form-panel input[type='number'],
+.settings-form-panel input[type='password'],
+.settings-form-panel input[type='search'],
+.settings-form-panel select,
+.settings-form-panel textarea,
+.semantic-profile-editor input[type='text'],
+.semantic-profile-editor input[type='number'],
+.semantic-profile-editor input[type='search'],
+.semantic-profile-editor select,
+.semantic-profile-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 38px;
+  height: 38px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-sm);
+  background: var(--control-bg);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.35;
+  box-shadow: none;
+  color-scheme: inherit;
+}
+
+.settings-field input::placeholder,
+.settings-form input::placeholder,
+.settings-form-panel input::placeholder,
+.semantic-profile-editor input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.settings-field textarea,
+.settings-field-area textarea {
+  height: auto;
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.45;
+  padding: 10px 12px;
+}
+
+.settings-field select {
+  cursor: pointer;
+}
+
+.settings-field input:focus,
+.settings-field select:focus,
+.settings-field textarea:focus,
+.settings-form input:focus,
+.settings-form select:focus,
+.settings-form textarea:focus,
+.settings-form-panel input:focus,
+.settings-form-panel select:focus,
+.settings-form-panel textarea:focus,
+.semantic-profile-editor input:focus,
+.semantic-profile-editor select:focus,
+.semantic-profile-editor textarea:focus {
+  border-color: var(--border-focus);
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.settings-field input:disabled,
+.settings-form input:disabled,
+.settings-form-panel input:disabled,
+.semantic-profile-editor input:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+}
+
+.settings-field-hint,
+.settings-form .control-field-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Multi-display picker */
+.settings-subpanel {
+  margin-top: 12px;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px dashed rgba(148, 163, 184, 0.14);
+  background: transparent;
+  width: 100%;
+}
+
+.settings-subpanel-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.settings-subpanel-head strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.settings-subpanel-head small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-check-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px 12px;
+  align-items: start;
+  width: 100%;
+}
+
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.32);
+  cursor: pointer;
+  min-height: 0;
+}
+
+.settings-check.is-active {
+  border-color: rgba(56, 189, 248, 0.32);
+  background: rgba(56, 189, 248, 0.09);
+}
+
+.settings-check input {
+  margin-top: 3px;
+  width: auto;
+  min-height: 0;
+  height: auto;
+}
+
+.settings-check-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-check-copy strong {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.settings-check-copy small {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.settings-inline-actions .btn {
+  min-height: 34px;
+  padding: 0 14px;
+  font-size: 13px;
+}
+
+.settings-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  max-width: 100%;
+}
+
+.settings-toggle input {
+  margin-top: 4px;
+  width: auto;
+  min-height: 0;
+  height: auto;
+}
+
+.settings-toggle span,
+.settings-toggle strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.settings-toggle small {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.settings-disclosure {
+  margin-top: 4px;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+  background: transparent;
+  width: 100%;
+}
+
+.settings-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text-secondary);
+  padding: 2px 0 10px;
+}
+
+.settings-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-disclosure > summary::before {
+  content: '▸ ';
+  color: var(--text-muted);
+}
+
+.settings-disclosure[open] > summary::before {
+  content: '▾ ';
+}
+
+.settings-form-error,
+.settings-form .error {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+
+.settings-empty {
+  padding: 10px 0;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+/* Neutralize older narrow constraints */
+.app-tab-panel-settings .settings-surface,
+.app-tab-panel-settings .panel.control-panel,
+.app-tab-panel-settings .settings-block,
+.app-tab-panel-settings .preset-panel {
+  width: 100% !important;
+  max-width: none !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.app-tab-panel-settings .settings-grid {
+  width: 100% !important;
+  align-items: start !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 14px 20px !important;
+}
+
+.app-tab-panel-settings label {
+  height: auto !important;
+  min-height: 0 !important;
+  max-width: none !important;
+  align-self: start !important;
+}
+
+/* Large / fullscreen: use more columns and breathing room */
+@media (min-width: 1200px) {
+  .settings-fields,
+  .settings-fields-advanced,
+  .app-tab-panel-settings .settings-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 16px 22px;
+  }
+
+  .settings-fields-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .settings-check-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+@media (min-width: 1600px) {
+  .settings-fields,
+  .settings-fields-advanced,
+  .app-tab-panel-settings .settings-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 16px 24px;
+  }
+
+  .settings-fields-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .settings-fields-mask {
+    grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  }
+
+  .settings-field input,
+  .settings-field select,
+  .settings-form input[type='text'],
+  .settings-form input[type='number'],
+  .settings-form input[type='password'],
+  .settings-form select {
+    min-height: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-fields,
+  .settings-fields-2,
+  .settings-fields-mask,
+  .settings-fields-advanced,
+  .app-tab-panel-settings .settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .settings-fields,
+  .settings-fields-2,
+  .settings-fields-mask,
+  .settings-fields-advanced,
+  .settings-check-grid,
+  .app-tab-panel-settings .settings-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Settings: left category nav + content pane */
+.settings-workspace {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+  gap: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.16));
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-card-strong, rgba(15, 23, 42, 0.35));
+}
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  padding: 12px 10px;
+  border-right: 1px solid var(--border-divider, rgba(148, 163, 184, 0.12));
+  background: var(--bg-secondary, rgba(2, 6, 23, 0.35));
+  overflow-y: auto;
+}
+
+.settings-nav-title {
+  padding: 2px 8px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.settings-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.settings-nav-item {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 10px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  box-shadow: none;
+  min-height: 0;
+}
+
+.settings-nav-item:hover {
+  background: var(--bg-hover, rgba(56, 189, 248, 0.08));
+  color: var(--text-primary);
+}
+
+.settings-nav-item.is-active {
+  background: var(--row-active, rgba(56, 189, 248, 0.12));
+  border-color: rgba(56, 189, 248, 0.28);
+  color: var(--text-primary);
+}
+
+.settings-nav-item-label {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.settings-nav-item-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.settings-nav-item.is-active .settings-nav-item-hint {
+  color: var(--text-secondary);
+}
+
+.settings-nav-content {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 14px 18px 18px;
+  background: transparent;
+}
+
+.app-tab-panel-settings.settings-page {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+}
+
+.app-tab-panel-settings .settings-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-tab-panel-settings .settings-form {
+  max-width: none !important;
+  width: 100% !important;
+  padding: 0 !important;
+}
+
+/* Theme toggle: trailing right of tabbar */
+.app-tabbar {
+  display: flex;
+  align-items: center;
+  gap: 10px 12px;
+}
+
+.app-tabbar > .app-tabs {
+  flex: 0 0 auto;
+}
+
+.app-tabbar-aside {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  margin-left: auto !important;
+  min-width: 0;
+}
+
+.app-tabbar-aside .theme-toggle-end,
+.app-tabbar-aside .theme-toggle {
+  margin-left: 4px;
+  flex: 0 0 auto;
+  order: 99;
+}
+
+[data-theme='light'] .settings-workspace {
+  background: var(--bg-secondary);
+  border-color: var(--border-subtle);
+}
+
+[data-theme='light'] .settings-nav {
+  background: rgba(241, 245, 249, 0.95);
+  border-right-color: var(--border-divider);
+}
+
+[data-theme='light'] .settings-nav-item.is-active {
+  background: rgba(2, 132, 199, 0.1);
+  border-color: rgba(2, 132, 199, 0.25);
+}
+
+@media (max-width: 900px) {
+  .settings-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-nav {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-divider, rgba(148, 163, 184, 0.12));
+    padding: 10px;
+  }
+
+  .settings-nav-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px;
+  }
+
+  .settings-nav-item-hint {
+    display: none;
+  }
+}
+
+
+/* ===== Settings polish: nav align, toggle left, spacing ===== */
+
+.settings-workspace {
+  align-items: stretch;
+}
+
+.settings-nav {
+  align-items: stretch;
+  text-align: left;
+}
+
+.settings-nav-list {
+  align-items: stretch;
+  width: 100%;
+}
+
+/* Override global button centering that mis-aligns nav items */
+button.settings-nav-item,
+.settings-nav-item {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 3px !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 10px 12px !important;
+  margin: 0 !important;
+  border-radius: 10px !important;
+  text-align: left !important;
+  white-space: normal !important;
+  box-shadow: none !important;
+  transform: none !important;
+  filter: none !important;
+  background-image: none !important;
+}
+
+button.settings-nav-item:hover,
+button.settings-nav-item.is-active {
+  transform: none !important;
+  filter: none !important;
+}
+
+.settings-nav-item-label,
+.settings-nav-item-hint {
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+
+.settings-nav-content {
+  padding: 18px 22px 22px;
+}
+
+.settings-form-pane .settings-form-header {
+  margin-bottom: 8px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border-divider, rgba(148, 163, 184, 0.12));
+}
+
+.settings-form-pane .settings-section {
+  padding: 16px 0 4px;
+  border-top: 0;
+}
+
+.settings-form-pane .settings-section-block {
+  padding: 16px 0 18px;
+  border-top: 1px solid var(--border-divider, rgba(148, 163, 184, 0.1));
+}
+
+.settings-form-pane .settings-section-block:first-of-type {
+  border-top: 0;
+  padding-top: 8px;
+}
+
+.settings-form-pane .settings-section-title {
+  margin: 0 0 12px;
+}
+
+.settings-form-pane .settings-fields {
+  gap: 14px 18px;
+}
+
+.settings-form-pane .settings-section-desc {
+  margin: 0 0 12px;
+  max-width: 72ch;
+}
+
+/* Checkboxes / toggles: left aligned, never centered */
+label.settings-toggle,
+.settings-toggle {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  gap: 10px !important;
+  width: auto !important;
+  max-width: 100% !important;
+  margin: 0 0 12px !important;
+  padding: 0 !important;
+  text-align: left !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  min-height: 0 !important;
+  height: auto !important;
+}
+
+.settings-toggle input[type="checkbox"] {
+  flex: 0 0 auto !important;
+  width: 16px !important;
+  height: 16px !important;
+  min-height: 16px !important;
+  margin: 3px 0 0 !important;
+  padding: 0 !important;
+  accent-color: var(--accent-primary);
+}
+
+.settings-toggle > span {
+  display: block;
+  text-align: left;
+  line-height: 1.4;
+}
+
+.settings-inline-actions {
+  justify-content: flex-start !important;
+  margin: 4px 0 12px;
+}
+
+.settings-form-pane .settings-inline-actions .btn {
+  min-height: 34px;
+}
+
+/* Privacy page toggles / fields left align */
+.settings-form-privacy .settings-section {
+  padding: 14px 0 16px;
+}
+
+.settings-form-privacy label.settings-toggle {
+  width: 100%;
+  max-width: 640px;
+}
+
+.settings-form-privacy .settings-fields-2 {
+  gap: 16px 20px;
+}
+
+.settings-form-privacy .settings-fields-mask {
+  max-width: 720px;
+}
+
+/* Nav content form should not inherit center from parent */
+.settings-nav-content,
+.settings-form,
+.settings-section,
+.settings-fields {
+  text-align: left;
+}
+
+@media (max-width: 900px) {
+  button.settings-nav-item,
+  .settings-nav-item {
+    align-items: flex-start !important;
+  }
+}
+

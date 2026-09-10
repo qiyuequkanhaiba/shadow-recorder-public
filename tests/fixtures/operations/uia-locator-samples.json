@@ -1,0 +1,89 @@
+[
+  {
+    "caseId": "runtime-id-wins-over-changing-labels",
+    "expectedStrategy": "runtime",
+    "expectedCacheKey": "runtime:1234:42.7.19",
+    "samples": [
+      {
+        "runtimeId": [42, 7, 19],
+        "processId": 1234,
+        "windowHwnd": "0xABCD",
+        "name": "Save",
+        "automationId": "btnSave",
+        "controlType": "Button",
+        "frameworkId": "Win32",
+        "boundingRect": { "left": 10, "top": 20, "width": 80, "height": 28 }
+      },
+      {
+        "runtimeId": [42, 7, 19],
+        "processId": 1234,
+        "windowHwnd": "0xABCD",
+        "name": "Saved",
+        "automationId": "btnSaveRenamed",
+        "controlType": "Button",
+        "frameworkId": "Win32",
+        "boundingRect": { "left": 12, "top": 20, "width": 84, "height": 28 }
+      }
+    ]
+  },
+  {
+    "caseId": "locator-fallback-normalizes-window-and-parent-path",
+    "expectedStrategy": "locator",
+    "expectedCacheKey": "locator:1234:0xabcd:button:btnsave:save:window::editor/form:mainform::1:2:3:4",
+    "samples": [
+      {
+        "processId": 1234,
+        "windowHwnd": " 0xABCD ",
+        "name": " Save ",
+        "automationId": " btnSave ",
+        "controlType": " Button ",
+        "parentPath": [
+          { "controlType": "Window", "name": "Editor", "automationId": null },
+          { "controlType": "Form", "name": null, "automationId": "mainForm" }
+        ],
+        "boundingRect": { "left": 1, "top": 2, "width": 3, "height": 4 }
+      },
+      {
+        "processId": 1234,
+        "windowHwnd": "0xabcd",
+        "name": "save",
+        "automationId": "btnsave",
+        "controlType": "button",
+        "parentPath": [
+          { "controlType": "window", "name": "editor", "automationId": null },
+          { "controlType": "form", "name": null, "automationId": "mainform" }
+        ],
+        "boundingRect": { "left": 1, "top": 2, "width": 3, "height": 4 }
+      }
+    ]
+  },
+  {
+    "caseId": "locator-fallback-keeps-weak-uia-control-stable",
+    "expectedStrategy": "locator",
+    "expectedCacheKey": "locator:5678:0x4455:listitem::balanced:window::preferences/list::mode list:100:200:220:32",
+    "samples": [
+      {
+        "processId": 5678,
+        "windowHwnd": "0x4455",
+        "name": "Balanced",
+        "controlType": "ListItem",
+        "parentPath": [
+          { "controlType": "Window", "name": "Preferences", "automationId": null },
+          { "controlType": "List", "name": "Mode List", "automationId": null }
+        ],
+        "boundingRect": { "left": 100, "top": 200, "width": 220, "height": 32 }
+      },
+      {
+        "processId": 5678,
+        "windowHwnd": "0X4455",
+        "name": " balanced ",
+        "controlType": "listitem",
+        "parentPath": [
+          { "controlType": "window", "name": "preferences", "automationId": null },
+          { "controlType": "list", "name": " mode list ", "automationId": null }
+        ],
+        "boundingRect": { "left": 100, "top": 200, "width": 220, "height": 32 }
+      }
+    ]
+  }
+]

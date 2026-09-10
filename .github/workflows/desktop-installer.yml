@@ -1,0 +1,103 @@
+name: Desktop Windows Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_msi:
+        description: Build WiX MSI in addition to the NSIS installer.
+        required: false
+        default: "false"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: examples/desktop/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: examples/desktop
+
+      - name: Ensure Windows Rust target
+        shell: pwsh
+        run: rustup target add x86_64-pc-windows-msvc
+
+      - name: Prepare FFmpeg
+        run: npm run prepare:ffmpeg
+        working-directory: examples/desktop
+
+      - name: Build NSIS installer
+        shell: pwsh
+        working-directory: examples/desktop
+        run: npm run dist:nsis
+
+      - name: Verify NSIS installer artifact
+        shell: pwsh
+        run: |
+          $artifacts = @(Get-ChildItem -Path "examples/desktop/release" -Filter "*.exe" -File)
+          if ($artifacts.Count -eq 0) {
+            throw "No NSIS .exe installer was produced under examples/desktop/release."
+          }
+
+          "## NSIS Installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          foreach ($artifact in $artifacts) {
+            "- $($artifact.Name) ($([Math]::Round($artifact.Length / 1MB, 2)) MB)" |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload NSIS installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-recorder-nsis-windows-x64
+          path: examples/desktop/release/*.exe
+          if-no-files-found: error
+
+      - name: Build WiX MSI
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
+        shell: pwsh
+        working-directory: examples/desktop
+        run: npm run dist:msi
+
+      - name: Verify MSI artifact
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
+        shell: pwsh
+        run: |
+          $artifacts = @(Get-ChildItem -Path "examples/desktop/release" -Filter "*.msi" -File)
+          if ($artifacts.Count -eq 0) {
+            throw "No MSI installer was produced under examples/desktop/release."
+          }
+
+          "## MSI Installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          foreach ($artifact in $artifacts) {
+            "- $($artifact.Name) ($([Math]::Round($artifact.Length / 1MB, 2)) MB)" |
+              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload MSI installer
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: shadow-recorder-msi-windows-x64
+          path: examples/desktop/release/*.msi
+          if-no-files-found: error

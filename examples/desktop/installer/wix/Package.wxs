@@ -1,0 +1,68 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+  <Package
+    Name="$(ProductName)"
+    Manufacturer="$(Manufacturer)"
+    Version="$(ProductVersion)"
+    UpgradeCode="2F22A57C-48EF-4B05-8CC0-80B735CD1A91"
+    Scope="perMachine"
+    Language="2052"
+    Codepage="936"
+    InstallerVersion="500">
+
+    <MajorUpgrade DowngradeErrorMessage="检测到较新的影子录制器版本，无法安装旧版本。" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Icon Id="AppIcon" SourceFile="$(IconPath)" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(LicensePath)" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="$(ProductName)" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="ProgramMenuDir" Name="$(ProductName)" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="DesktopFolder" />
+
+    <Files Include="!(bindpath.AppPayload)\**" Directory="INSTALLFOLDER" />
+
+    <Component Id="StartMenuShortcutComponent" Directory="ProgramMenuDir">
+      <Shortcut
+        Id="StartMenuShortcut"
+        Name="$(ProductName)"
+        Target="[INSTALLFOLDER]$(AppExeName)"
+        WorkingDirectory="INSTALLFOLDER"
+        Icon="AppIcon"
+        IconIndex="0" />
+      <RemoveFolder Id="ProgramMenuDirOnUninstall" Directory="ProgramMenuDir" On="uninstall" />
+      <RegistryValue
+        Root="HKCU"
+        Key="Software\ReqCase\$(ProductName)\Shortcuts"
+        Name="StartMenu"
+        Type="integer"
+        Value="1"
+        KeyPath="yes" />
+    </Component>
+
+    <Component Id="DesktopShortcutComponent" Directory="DesktopFolder">
+      <Shortcut
+        Id="DesktopShortcut"
+        Name="$(ProductName)"
+        Target="[INSTALLFOLDER]$(AppExeName)"
+        WorkingDirectory="INSTALLFOLDER"
+        Icon="AppIcon"
+        IconIndex="0" />
+      <RegistryValue
+        Root="HKCU"
+        Key="Software\ReqCase\$(ProductName)\Shortcuts"
+        Name="Desktop"
+        Type="integer"
+        Value="1"
+        KeyPath="yes" />
+    </Component>
+  </Package>
+</Wix>

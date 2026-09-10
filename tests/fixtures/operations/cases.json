@@ -1,0 +1,853 @@
+[
+  {
+    "caseId": "win32-save-toast",
+    "technology": "win32",
+    "sessionId": "golden-win32-save",
+    "inputEvents": [
+      { "eventId": "input-save-click", "eventType": "mouse_left_click", "occurredAtMs": 1000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-save-target",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 980,
+        "sourceEventId": "input-save-click",
+        "payload": { "runtimeId": [1, 10], "name": "Save", "controlType": "Button" }
+      },
+      {
+        "eventId": "sem-save-toast",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 1420,
+        "sourceEventId": "input-save-click",
+        "payload": { "runtimeId": [1, 20], "name": "Saved", "controlType": "Text" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-save-click",
+        "sourceEventIds": ["input-save-click"],
+        "action": { "kind": "click", "occurredAtMs": 1000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 1420,
+          "latencyMs": 420,
+          "reasonCodes": ["popup-appeared"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "wpf-checkbox-toggle",
+    "technology": "wpf",
+    "sessionId": "golden-wpf-toggle",
+    "inputEvents": [
+      { "eventId": "input-toggle-click", "eventType": "mouse_left_click", "occurredAtMs": 2000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-toggle-before",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 1985,
+        "sourceEventId": "input-toggle-click",
+        "payload": { "runtimeId": [2, 10], "name": "Enable sync", "toggleState": "off" }
+      },
+      {
+        "eventId": "sem-toggle-after",
+        "eventType": "uia_property_changed",
+        "occurredAtMs": 2086,
+        "sourceEventId": "input-toggle-click",
+        "payload": { "runtimeId": [2, 10], "property": "toggleState", "before": "off", "after": "on" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-toggle",
+        "sourceEventIds": ["input-toggle-click"],
+        "action": { "kind": "toggle", "occurredAtMs": 2000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 2086,
+          "latencyMs": 86,
+          "reasonCodes": ["toggle-state-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "qt-combo-selection",
+    "technology": "qt",
+    "sessionId": "golden-qt-selection",
+    "inputEvents": [
+      { "eventId": "input-select-click", "eventType": "mouse_left_click", "occurredAtMs": 3000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-select-target",
+        "eventType": "uia_focus_changed",
+        "occurredAtMs": 3015,
+        "sourceEventId": "input-select-click",
+        "payload": { "runtimeId": [3, 10], "name": "Balanced", "controlType": "ListItem" }
+      },
+      {
+        "eventId": "sem-selection-after",
+        "eventType": "uia_selection_changed",
+        "occurredAtMs": 3130,
+        "sourceEventId": "input-select-click",
+        "payload": { "runtimeId": [3, 10], "before": "notSelected", "after": "selected" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-select",
+        "sourceEventIds": ["input-select-click"],
+        "action": { "kind": "select", "occurredAtMs": 3000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 3130,
+          "latencyMs": 130,
+          "reasonCodes": ["selection-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "electron-tree-expand",
+    "technology": "electron",
+    "sessionId": "golden-electron-expand",
+    "inputEvents": [
+      { "eventId": "input-expand-click", "eventType": "mouse_left_click", "occurredAtMs": 4000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-expand-before",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 3990,
+        "sourceEventId": "input-expand-click",
+        "payload": { "runtimeId": [4, 10], "name": "Advanced", "expandCollapseState": "collapsed" }
+      },
+      {
+        "eventId": "sem-expand-after",
+        "eventType": "uia_property_changed",
+        "occurredAtMs": 4092,
+        "sourceEventId": "input-expand-click",
+        "payload": { "runtimeId": [4, 10], "property": "expandCollapseState", "before": "collapsed", "after": "expanded" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-expand",
+        "sourceEventIds": ["input-expand-click"],
+        "action": { "kind": "expand", "occurredAtMs": 4000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 4092,
+          "latencyMs": 92,
+          "reasonCodes": ["expand-state-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "wpf-input-and-save",
+    "technology": "wpf",
+    "sessionId": "golden-wpf-input-save",
+    "inputEvents": [
+      { "eventId": "input-text-summary", "eventType": "keyboard_summary", "occurredAtMs": 5000 },
+      { "eventId": "input-form-save", "eventType": "mouse_left_click", "occurredAtMs": 5600 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-text-length",
+        "eventType": "uia_property_changed",
+        "occurredAtMs": 5100,
+        "sourceEventId": "input-text-summary",
+        "payload": { "runtimeId": [5, 10], "property": "valueLength", "before": 0, "after": 8, "privacyClass": "text-length-only" }
+      },
+      {
+        "eventId": "sem-editor-closed",
+        "eventType": "window_closed",
+        "occurredAtMs": 6000,
+        "sourceEventId": "input-form-save",
+        "payload": { "runtimeId": [5, 20], "name": "Editor" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-type-summary",
+        "sourceEventIds": ["input-text-summary"],
+        "action": { "kind": "typeSummary", "occurredAtMs": 5000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 5100,
+          "latencyMs": 100,
+          "reasonCodes": ["value-length-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-form-save",
+        "sourceEventIds": ["input-form-save"],
+        "action": { "kind": "click", "occurredAtMs": 5600 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 6000,
+          "latencyMs": 400,
+          "reasonCodes": ["window-closed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "win32-validation-dialog",
+    "technology": "win32",
+    "sessionId": "golden-win32-error",
+    "inputEvents": [
+      { "eventId": "input-submit-click", "eventType": "mouse_left_click", "occurredAtMs": 6200 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-validation-dialog",
+        "eventType": "dialog_appeared",
+        "occurredAtMs": 6450,
+        "sourceEventId": "input-submit-click",
+        "payload": { "runtimeId": [6, 20], "name": "Validation error", "controlType": "Window" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-submit-error",
+        "sourceEventIds": ["input-submit-click"],
+        "action": { "kind": "click", "occurredAtMs": 6200 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 6450,
+          "latencyMs": 250,
+          "reasonCodes": ["dialog-appeared", "negative-completion-signal"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "electron-delayed-candidate",
+    "technology": "electron",
+    "sessionId": "golden-electron-delayed",
+    "inputEvents": [
+      { "eventId": "input-run-click", "eventType": "mouse_left_click", "occurredAtMs": 7000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-delayed-structure",
+        "eventType": "uia_structure_changed",
+        "occurredAtMs": 9999,
+        "sourceEventId": "input-run-click",
+        "payload": { "windowHwnd": "0x7000", "change": "childrenInvalidated" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-delayed-candidate",
+        "sourceEventIds": ["input-run-click"],
+        "action": { "kind": "click", "occurredAtMs": 7000 },
+        "outcome": {
+          "status": "candidate",
+          "observedAtMs": 9999,
+          "latencyMs": 2999,
+          "reasonCodes": ["structure-changed", "weak-completion-signal"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      }
+    ]
+  },
+  {
+    "caseId": "qt-no-observable-result",
+    "technology": "qt",
+    "sessionId": "golden-qt-incomplete",
+    "inputEvents": [
+      { "eventId": "input-no-result-click", "eventType": "mouse_left_click", "occurredAtMs": 10000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-no-result-target",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 9990,
+        "sourceEventId": "input-no-result-click",
+        "payload": { "runtimeId": [8, 10], "name": "Refresh", "controlType": "Button" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-no-result",
+        "sourceEventIds": ["input-no-result-click"],
+        "action": { "kind": "click", "occurredAtMs": 10000 },
+        "outcome": {
+          "status": "incomplete",
+          "observedAtMs": 13000,
+          "latencyMs": 3000,
+          "reasonCodes": ["result-timeout", "no-observable-change"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      }
+    ]
+  },
+  {
+    "caseId": "electron-rapid-clicks",
+    "technology": "electron",
+    "sessionId": "golden-electron-rapid",
+    "inputEvents": [
+      { "eventId": "input-rapid-first", "eventType": "mouse_left_click", "occurredAtMs": 14000 },
+      { "eventId": "input-rapid-second", "eventType": "mouse_left_click", "occurredAtMs": 14200 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-rapid-popup-a",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 14480,
+        "sourceEventId": "input-rapid-second",
+        "payload": { "runtimeId": [9, 20], "name": "Queued" }
+      },
+      {
+        "eventId": "sem-rapid-popup-b",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 14490,
+        "sourceEventId": "input-rapid-second",
+        "payload": { "runtimeId": [9, 21], "name": "Started" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-rapid-first",
+        "sourceEventIds": ["input-rapid-first"],
+        "action": { "kind": "click", "occurredAtMs": 14000 },
+        "outcome": {
+          "status": "incomplete",
+          "observedAtMs": 14200,
+          "latencyMs": 200,
+          "reasonCodes": ["next-input-closed-window", "no-observable-change"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      },
+      {
+        "operationId": "operation-rapid-second",
+        "sourceEventIds": ["input-rapid-second"],
+        "action": { "kind": "click", "occurredAtMs": 14200 },
+        "outcome": {
+          "status": "ambiguous",
+          "observedAtMs": 14490,
+          "latencyMs": 290,
+          "reasonCodes": ["multiple-candidates"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      }
+    ]
+  },
+  {
+    "caseId": "weak-uia-circuit-open",
+    "technology": "weak-uia",
+    "sessionId": "golden-weak-uia",
+    "inputEvents": [
+      { "eventId": "input-weak-click", "eventType": "mouse_left_click", "occurredAtMs": 15000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-observer-degraded",
+        "eventType": "observer_health",
+        "occurredAtMs": 15080,
+        "sourceEventId": "input-weak-click",
+        "payload": { "state": "circuitOpen", "queueOverflowCount": 0 }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-weak-uia",
+        "sourceEventIds": ["input-weak-click"],
+        "action": { "kind": "click", "occurredAtMs": 15000 },
+        "outcome": {
+          "status": "observerDegraded",
+          "observedAtMs": 15080,
+          "latencyMs": 80,
+          "reasonCodes": ["uia-circuit-open"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      }
+    ]
+  },
+  {
+    "caseId": "temporal-boundaries",
+    "technology": "win32",
+    "sessionId": "golden-boundaries",
+    "inputEvents": [
+      { "eventId": "input-boundary-target", "eventType": "mouse_left_click", "occurredAtMs": 20000 },
+      { "eventId": "input-boundary-outcome", "eventType": "mouse_left_click", "occurredAtMs": 21000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-boundary-target",
+        "eventType": "uia_focus_changed",
+        "occurredAtMs": 20300,
+        "sourceEventId": "input-boundary-target",
+        "payload": { "runtimeId": [11, 10], "name": "Boundary target" }
+      },
+      {
+        "eventId": "sem-boundary-outcome",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 24000,
+        "sourceEventId": "input-boundary-outcome",
+        "payload": { "runtimeId": [11, 20], "name": "Boundary result" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-boundary-target",
+        "sourceEventIds": ["input-boundary-target"],
+        "action": { "kind": "click", "occurredAtMs": 20000 },
+        "outcome": {
+          "status": "incomplete",
+          "observedAtMs": 21000,
+          "latencyMs": 1000,
+          "reasonCodes": ["next-input-closed-window", "no-observable-change"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      },
+      {
+        "operationId": "operation-boundary-outcome",
+        "sourceEventIds": ["input-boundary-outcome"],
+        "action": { "kind": "click", "occurredAtMs": 21000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 24000,
+          "latencyMs": 3000,
+          "reasonCodes": ["popup-appeared"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ],
+    "boundaryAssertions": [
+      { "window": "target", "offsetMs": 299, "accepted": true },
+      { "window": "target", "offsetMs": 300, "accepted": true },
+      { "window": "target", "offsetMs": 301, "accepted": false },
+      { "window": "outcome", "offsetMs": 2999, "accepted": true },
+      { "window": "outcome", "offsetMs": 3000, "accepted": true },
+      { "window": "outcome", "offsetMs": 3001, "accepted": false }
+    ]
+  },
+  {
+    "caseId": "password-redaction",
+    "technology": "wpf",
+    "sessionId": "golden-password-redaction",
+    "inputEvents": [
+      { "eventId": "input-password-summary", "eventType": "keyboard_summary", "occurredAtMs": 25000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-password-redacted",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 25020,
+        "sourceEventId": "input-password-summary",
+        "payload": { "runtimeId": [12, 10], "controlType": "Edit", "isPassword": true, "privacyClass": "password-redacted" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-password-summary",
+        "sourceEventIds": ["input-password-summary"],
+        "action": { "kind": "typeSummary", "occurredAtMs": 25000 },
+        "outcome": {
+          "status": "incomplete",
+          "observedAtMs": 28000,
+          "latencyMs": 3000,
+          "reasonCodes": ["result-timeout", "no-observable-change"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      }
+    ]
+  },
+  {
+    "caseId": "win32-menu-filter-flow",
+    "technology": "win32",
+    "sessionId": "golden-win32-menu-filter",
+    "inputEvents": [
+      { "eventId": "input-menu-click", "eventType": "mouse_left_click", "occurredAtMs": 30000 },
+      { "eventId": "input-filter-click", "eventType": "mouse_left_click", "occurredAtMs": 30600 },
+      { "eventId": "input-filter-type", "eventType": "keyboard_summary", "occurredAtMs": 31500 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-menu-target",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 29990,
+        "sourceEventId": "input-menu-click",
+        "payload": { "runtimeId": [13, 10], "name": "View", "controlType": "MenuItem" }
+      },
+      {
+        "eventId": "sem-menu-opened",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 30120,
+        "sourceEventId": "input-menu-click",
+        "payload": { "runtimeId": [13, 11], "name": "View menu", "controlType": "Menu" }
+      },
+      {
+        "eventId": "sem-filter-target",
+        "eventType": "uia_focus_changed",
+        "occurredAtMs": 30620,
+        "sourceEventId": "input-filter-click",
+        "payload": { "runtimeId": [13, 20], "name": "Open issues", "controlType": "MenuItem" }
+      },
+      {
+        "eventId": "sem-filter-applied",
+        "eventType": "uia_selection_changed",
+        "occurredAtMs": 30760,
+        "sourceEventId": "input-filter-click",
+        "payload": { "runtimeId": [13, 20], "before": "notSelected", "after": "selected" }
+      },
+      {
+        "eventId": "sem-filter-text",
+        "eventType": "uia_property_changed",
+        "occurredAtMs": 31740,
+        "sourceEventId": "input-filter-type",
+        "payload": { "runtimeId": [13, 30], "property": "valueLength", "before": 0, "after": 6, "privacyClass": "text-length-only" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-menu-open",
+        "sourceEventIds": ["input-menu-click"],
+        "action": { "kind": "click", "occurredAtMs": 30000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 30120,
+          "latencyMs": 120,
+          "reasonCodes": ["popup-appeared"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-filter-select",
+        "sourceEventIds": ["input-filter-click"],
+        "action": { "kind": "select", "occurredAtMs": 30600 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 30760,
+          "latencyMs": 160,
+          "reasonCodes": ["selection-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-filter-type",
+        "sourceEventIds": ["input-filter-type"],
+        "action": { "kind": "typeSummary", "occurredAtMs": 31500 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 31740,
+          "latencyMs": 240,
+          "reasonCodes": ["value-length-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "wpf-tabbed-form-flow",
+    "technology": "wpf",
+    "sessionId": "golden-wpf-tabbed-form",
+    "inputEvents": [
+      { "eventId": "input-tab-click", "eventType": "mouse_left_click", "occurredAtMs": 33000 },
+      { "eventId": "input-description-type", "eventType": "keyboard_summary", "occurredAtMs": 33800 },
+      { "eventId": "input-save-shortcut", "eventType": "keyboard_summary", "occurredAtMs": 35000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-tab-selected",
+        "eventType": "uia_selection_changed",
+        "occurredAtMs": 33110,
+        "sourceEventId": "input-tab-click",
+        "payload": { "runtimeId": [14, 10], "name": "Details", "before": "notSelected", "after": "selected" }
+      },
+      {
+        "eventId": "sem-description-length",
+        "eventType": "uia_property_changed",
+        "occurredAtMs": 34020,
+        "sourceEventId": "input-description-type",
+        "payload": { "runtimeId": [14, 20], "property": "valueLength", "before": 12, "after": 21, "privacyClass": "text-length-only" }
+      },
+      {
+        "eventId": "sem-shortcut-saved",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 35330,
+        "sourceEventId": "input-save-shortcut",
+        "payload": { "runtimeId": [14, 30], "name": "Saved", "controlType": "Text" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-tab-select",
+        "sourceEventIds": ["input-tab-click"],
+        "action": { "kind": "select", "occurredAtMs": 33000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 33110,
+          "latencyMs": 110,
+          "reasonCodes": ["selection-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-description-type",
+        "sourceEventIds": ["input-description-type"],
+        "action": { "kind": "typeSummary", "occurredAtMs": 33800 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 34020,
+          "latencyMs": 220,
+          "reasonCodes": ["value-length-changed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-shortcut-save",
+        "sourceEventIds": ["input-save-shortcut"],
+        "action": { "kind": "shortcut", "occurredAtMs": 35000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 35330,
+          "latencyMs": 330,
+          "reasonCodes": ["popup-appeared"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "qt-grid-scroll-open",
+    "technology": "qt",
+    "sessionId": "golden-qt-grid-flow",
+    "inputEvents": [
+      { "eventId": "input-grid-scroll", "eventType": "mouse_wheel", "occurredAtMs": 37000 },
+      { "eventId": "input-row-double-click", "eventType": "mouse_double_click", "occurredAtMs": 37800 },
+      { "eventId": "input-row-context", "eventType": "mouse_right_click", "occurredAtMs": 39000 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-grid-structure",
+        "eventType": "uia_structure_changed",
+        "occurredAtMs": 37480,
+        "sourceEventId": "input-grid-scroll",
+        "payload": { "runtimeId": [15, 10], "change": "childrenInvalidated" }
+      },
+      {
+        "eventId": "sem-row-window-opened",
+        "eventType": "window_opened",
+        "occurredAtMs": 38160,
+        "sourceEventId": "input-row-double-click",
+        "payload": { "runtimeId": [15, 20], "name": "Row details" }
+      },
+      {
+        "eventId": "sem-row-context-menu",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 39120,
+        "sourceEventId": "input-row-context",
+        "payload": { "runtimeId": [15, 30], "name": "Context menu", "controlType": "Menu" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-grid-scroll",
+        "sourceEventIds": ["input-grid-scroll"],
+        "action": { "kind": "scroll", "occurredAtMs": 37000 },
+        "outcome": {
+          "status": "candidate",
+          "observedAtMs": 37480,
+          "latencyMs": 480,
+          "reasonCodes": ["structure-changed", "weak-completion-signal"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      },
+      {
+        "operationId": "operation-row-open",
+        "sourceEventIds": ["input-row-double-click"],
+        "action": { "kind": "doubleClick", "occurredAtMs": 37800 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 38160,
+          "latencyMs": 360,
+          "reasonCodes": ["window-opened"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-row-context",
+        "sourceEventIds": ["input-row-context"],
+        "action": { "kind": "rightClick", "occurredAtMs": 39000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 39120,
+          "latencyMs": 120,
+          "reasonCodes": ["popup-appeared"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  },
+  {
+    "caseId": "electron-modal-cancel-retry",
+    "technology": "electron",
+    "sessionId": "golden-electron-modal-retry",
+    "inputEvents": [
+      { "eventId": "input-modal-submit", "eventType": "mouse_left_click", "occurredAtMs": 41000 },
+      { "eventId": "input-modal-cancel", "eventType": "mouse_left_click", "occurredAtMs": 41700 },
+      { "eventId": "input-modal-retry", "eventType": "mouse_left_click", "occurredAtMs": 42500 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-modal-error",
+        "eventType": "dialog_appeared",
+        "occurredAtMs": 41240,
+        "sourceEventId": "input-modal-submit",
+        "payload": { "runtimeId": [16, 10], "name": "Cannot submit", "controlType": "Window" }
+      },
+      {
+        "eventId": "sem-modal-closed",
+        "eventType": "window_closed",
+        "occurredAtMs": 41890,
+        "sourceEventId": "input-modal-cancel",
+        "payload": { "runtimeId": [16, 10], "name": "Cannot submit" }
+      },
+      {
+        "eventId": "sem-modal-retry-target",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 42490,
+        "sourceEventId": "input-modal-retry",
+        "payload": { "runtimeId": [16, 20], "name": "Retry", "controlType": "Button" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-modal-submit",
+        "sourceEventIds": ["input-modal-submit"],
+        "action": { "kind": "click", "occurredAtMs": 41000 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 41240,
+          "latencyMs": 240,
+          "reasonCodes": ["dialog-appeared", "negative-completion-signal"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-modal-cancel",
+        "sourceEventIds": ["input-modal-cancel"],
+        "action": { "kind": "click", "occurredAtMs": 41700 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 41890,
+          "latencyMs": 190,
+          "reasonCodes": ["window-closed"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      },
+      {
+        "operationId": "operation-modal-retry",
+        "sourceEventIds": ["input-modal-retry"],
+        "action": { "kind": "click", "occurredAtMs": 42500 },
+        "outcome": {
+          "status": "incomplete",
+          "observedAtMs": 45500,
+          "latencyMs": 3000,
+          "reasonCodes": ["result-timeout", "no-observable-change"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      }
+    ]
+  },
+  {
+    "caseId": "weak-uia-recovery-sequence",
+    "technology": "weak-uia",
+    "sessionId": "golden-weak-uia-recovery",
+    "inputEvents": [
+      { "eventId": "input-degraded-click", "eventType": "mouse_left_click", "occurredAtMs": 47000 },
+      { "eventId": "input-coordinate-fallback", "eventType": "mouse_left_click", "occurredAtMs": 47700 },
+      { "eventId": "input-recovered-click", "eventType": "mouse_left_click", "occurredAtMs": 48600 }
+    ],
+    "semanticEvents": [
+      {
+        "eventId": "sem-recovery-degraded",
+        "eventType": "observer_health",
+        "occurredAtMs": 47080,
+        "sourceEventId": "input-degraded-click",
+        "payload": { "state": "circuitOpen", "queueOverflowCount": 3 }
+      },
+      {
+        "eventId": "sem-recovery-coordinate-context",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 47730,
+        "sourceEventId": "input-coordinate-fallback",
+        "payload": { "runtimeId": [17, 10], "controlType": "Pane" }
+      },
+      {
+        "eventId": "sem-recovered-target",
+        "eventType": "uia_snapshot",
+        "occurredAtMs": 48590,
+        "sourceEventId": "input-recovered-click",
+        "payload": { "runtimeId": [17, 20], "name": "Apply", "controlType": "Button" }
+      },
+      {
+        "eventId": "sem-recovered-observer",
+        "eventType": "observer_health",
+        "occurredAtMs": 48605,
+        "sourceEventId": "input-recovered-click",
+        "payload": { "state": "restarted", "queueOverflowCount": 0 }
+      },
+      {
+        "eventId": "sem-recovered-toast",
+        "eventType": "popup_appeared",
+        "occurredAtMs": 48910,
+        "sourceEventId": "input-recovered-click",
+        "payload": { "runtimeId": [17, 30], "name": "Applied", "controlType": "Text" }
+      }
+    ],
+    "expectedOperations": [
+      {
+        "operationId": "operation-degraded-click",
+        "sourceEventIds": ["input-degraded-click"],
+        "action": { "kind": "click", "occurredAtMs": 47000 },
+        "outcome": {
+          "status": "observerDegraded",
+          "observedAtMs": 47080,
+          "latencyMs": 80,
+          "reasonCodes": ["uia-circuit-open", "queue-overflow"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      },
+      {
+        "operationId": "operation-coordinate-fallback",
+        "sourceEventIds": ["input-coordinate-fallback"],
+        "action": { "kind": "click", "occurredAtMs": 47700 },
+        "outcome": {
+          "status": "incomplete",
+          "observedAtMs": 48600,
+          "latencyMs": 900,
+          "reasonCodes": ["next-input-closed-window", "no-observable-change"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "context"]
+      },
+      {
+        "operationId": "operation-recovered-click",
+        "sourceEventIds": ["input-recovered-click"],
+        "action": { "kind": "click", "occurredAtMs": 48600 },
+        "outcome": {
+          "status": "confirmed",
+          "observedAtMs": 48910,
+          "latencyMs": 310,
+          "reasonCodes": ["popup-appeared", "observer-restarted"]
+        },
+        "expectedEvidenceRoles": ["supportsTarget", "supportsOutcome"]
+      }
+    ]
+  }
+]

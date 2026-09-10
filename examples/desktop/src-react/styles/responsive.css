@@ -1,0 +1,448 @@
+/* Fluid window layout — fill Electron window and reflow on resize.
+ * Loaded last so it wins over legacy min-height / 100vh rules.
+ */
+
+html {
+  height: 100%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  max-height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+#root {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Page shell fills window */
+.layout {
+  width: min(100%, 1860px);
+  max-width: 100%;
+  height: 100%;
+  max-height: 100%;
+  margin: 0 auto;
+  padding: clamp(8px, 0.8vw, 12px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.workspace-shell,
+.workspace-shell-mvp,
+.app-shell,
+.main-tabs-wrapper {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Flat tab bar: natural height */
+.app-tabbar,
+.tab-nav-container {
+  flex: 0 0 auto;
+}
+
+.app-tab-panels,
+.tab-content {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-top: 10px;
+  gap: 0;
+}
+
+.app-tab-panel,
+.tab-page {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* —— Main recording tab —— */
+.app-tab-panel-main {
+  overflow: hidden;
+}
+
+.app-tab-panel-main .recorder-main-shell,
+.app-tab-panel-main .recorder-main-shell-mvp {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  gap: 0;
+  overflow: hidden;
+}
+
+/* Workbench: video | log, both stretch with window */
+.recorder-workbench-grid {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: none !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, min(360px, 32vw)) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  align-items: stretch !important;
+  gap: 10px !important;
+  overflow: hidden;
+}
+
+.recorder-primary-stack {
+  min-width: 0;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.recorder-primary-stack > .recorder-playback-stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+}
+
+/* Playback stage fills stack */
+.recorder-playback-stage {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100%;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  gap: 8px !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.recorder-stage-surface {
+  min-height: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.recorder-stage-player-shell {
+  flex: 1 1 auto;
+  min-height: 0 !important;
+  height: auto !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, min(260px, 28%)) !important;
+  gap: 8px !important;
+  overflow: hidden;
+}
+
+.recorder-stage-screen,
+.recorder-stage-screen-video {
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.recorder-stage-video-player {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.recorder-stage-video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  background: #000;
+  border-radius: 8px;
+}
+
+.recorder-stage-segment-panel {
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 6px;
+  overflow: hidden;
+}
+
+.recorder-stage-segment-list {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.recorder-stage-metrics-tags,
+.recorder-stage-metrics {
+  flex: 0 0 auto;
+}
+
+/* Log panel fills column; internal list scrolls */
+.recorder-log-panel {
+  min-width: 0;
+  min-height: 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  display: grid !important;
+  grid-template-rows: auto auto auto minmax(0, 1fr) !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+  box-sizing: border-box;
+}
+
+.recorder-log-table {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.recorder-log-rows {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.recorder-log-empty {
+  flex: 1 1 auto;
+  min-height: 80px;
+  display: grid;
+  place-items: center;
+}
+
+/* Toolbar wraps, never forces horizontal overflow */
+.recorder-toolbar-panel-slim {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.recorder-toolbar-actions-primary {
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.meta-tags {
+  max-width: 100%;
+}
+
+/* —— Settings tab: scroll whole form when short —— */
+.app-tab-panel-settings {
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
+  max-width: none;
+  padding-right: 2px;
+  align-self: stretch;
+}
+
+.app-tab-panel-settings .panel.control-panel {
+  max-width: 100%;
+}
+
+/* —— Breakpoints: reflow by window width —— */
+
+/* Medium: player stacks video above segments */
+@media (max-width: 1280px) {
+  .recorder-stage-player-shell {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: minmax(180px, 1.2fr) minmax(140px, 0.8fr) !important;
+  }
+
+  .recorder-stage-segment-list {
+    max-height: none;
+  }
+}
+
+/* Narrow: workbench stacks playback above log */
+@media (max-width: 1100px) {
+  .recorder-workbench-grid {
+    grid-template-columns: 1fr !important;
+    grid-template-rows: minmax(220px, 1.15fr) minmax(200px, 0.95fr) !important;
+    height: 100% !important;
+  }
+
+  .recorder-primary-stack,
+  .recorder-log-panel {
+    height: 100% !important;
+    max-height: none;
+  }
+
+  .app-tabbar,
+  .tab-nav-container {
+    align-items: stretch;
+  }
+
+  .app-tabbar-meta,
+  .workspace-status-inline {
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+/* Short windows: allow outer scroll so nothing is clipped permanently */
+@media (max-height: 720px) {
+  body {
+    overflow: auto;
+  }
+
+  html,
+  body,
+  #root,
+  .layout {
+    height: auto;
+    max-height: none;
+    min-height: 100%;
+  }
+
+  .workspace-shell,
+  .app-shell,
+  .app-tab-panels,
+  .app-tab-panel-main {
+    overflow: visible;
+    height: auto;
+    min-height: 0;
+  }
+
+  .app-tab-panel-main .recorder-main-shell-mvp {
+    height: auto !important;
+    min-height: min(640px, 100vh - 72px) !important;
+  }
+
+  .recorder-workbench-grid {
+    min-height: 480px !important;
+    height: auto !important;
+  }
+
+  .recorder-primary-stack,
+  .recorder-log-panel,
+  .recorder-playback-stage {
+    height: auto !important;
+    min-height: 280px !important;
+  }
+}
+
+/* Very narrow */
+@media (max-width: 760px) {
+  .layout {
+    padding: 6px;
+  }
+
+  .recorder-toolbar-panel-slim {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .recorder-toolbar-actions-primary {
+    justify-content: flex-start;
+  }
+
+  .recorder-stage-title-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .app-tab {
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+}
+
+
+/* fill-chain fix: stretch main workbench to full remaining height */
+.app-tab-panels,
+.tab-content {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100%;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.app-tab-panel-main {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.app-tab-panel-main .recorder-main-shell,
+.app-tab-panel-main .recorder-main-shell-mvp,
+.app-tab-panel-main .recorder-main-shell-fill {
+  flex: 1 1 auto !important;
+  width: 100%;
+  min-height: 0 !important;
+  height: 100% !important;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  overflow: hidden !important;
+}
+
+.app-tab-panel-main .recorder-workbench-grid {
+  width: 100%;
+  height: 100% !important;
+  min-height: 0 !important;
+  align-self: stretch;
+}
+
+/* settings: full width, multi-column form */
+.app-tab-panel-settings,
+.settings-page {
+  width: 100% !important;
+  max-width: none !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0 !important;
+}
+
+.app-tab-panel-settings .settings-surface {
+  width: 100%;
+  max-width: none;
+}
+
+.app-tab-panel-settings .settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  width: 100%;
+}
+
+.app-tab-panel-settings .settings-option-list {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  width: 100%;
+}

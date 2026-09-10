@@ -1,0 +1,17 @@
+{
+  "profileId": "demo",
+  "rules": [
+    {
+      "matchControlName": "保存",
+      "alias": "保存订单"
+    },
+    {
+      "matchAutomationId": "btnNewOrder",
+      "alias": "新建订单"
+    },
+    {
+      "matchTitleContains": "登录",
+      "aliasPrefix": "业务·"
+    }
+  ]
+}

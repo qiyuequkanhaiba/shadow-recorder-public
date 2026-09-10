@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "profileId": "demo-notepad",
+  "name": "记事本演示画像",
+  "description": "示例：进程绑定 + 控件别名 + 场景完成规则。可被 load_semantic_profile 加载。",
+  "targetProcessName": "notepad.exe",
+  "enabled": true,
+  "priority": 10,
+  "source": "sample",
+  "aliasRules": [
+    {
+      "ruleId": "alias-save",
+      "alias": "保存文件",
+      "automationId": null,
+      "controlName": "保存",
+      "controlType": "Button",
+      "priority": 10,
+      "actionType": "CLICK"
+    },
+    {
+      "ruleId": "alias-open",
+      "alias": "打开文件",
+      "controlName": "打开",
+      "controlType": "Button",
+      "priority": 10,
+      "actionType": "CLICK"
+    }
+  ],
+  "scenarioRules": [
+    {
+      "ruleId": "scenario-save-dialog",
+      "name": "保存后出现对话框",
+      "triggerActionAlias": "保存文件",
+      "primaryTargetAlias": null,
+      "transitionType": "dialog",
+      "timeoutMs": 3000,
+      "completionMode": "semantic_only",
+      "negative": false
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+{
+  "name": "shadow-recorder-desktop-example",
+  "version": "0.1.10",
+  "private": true,
+  "author": "ReqCase",
+  "description": "Electron + React demo for shadow_recorder napi plugin",
+  "main": "dist-electron/src-electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm:dev:react\" \"npm:dev:electron\"",
+    "dev:react": "vite",
+    "dev:electron": "npm run prepare:ffmpeg:optional && npm run build:native && npm run build:react && npm run build:electron && wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist-electron/src-electron/main.js",
+    "demo:node": "npm run build:native && tsx src-electron/node-usage.ts",
+    "build:native": "powershell -ExecutionPolicy Bypass -File ../../scripts/windows-build-native.ps1 -SkipEnvCheck -NoTargetInstall",
+    "build:native:release": "powershell -ExecutionPolicy Bypass -File ../../scripts/windows-build-native.ps1 -SkipEnvCheck -NoTargetInstall -Release",
+    "prepare:ffmpeg": "tsx scripts/prepare-ffmpeg-resource.ts",
+    "prepare:ffmpeg:optional": "tsx scripts/prepare-ffmpeg-resource.ts --optional",
+    "clean:release-output": "tsx scripts/clean-release-output.ts",
+    "clean:safe": "powershell -ExecutionPolicy Bypass -File ../../scripts/safe-clean-workspace.ps1",
+    "clean:safe:dry-run": "powershell -ExecutionPolicy Bypass -File ../../scripts/safe-clean-workspace.ps1 -DryRun",
+    "test:metrics-stream": "tsx scripts/metrics-stream-test.ts",
+    "test:recorder-page-bindings": "tsx scripts/recorder-page-bindings-test.ts",
+    "test:tuning-advisor-commands": "tsx scripts/tuning-advisor-commands-test.ts",
+    "test:recorder-bootstrap-bindings": "tsx scripts/recorder-bootstrap-bindings-test.ts",
+    "test:recorder-bootstrap-loader": "tsx scripts/recorder-bootstrap-loader-test.ts",
+    "test:ipc-validators": "tsx scripts/ipc-validators-test.ts",
+    "test:report-export": "tsx scripts/report-export-test.ts",
+    "test:evidence-export": "tsx scripts/evidence-export-test.ts",
+    "test:evidence-manifest-v2": "tsx scripts/evidence-manifest-v2-test.ts && tsx scripts/evidence-export-manifest-v2-test.ts",
+    "test:recording-smoke": "tsx scripts/recording-smoke-metadata-test.ts && tsx scripts/recording-smoke-test.ts",
+    "test:encoding-benchmark": "tsx scripts/encoding-benchmark-test.ts",
+    "bench:compare": "tsx scripts/benchmark-compare.ts",
+    "test:performance-baseline": "tsx scripts/performance-baseline-test.ts",
+    "test:operation-semantic-baseline": "tsx scripts/operation-semantic-baseline-test.ts",
+    "test:operation-golden-contract": "tsx scripts/operation-golden-contract-test.ts",
+    "test:operation-ipc-validators": "tsx scripts/operation-ipc-validators-test.ts",
+    "test:native-declaration": "tsx scripts/native-declaration-contract-test.ts",
+    "test:operation-native-contract": "tsx scripts/native-declaration-contract-test.ts && tsx scripts/operation-native-contract-test.ts",
+    "test:operation-compatibility": "tsx scripts/operation-compatibility-test.ts && tsx scripts/historical-session-matrix-test.ts",
+    "test:historical-session-matrix": "tsx scripts/historical-session-matrix-test.ts",
+    "test:historical-session-real-packs": "tsx scripts/historical-session-real-pack-test.ts",
+    "test:historical-session-ui-smoke": "node scripts/historical-session-ui-smoke.mjs",
+    "test:recording-review-interaction": "tsx scripts/recording-review-interaction-test.ts",
+    "test:operation-performance-skeleton": "tsx scripts/operation-performance-test.ts",
+    "test:semantic-profile-contract": "tsx scripts/semantic-profile-contract-test.ts",
+    "test:operation-semantic-suite": "npm run test:operation-golden-contract && npm run test:operation-ipc-validators && npm run test:operation-compatibility && npm run test:recording-review-interaction && npm run test:operation-performance-skeleton && npm run test:semantic-profile-contract",
+    "test:diagnostics": "tsx scripts/diagnostics-test.ts",
+    "test:floating-toolbar": "tsx scripts/floating-toolbar-layout-test.ts",
+    "test:quick-defect-fallback": "tsx scripts/quick-defect-fallback-test.ts",
+    "test:package-artifact": "tsx scripts/package-artifact-test.ts",
+    "check:quality": "powershell -ExecutionPolicy Bypass -File ../../scripts/quality-gate.ps1",
+    "check:quality:quick": "powershell -ExecutionPolicy Bypass -File ../../scripts/quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild",
+    "typecheck:react": "tsc -p tsconfig.json --noEmit",
+    "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
+    "build": "npm run build:react && npm run build:electron",
+    "build:react": "npm run typecheck:react && vite build",
+    "build:electron": "tsc -p tsconfig.electron.json",
+    "patch:semantic-profile-ipc": "node ../../scripts/patch-semantic-profile-ipc.mjs && node ../../scripts/patch-semantic-profile-ipc-finish.mjs",
+    "pack": "npm run build:native:release && npm run prepare:ffmpeg && npm run build && npm run clean:release-output && electron-builder --dir",
+    "dist:nsis": "npm run build:native:release && npm run prepare:ffmpeg && npm run build && npm run clean:release-output && electron-builder --win nsis",
+    "dist:wix-msi": "npm run pack && powershell -ExecutionPolicy Bypass -File scripts/build-wix-msi.ps1 -SkipPack",
+    "dist:msi": "npm run dist:wix-msi",
+    "pack:msi": "npm run dist:msi",
+    "dist": "npm run dist:nsis",
+    "test:ai-provider": "tsx scripts/ai-provider-test.ts",
+    "release:preflight": "npm run check:quality && npm run build"
+  },
+  "build": {
+    "appId": "com.reqcase.shadowrecorder",
+    "productName": "影子录制器",
+    "directories": {
+      "output": "release"
+    },
+    "electronDist": "node_modules/electron/dist",
+    "files": [
+      "dist-react/**/*",
+      "dist-electron/**/*",
+      "!dist-electron/reports/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "../../target/release/shadow_recorder.node",
+        "to": "shadow_recorder.node"
+      },
+      {
+        "from": "build-resources/ffmpeg",
+        "to": "ffmpeg"
+      },
+      {
+        "from": "../../ico.ico",
+        "to": "ico.ico"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "../../ico.ico"
+    },
+    "nsis": {
+      "artifactName": "${productName} 安装包 ${version}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "msi": {
+      "artifactName": "${productName} ${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "@types/react": "^19.1.11",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.0.1",
+    "cross-env": "^10.1.0",
+    "electron": "^37.1.0",
+    "electron-builder": "^26.8.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.3",
+    "wait-on": "^8.0.5"
+  }
+}

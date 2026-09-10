@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "kind": "reqcase.operation-golden-manifest",
+  "casesFile": "cases.json",
+  "minimumCaseCount": 10,
+  "requiredTechnologies": [
+    "win32",
+    "wpf",
+    "qt",
+    "electron",
+    "weak-uia"
+  ],
+  "requiredOutcomeStatuses": [
+    "confirmed",
+    "candidate",
+    "ambiguous",
+    "incomplete",
+    "observerDegraded"
+  ],
+  "privacyForbiddenValues": [
+    "example-secret-value",
+    "user@example.invalid",
+    "token-plaintext"
+  ],
+  "targetWindowMs": 300,
+  "outcomeWindowMs": 3000
+}

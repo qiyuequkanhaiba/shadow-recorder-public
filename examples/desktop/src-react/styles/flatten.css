@@ -1,0 +1,664 @@
+/* Flatten nested cards → single-layer bars / lists / form sections */
+
+/* ========== 1) Recording action bar (not a tall card) ========== */
+.recorder-action-bar,
+.recorder-toolbar-panel,
+.recorder-toolbar-panel-slim,
+.recorder-toolbar-panel-compact {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center !important;
+  align-self: start !important;
+  justify-content: space-between;
+  gap: 8px 12px !important;
+  width: 100%;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  margin: 0 !important;
+  padding: 6px 0 8px !important;
+  border: 0 !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  transform: none !important;
+}
+
+.recorder-action-bar:hover,
+.recorder-toolbar-panel:hover,
+.recorder-toolbar-panel-slim:hover {
+  background: transparent !important;
+  border-color: transparent !important;
+  border-bottom-color: rgba(148, 163, 184, 0.18) !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.recorder-action-bar-meta,
+.recorder-toolbar-meta {
+  flex: 1 1 200px;
+  min-width: 0;
+  align-items: center;
+}
+
+.recorder-action-bar-actions,
+.recorder-toolbar-actions-primary {
+  display: flex !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  grid-column: auto !important;
+  align-self: center !important;
+}
+
+.recorder-action-bar-actions .btn,
+.recorder-toolbar-actions-primary .btn {
+  min-height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+/* Kill legacy toolbar stat cards if any remain */
+.recorder-toolbar-brief,
+.recorder-toolbar-stat {
+  display: none !important;
+}
+
+/* Main shell: toolbar row must stay content-sized */
+.app-tab-panel-main .recorder-main-shell-mvp,
+.app-tab-panel-main .recorder-main-shell {
+  grid-template-rows: minmax(0, 1fr) !important;
+  align-items: stretch;
+}
+
+/* ========== 2) Continuous timeline: rail list, not nested cards ========== */
+.timeline-rail,
+.recorder-stage-segment-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  gap: 6px;
+  min-height: 0;
+  height: 100%;
+  padding: 0 !important;
+  margin: 0;
+  border: 0 !important;
+  border-left: 1px solid rgba(148, 163, 184, 0.12) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-left: 10px !important;
+}
+
+.timeline-rail-head,
+.recorder-stage-segment-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 0 2px;
+  border: 0;
+  background: transparent;
+}
+
+.timeline-rail-head strong,
+.recorder-stage-segment-header strong {
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.timeline-rail-head span,
+.recorder-stage-segment-header span {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.timeline-rail-list,
+.recorder-stage-segment-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Single-layer row item */
+.timeline-rail-item,
+.meta-chip.segment-chip,
+.recorder-stage-segment-chip {
+  display: grid !important;
+  grid-template-columns: 1fr;
+  gap: 1px !important;
+  width: 100%;
+  margin: 0;
+  padding: 6px 8px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  border-left: 2px solid transparent !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-secondary);
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.timeline-rail-item:hover,
+.meta-chip.segment-chip:hover,
+.recorder-stage-segment-chip:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.08) !important;
+  border-left-color: rgba(56, 189, 248, 0.45) !important;
+  color: var(--text-primary);
+  transform: none !important;
+}
+
+.timeline-rail-item.is-active,
+.meta-chip.segment-chip.is-active,
+.recorder-stage-segment-chip.is-active {
+  background: rgba(56, 189, 248, 0.1) !important;
+  border-left-color: var(--accent-primary) !important;
+  color: var(--text-primary);
+}
+
+.timeline-rail-item strong,
+.meta-chip.segment-chip strong,
+.recorder-stage-segment-chip strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: inherit;
+}
+
+.timeline-rail-item span,
+.timeline-rail-item small,
+.meta-chip.segment-chip span,
+.meta-chip.segment-chip small,
+.recorder-stage-segment-chip span,
+.recorder-stage-segment-chip small {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.timeline-rail-empty {
+  padding: 16px 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  border: 0;
+  background: transparent;
+}
+
+/* Playback stage itself: no outer card chrome */
+.app-tab-panel-main .recorder-playback-stage,
+.app-tab-panel-main .recorder-primary-stack {
+  border: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.app-tab-panel-main .recorder-primary-stack {
+  border: 1px solid rgba(148, 163, 184, 0.12) !important;
+  border-radius: 10px;
+  background: rgba(2, 6, 23, 0.22) !important;
+}
+
+.app-tab-panel-main .recorder-log-panel {
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+/* ========== 3) Settings tab: one surface, section dividers ========== */
+.settings-page,
+.app-tab-panel-settings {
+  gap: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+.settings-page .settings-surface,
+.app-tab-panel-settings .settings-surface,
+.app-tab-panel-settings .panel.control-panel {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  padding: 0 0 16px !important;
+  margin: 0 0 8px !important;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12) !important;
+  transform: none !important;
+}
+
+.settings-page .settings-surface:last-child,
+.app-tab-panel-settings .settings-surface:last-child {
+  border-bottom: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.settings-page .settings-surface:hover,
+.app-tab-panel-settings .panel:hover,
+.app-tab-panel-settings .settings-surface:hover {
+  background: transparent !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.settings-heading {
+  margin: 0 0 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-heading h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.settings-heading h2::before {
+  display: none !important;
+}
+
+.settings-heading p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-meta {
+  margin: 0 0 12px;
+}
+
+.settings-grid {
+  display: grid;
+  gap: 10px 14px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-block,
+.preset-panel,
+.control-panel-display-card {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding: 10px 0 !important;
+  margin: 4px 0 0;
+  border-top: 1px solid rgba(148, 163, 184, 0.1) !important;
+}
+
+.settings-block-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.settings-option-list {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+
+.settings-option,
+.control-panel-display-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 8px !important;
+  background: rgba(148, 163, 184, 0.04) !important;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+
+.settings-option:hover,
+.control-panel-display-option:hover {
+  background: rgba(148, 163, 184, 0.08) !important;
+}
+
+.settings-option.is-active,
+.control-panel-display-option.active {
+  border-color: rgba(56, 189, 248, 0.28) !important;
+  background: rgba(56, 189, 248, 0.08) !important;
+}
+
+.settings-option-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-option-copy strong {
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.settings-option-copy small {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.settings-inline-actions,
+.preset-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.settings-disclosure,
+.control-disclosure {
+  border: 0 !important;
+  border-top: 1px solid rgba(148, 163, 184, 0.1) !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  padding: 8px 0 !important;
+  box-shadow: none !important;
+}
+
+.settings-disclosure > summary,
+.control-disclosure > summary {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  list-style: none;
+}
+
+.settings-disclosure > summary::-webkit-details-marker,
+.control-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-feedback-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.settings-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-empty {
+  padding: 12px 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.settings-page label,
+.app-tab-panel-settings label,
+.settings-surface label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.settings-page input,
+.settings-page select,
+.settings-page textarea,
+.app-tab-panel-settings input,
+.app-tab-panel-settings select,
+.app-tab-panel-settings textarea {
+  min-height: 32px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgba(2, 6, 23, 0.35);
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.settings-page .control-row,
+.app-tab-panel-settings .control-row {
+  border: 0;
+  background: transparent;
+  padding: 6px 0;
+}
+
+/* Legacy panel chrome off inside settings */
+.app-tab-panel-settings .panel h2::before {
+  display: none !important;
+}
+
+/* Prevent player-shell nested card look on segment side */
+.recorder-stage-player-shell {
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.recorder-stage-screen {
+  border-radius: 10px;
+}
+
+
+/* Tab row: tabs left, dynamic tools right (no separate action card) */
+.app-tabbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  flex-wrap: nowrap;
+  min-height: 44px;
+  padding: 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.16);
+  background: transparent;
+}
+
+.app-tabbar-aside {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  min-width: 0;
+  padding: 4px 0;
+}
+
+.app-tabbar-tags {
+  justify-content: flex-end;
+  max-width: min(100%, 420px);
+}
+
+.app-tabbar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.app-tabbar-actions .btn {
+  min-height: 30px;
+  padding: 0 11px;
+  font-size: 12px;
+}
+
+/* Main panel is only workbench now */
+.recorder-main-shell-fill {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  gap: 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  flex: 1 1 auto !important;
+}
+
+.recorder-main-shell-fill > .recorder-workbench-grid {
+  height: 100%;
+  min-height: 0;
+}
+
+/* Hide any leftover action bar chrome */
+.recorder-action-bar {
+  display: none !important;
+}
+
+@media (max-width: 1100px) {
+  .app-tabbar {
+    flex-wrap: wrap;
+    align-items: stretch;
+  }
+
+  .app-tabs {
+    width: 100%;
+  }
+
+  .app-tabbar-aside {
+    width: 100%;
+    justify-content: space-between;
+    padding-bottom: 6px;
+  }
+
+  .app-tabbar-tags {
+    max-width: 100%;
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-tabbar-aside {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .app-tabbar-actions {
+    justify-content: flex-start;
+  }
+}
+
+
+/* ===== FINAL layout fill overrides ===== */
+html, body, #root {
+  height: 100%;
+}
+
+.layout {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.workspace-shell,
+.workspace-shell-mvp,
+.app-shell {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-tabbar {
+  flex: 0 0 auto;
+}
+
+.app-tab-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Recording: fill remaining viewport under tabbar */
+.app-tab-panel.app-tab-panel-main {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.app-tab-panel-main .recorder-main-shell-fill {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  display: grid !important;
+  grid-template-rows: minmax(0, 1fr) !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.app-tab-panel-main .recorder-workbench-grid {
+  height: 100% !important;
+  min-height: 0 !important;
+  width: 100% !important;
+}
+
+.app-tab-panel-main .recorder-primary-stack,
+.app-tab-panel-main .recorder-log-panel,
+.app-tab-panel-main .recorder-playback-stage {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+/* Settings: use full content width */
+.app-tab-panel.app-tab-panel-settings.settings-page,
+.app-tab-panel-settings,
+.settings-page {
+  width: 100% !important;
+  max-width: none !important;
+  align-self: stretch !important;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.app-tab-panel-settings .settings-surface,
+.app-tab-panel-settings .settings-grid,
+.app-tab-panel-settings .settings-block,
+.app-tab-panel-settings .settings-option-list {
+  width: 100% !important;
+  max-width: none !important;
+  box-sizing: border-box;
+}
+
+.app-tab-panel-settings .settings-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
+}
+
+.app-tab-panel-settings .settings-option-list {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+}

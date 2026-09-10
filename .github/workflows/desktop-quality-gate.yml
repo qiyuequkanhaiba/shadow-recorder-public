@@ -1,0 +1,167 @@
+name: Desktop Quality Gate
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - src/**
+      - scripts/**
+      - examples/desktop/**
+      - Cargo.toml
+      - Cargo.lock
+      - build.rs
+      - .github/workflows/desktop-quality-gate.yml
+  pull_request:
+    paths:
+      - src/**
+      - scripts/**
+      - examples/desktop/**
+      - Cargo.toml
+      - Cargo.lock
+      - build.rs
+      - .github/workflows/desktop-quality-gate.yml
+  workflow_dispatch:
+    inputs:
+      enable_benchmark_compare:
+        description: Enable benchmark baseline/candidate compare gate in this run.
+        required: false
+        default: "false"
+      benchmark_baseline_path:
+        description: Optional benchmark baseline JSON path (repo-relative or absolute on runner).
+        required: false
+        default: ""
+      benchmark_candidate_path:
+        description: Optional benchmark candidate JSON path (repo-relative or absolute on runner).
+        required: false
+        default: ""
+      benchmark_capture_goal:
+        description: Optional capture improvement goal ratio in [0,1].
+        required: false
+        default: "0.15"
+      benchmark_encode_goal:
+        description: Optional encode improvement goal ratio in [0,1].
+        required: false
+        default: "0.15"
+      benchmark_drop_goal:
+        description: Optional drop-rate improvement goal ratio in [0,1].
+        required: false
+        default: "0.30"
+
+jobs:
+  quality-gate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: examples/desktop/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install desktop dependencies
+        run: npm ci
+        working-directory: examples/desktop
+
+      - name: Run quick quality gate
+        id: run_quality_gate
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $args = @(
+            "-SkipWindowsEnvCheck",
+            "-SkipBuild"
+          )
+
+          $enableBenchmarkCompare = "${{ github.event.inputs.enable_benchmark_compare || 'false' }}"
+          $baselinePath = "${{ github.event.inputs.benchmark_baseline_path || '' }}"
+          $candidatePath = "${{ github.event.inputs.benchmark_candidate_path || '' }}"
+          $captureGoal = "${{ github.event.inputs.benchmark_capture_goal || '0.15' }}"
+          $encodeGoal = "${{ github.event.inputs.benchmark_encode_goal || '0.15' }}"
+          $dropGoal = "${{ github.event.inputs.benchmark_drop_goal || '0.30' }}"
+
+          if ($enableBenchmarkCompare -eq "true") {
+            if ([string]::IsNullOrWhiteSpace($baselinePath) -or [string]::IsNullOrWhiteSpace($candidatePath)) {
+              throw "enable_benchmark_compare=true requires both benchmark_baseline_path and benchmark_candidate_path."
+            }
+
+            $args += @(
+              "-BenchmarkBaselinePath", $baselinePath,
+              "-BenchmarkCandidatePath", $candidatePath,
+              "-BenchmarkCaptureGoal", $captureGoal,
+              "-BenchmarkEncodeGoal", $encodeGoal,
+              "-BenchmarkDropGoal", $dropGoal
+            )
+
+            Write-Host "Benchmark compare gate enabled for this run."
+          } else {
+            Write-Host "Benchmark compare gate disabled for this run."
+          }
+
+          powershell -ExecutionPolicy Bypass -File .\scripts\quality-gate.ps1 @args
+
+      - name: Publish quality gate step summary
+        if: always()
+        shell: pwsh
+        run: |
+          $status = "${{ steps.run_quality_gate.outcome }}"
+          $enableBenchmarkCompare = "${{ github.event.inputs.enable_benchmark_compare || 'false' }}"
+          $baselinePath = "${{ github.event.inputs.benchmark_baseline_path || '' }}"
+          $candidatePath = "${{ github.event.inputs.benchmark_candidate_path || '' }}"
+          $captureGoal = "${{ github.event.inputs.benchmark_capture_goal || '0.15' }}"
+          $encodeGoal = "${{ github.event.inputs.benchmark_encode_goal || '0.15' }}"
+          $dropGoal = "${{ github.event.inputs.benchmark_drop_goal || '0.30' }}"
+
+          $summary = @()
+          $summary += "# Desktop Quality Gate"
+          $summary += ""
+          $summary += "- Status: **$status**"
+          $summary += "- Workflow event: ${{ github.event_name }}"
+          $summary += "- Benchmark compare enabled: **$enableBenchmarkCompare**"
+
+          if ($enableBenchmarkCompare -eq "true") {
+            $summary += "- Benchmark baseline path: $baselinePath"
+            $summary += "- Benchmark candidate path: $candidatePath"
+            $summary += "- Benchmark goals (capture/encode/drop): $captureGoal / $encodeGoal / $dropGoal"
+          }
+
+          $summaryText = $summary -join "`n"
+          $summaryText | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+          $benchmarkSummaryPath = "examples/desktop/.ci-artifacts/quality-gate-benchmark-compare-result.md"
+          if (Test-Path $benchmarkSummaryPath) {
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            "## Benchmark Compare Details" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+            Get-Content -Path $benchmarkSummaryPath -Raw | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          }
+
+      - name: Upload quality gate benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-quality-gate-benchmark
+          path: |
+            examples/desktop/.ci-artifacts/quality-gate-benchmark-compare-result.json
+            examples/desktop/.ci-artifacts/quality-gate-benchmark-compare-result.md
+          if-no-files-found: ignore
+
+      - name: Enforce quality gate pass
+        if: steps.run_quality_gate.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Error "Desktop quality gate failed."
+          exit 1

@@ -16,7 +16,17 @@ export type ChecksumEntryOptions = {
 
 export async function createZipArchive(sourceDir: string, destinationZipPath: string): Promise<void> {
   await mkdir(path.dirname(destinationZipPath), { recursive: true });
-  await runPowerShellZip(sourceDir, destinationZipPath);
+  if (process.platform === 'win32') {
+    try {
+      await runPowerShellZip(sourceDir, destinationZipPath);
+      return;
+    } catch (err: any) {
+      if (err?.code !== 'ENOENT') {
+        throw err;
+      }
+    }
+  }
+  await runUnixZip(sourceDir, destinationZipPath);
 }
 
 export async function buildChecksumEntries(
@@ -51,7 +61,7 @@ function runPowerShellZip(sourceDir: string, destinationZipPath: string): Promis
     const command = [
       '$ErrorActionPreference = "Stop"',
       `if (Test-Path -LiteralPath '${escapePowerShellLiteral(destinationZipPath)}') { Remove-Item -LiteralPath '${escapePowerShellLiteral(destinationZipPath)}' -Force }`,
-      `Compress-Archive -LiteralPath '${escapePowerShellLiteral(sourceDir)}' -DestinationPath '${escapePowerShellLiteral(destinationZipPath)}' -CompressionLevel Optimal`,
+      `Compress-Archive -LiteralPath '${escapePowerShellLiteral(sourceDir)}' -DestinationPath '${escapePowerShellLiteral(destinationZipPath)}' -CompressionLevel Fastest`,
     ].join('; ');
 
     const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { windowsHide: true });
@@ -66,6 +76,27 @@ function runPowerShellZip(sourceDir: string, destinationZipPath: string): Promis
         return;
       }
       reject(new Error(stderr.trim() || `Compress-Archive failed with exit code ${code}.`));
+    });
+  });
+}
+
+function runUnixZip(sourceDir: string, destinationZipPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('zip', ['-q', '-r', destinationZipPath, '.'], {
+      cwd: sourceDir,
+      windowsHide: true,
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.once('error', reject);
+    child.once('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `zip failed with exit code ${code}.`));
     });
   });
 }

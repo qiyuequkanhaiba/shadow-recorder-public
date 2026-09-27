@@ -963,18 +963,45 @@ export function registerReqCaseShadowRecorderIpc(
   handleTrusted(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidence, async (event, rawInput: unknown) => {
     const input = parseTestSessionEvidenceExportInput(rawInput);
     const reportProgress = (progress: { percent: number; message: string }) => {
+      const targets = new Set<WebContents>();
       if (!event.sender.isDestroyed()) {
-        event.sender.send(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidenceProgress, progress);
+        targets.add(event.sender);
+      }
+      for (const target of options.getRendererTargets()) {
+        if (!target.isDestroyed()) {
+          targets.add(target);
+        }
+      }
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+          targets.add(win.webContents);
+        }
+      }
+      for (const target of targets) {
+        try {
+          target.send(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidenceProgress, progress);
+        } catch {
+          // ignore
+        }
       }
     };
     let targetDir = input.targetDir;
     if (!targetDir) {
+      const senderWindow = BrowserWindow.fromWebContents(event.sender);
+      const isSenderFloating = senderWindow && !senderWindow.isResizable();
+      const dialogParent = senderWindow && !senderWindow.isDestroyed() && !isSenderFloating
+        ? senderWindow
+        : undefined;
+
       if (input.outputMode === 'zip') {
-        const result = await dialog.showSaveDialog({
+        const dialogOptions = {
           title: '保存证据 ZIP',
           defaultPath: resolveEvidenceZipSaveDialogDefaultPath(input),
           filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
-        });
+        };
+        const result = dialogParent
+          ? await dialog.showSaveDialog(dialogParent, dialogOptions)
+          : await dialog.showSaveDialog(dialogOptions);
         if (result.canceled || !result.filePath) {
           throw new Error('Export canceled by user');
         }
@@ -986,10 +1013,13 @@ export function registerReqCaseShadowRecorderIpc(
         }, reportProgress);
       }
 
-      const result = await dialog.showOpenDialog({
+      const dialogOptions = {
         title: '选择证据包导出目录',
-        properties: ['openDirectory', 'createDirectory'],
-      });
+        properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
+      };
+      const result = dialogParent
+        ? await dialog.showOpenDialog(dialogParent, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions);
       if (result.canceled || result.filePaths.length === 0) {
         throw new Error('Export canceled by user');
       }

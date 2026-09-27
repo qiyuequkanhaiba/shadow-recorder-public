@@ -610,19 +610,6 @@ export function createFloatingToolbarHtml(input: {
     <script>
       const api = window.reqcaseShadowRecorder;
       const exportProgressFill = document.getElementById('export-progress-fill');
-      if (api && api.onExportProgress) {
-        api.onExportProgress((progress) => {
-          const label = progress.percent + '% ' + progress.message;
-          setExportButtonState('exporting', label);
-          if (statusToast) {
-            statusToast.textContent = label;
-            statusToast.classList.add('is-visible');
-          }
-          if (exportProgressFill) {
-            exportProgressFill.style.width = Math.max(0, Math.min(100, progress.percent)) + '%';
-          }
-        });
-      }
       const island = document.getElementById('island');
       const islandInner = document.getElementById('island-inner');
       const islandContainer = document.getElementById('island-container');
@@ -645,6 +632,7 @@ export function createFloatingToolbarHtml(input: {
       };
 
       let busy = false;
+      let isExporting = false;
       let paused = false;
       let collapsed = ${initialCollapsed ? 'true' : 'false'};
       let pointerInside = false;
@@ -1064,6 +1052,9 @@ export function createFloatingToolbarHtml(input: {
       };
 
       const refreshCanExport = async () => {
+        if (isExporting) {
+          return canExport;
+        }
         try {
           if (!api.listTestSessions) {
             canExport = false;
@@ -1133,7 +1124,7 @@ export function createFloatingToolbarHtml(input: {
         buttons.pause.disabled = busy || !recording || paused;
         buttons.resume.disabled = busy || !recording || !paused;
         buttons.flag.disabled = busy || !recording;
-        buttons.export.disabled = busy || recording || !canExport;
+        buttons.export.disabled = isExporting || busy || recording || !canExport;
         buttons.main.disabled = busy;
         syncAutoCollapse();
         const effectiveCollapsed = pointerInside && requestedCollapsed ? collapsed : requestedCollapsed;
@@ -1162,7 +1153,7 @@ export function createFloatingToolbarHtml(input: {
               lastExportCheckAt = now;
               await refreshCanExport();
             }
-            buttons.export.disabled = busy || !canExport;
+            buttons.export.disabled = isExporting || busy || !canExport;
           }
         } catch {}
       };
@@ -1422,7 +1413,7 @@ export function createFloatingToolbarHtml(input: {
       };
 
       let exportStateTimer = null;
-      const setExportButtonState = (state, tooltip) => {
+      function setExportButtonState(state, tooltip) {
         if (!buttons.export) return;
         buttons.export.classList.remove('is-exporting', 'is-exported', 'is-error');
         island.classList.remove('is-exporting', 'is-exported');
@@ -1443,12 +1434,18 @@ export function createFloatingToolbarHtml(input: {
           buttons.export.innerHTML = '${ICONS.check}';
           buttons.export.setAttribute('title', tooltip || '已导出证据 ZIP');
           buttons.export.setAttribute('aria-label', tooltip || '已导出证据 ZIP');
+          if (exportProgressFill) {
+            exportProgressFill.style.width = '100%';
+          }
           exportStateTimer = window.setTimeout(() => {
             buttons.export.classList.remove('is-exported');
             island.classList.remove('is-exported');
             buttons.export.innerHTML = '${ICONS.export}';
             buttons.export.setAttribute('title', '导出证据 ZIP');
             buttons.export.setAttribute('aria-label', '导出证据 ZIP');
+            if (exportProgressFill) {
+              exportProgressFill.style.width = '0%';
+            }
             exportStateTimer = null;
           }, 2400);
         } else if (state === 'error') {
@@ -1456,6 +1453,9 @@ export function createFloatingToolbarHtml(input: {
           buttons.export.innerHTML = '${ICONS.warning}';
           buttons.export.setAttribute('title', tooltip || '暂无视频可导出');
           buttons.export.setAttribute('aria-label', tooltip || '暂无视频可导出');
+          if (exportProgressFill) {
+            exportProgressFill.style.width = '0%';
+          }
           exportStateTimer = window.setTimeout(() => {
             buttons.export.classList.remove('is-error');
             buttons.export.innerHTML = '${ICONS.export}';
@@ -1467,34 +1467,76 @@ export function createFloatingToolbarHtml(input: {
           buttons.export.innerHTML = '${ICONS.export}';
           buttons.export.setAttribute('title', '导出证据 ZIP');
           buttons.export.setAttribute('aria-label', '导出证据 ZIP');
+          if (exportProgressFill) {
+            exportProgressFill.style.width = '0%';
+          }
         }
-      };
+      }
 
-      const runExport = (event) => {
+      if (api && api.onExportProgress) {
+        api.onExportProgress((progress) => {
+          const label = progress.percent + '% ' + progress.message;
+          if (progress.percent < 100) {
+            isExporting = true;
+            if (buttons.export) buttons.export.disabled = true;
+            setExportButtonState('exporting', label);
+            if (statusToast) {
+              statusToast.textContent = label;
+              statusToast.classList.add('is-visible');
+            }
+          } else {
+            isExporting = false;
+            setExportButtonState('exported', '已完成导出 100%');
+            if (statusToast) {
+              statusToast.textContent = '已导出证据 ZIP';
+              statusToast.classList.add('is-visible');
+              if (toastTimer != null) {
+                window.clearTimeout(toastTimer);
+              }
+              toastTimer = window.setTimeout(() => {
+                statusToast.classList.remove('is-visible');
+              }, 2200);
+            }
+          }
+          if (exportProgressFill) {
+            exportProgressFill.style.width = Math.max(0, Math.min(100, progress.percent)) + '%';
+          }
+        });
+      }
+
+      const runExport = async (event) => {
         if (event) {
           event.preventDefault();
           event.stopPropagation();
         }
-        if (busy) return;
+        if (isExporting || busy) return;
         if (buttons.export.disabled || !canExport) {
           setExportButtonState('error', '暂无视频');
           return;
         }
-        void runTask(async () => {
-          if (!api.exportTestSessionEvidence) throw new Error('No export API');
-          setExportButtonState('exporting', '正在导出证据 ZIP…');
-          try {
-            await api.exportTestSessionEvidence({
-              targetDir: '',
-              outputMode: 'zip',
-              privacyAcknowledgedAt: new Date().toISOString(),
-            });
-            setExportButtonState('exported', '已导出证据 ZIP');
-          } catch (err) {
+        if (!api.exportTestSessionEvidence) throw new Error('No export API');
+        isExporting = true;
+        buttons.export.disabled = true;
+        setExportButtonState('exporting', '正在准备导出…');
+        try {
+          await api.exportTestSessionEvidence({
+            targetDir: '',
+            outputMode: 'zip',
+            privacyAcknowledgedAt: new Date().toISOString(),
+          });
+          setExportButtonState('exported', '已导出证据 ZIP');
+        } catch (err) {
+          const isCancel = err && /cancel/i.test(String(err?.message || err));
+          if (isCancel) {
+            setExportButtonState('idle');
+          } else {
             setExportButtonState('error', '导出失败');
-            throw err;
+            console.error('[island] export failed:', err);
           }
-        });
+        } finally {
+          isExporting = false;
+          void refresh();
+        }
       };
       buttons.export.addEventListener('click', (event) => runExport(event));
 

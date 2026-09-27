@@ -1136,14 +1136,14 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
                 </select>
               ) : null}
             </div>
-            <div className="hud-corner-encoder-row">
-              <span className="hud-meta-chip" title="编码格式">
+            <div className="hud-corner-encoder-row stage-top-meta">
+              <span className="hud-meta-chip meta-micro-tag" title="编码格式">
                 {encoderSummary.codecLabel !== '--' ? encoderSummary.codecLabel : '--'}
               </span>
-              <span className="hud-meta-chip" title="编码器">
+              <span className="hud-meta-chip meta-micro-tag" title="编码器">
                 {displayEncoderLabel}
               </span>
-              <span className="hud-meta-chip" title="编码路径">
+              <span className="hud-meta-chip meta-micro-tag" title="编码路径">
                 {encoderSummary.pathLabel}
               </span>
             </div>
@@ -1330,7 +1330,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
           ) : null}
 
           {/* Bottom Floating Transport Dock */}
-          <div className="hud-cinema-transport" role="toolbar" aria-label="回放控制栏">
+          <div className="hud-cinema-transport recorder-stage-transport-dock" role="toolbar" aria-label="回放控制栏">
             <button
               type="button"
               className="btn-dock-step"
@@ -1374,15 +1374,15 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
             </button>
 
             {/* Timecode & Scrubber Track */}
-            <div className="transport-time-track">
+            <div className="transport-time-track recorder-stage-transport-track">
               <span className="transport-clock-readout">
                 {continuousSegments.length > 0
                   ? `${formatClock(globalPlaybackMs)} / ${formatClock(totalDurationMs)}`
                   : '-- / --'}
               </span>
 
-              <div className="transport-scrubber-shell">
-                <div className="transport-scrubber-bar" aria-hidden="true">
+              <div className="transport-scrubber-shell recorder-stage-scrubber">
+                <div className="transport-scrubber-bar recorder-stage-scrubber-mark" aria-hidden="true">
                   <div
                     className="transport-scrubber-fill"
                     style={{ width: `${playbackProgressPct}%` }}
@@ -1405,7 +1405,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
             {/* Instant Defect Mark */}
             <button
               type="button"
-              className="btn-dock-quick-defect"
+              className="btn-dock-quick-defect recorder-stage-quick-defect"
               onClick={() => { void handleQuickDefect(); }}
               disabled={!canMarkQuickDefect || isQuickDefectPending}
               title="标记当前回放位置为缺陷"

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 
 import type {
@@ -10,7 +10,7 @@ import type {
 } from '../../types/contracts';
 import type { ConfigApplyFeedback } from '../components/RecorderControlPanel';
 import { RecorderPlaybackStage } from '../components/RecorderPlaybackStage';
-import { RecordingReviewPanel } from '../features/evidence/RecordingReviewPanel';
+import { HistorySessionPanel } from '../features/evidence/HistorySessionPanel';
 import { SettingsWorkspace } from '../features/settings/SettingsWorkspace';
 import { useRecorderBootstrap } from '../hooks/useRecorderBootstrap';
 import { useRecorderDashboardSnapshot } from '../hooks/useRecorderDashboardSnapshot';
@@ -75,6 +75,7 @@ export function RecorderPage() {
   const [displaysLoading, setDisplaysLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [historySelection, setHistorySelection] = useState<string[]>([]);
+  const [sessionSearchQuery, setSessionSearchQuery] = useState('');
   const toastTimerRef = useRef<number | null>(null);
   const noopHydrateFromSettings = useCallback(() => {}, []);
 
@@ -114,7 +115,7 @@ export function RecorderPage() {
     streams: dashboard.videoStreams,
     segments: dashboard.recentSegments,
   });
-  const semanticRecordingEnabled = config.semanticRecordingEnabled ?? !!config.defectEvidenceEnabled;
+
   const elapsedMsRef = useRef(0);
   const lastElapsedTickRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -347,13 +348,26 @@ export function RecorderPage() {
     : runtime.isPaused
       ? '继续录制'
       : '暂停录制';
-  const reviewCount = dashboard.events.length;
+
   const historicalSessionIds = dashboard.sessions
     .filter((session) => session.status !== 'active' && session.status !== 'paused')
     .map((session) => session.sessionId);
   const selectedHistoricalIds = historySelection.filter((id) => historicalSessionIds.includes(id));
   const allHistoricalSelected = historicalSessionIds.length > 0
     && selectedHistoricalIds.length === historicalSessionIds.length;
+
+  const filteredSessions = useMemo(() => {
+    const q = sessionSearchQuery.trim().toLowerCase();
+    if (!q) {
+      return dashboard.sessions;
+    }
+    return dashboard.sessions.filter((session) => {
+      const name = (session.name || '').toLowerCase();
+      const id = (session.sessionId || '').toLowerCase();
+      const time = formatSessionListTime(session.startedAtMs).toLowerCase();
+      return name.includes(q) || id.includes(q) || time.includes(q);
+    });
+  }, [dashboard.sessions, sessionSearchQuery]);
 
   async function handleExportCurrentSession(): Promise<void> {
     const session = dashboard.selectedSession ?? dashboard.activeSession;
@@ -417,8 +431,8 @@ export function RecorderPage() {
                 onClick={() => setActiveTab('evidence')}
               >
                 <span className="tab-icon">📑</span>
-                <span className="tab-text">记录与回顾</span>
-                {reviewCount > 0 ? <span className="capsule-badge">{reviewCount}</span> : null}
+                <span className="tab-text">历史记录</span>
+                {historicalSessionIds.length > 0 ? <span className="capsule-badge">{historicalSessionIds.length}</span> : null}
               </button>
               <button
                 type="button"
@@ -475,8 +489,8 @@ export function RecorderPage() {
                     type="button"
                     className="action-btn-sm app-island-pin"
                     disabled={busy}
-                    title="唤起悬浮岛"
-                    aria-label="唤起悬浮岛"
+                    title="唤起悬浮岛 (📌 悬浮窗)"
+                    aria-label="唤起悬浮岛 📌 悬浮窗 实时遥测与负载"
                     onClick={() => {
                       showToast('已唤起桌面极简透明悬浮窗');
                       void handleHideToTray();
@@ -579,7 +593,39 @@ export function RecorderPage() {
               >
                 <div className="evidence-layout-b">
                   <aside className="evidence-session-rail" aria-label="录制会话列表">
-                    <div className="evidence-session-rail-title">录制会话列表</div>
+                    <div className="evidence-session-rail-header">
+                      <div className="evidence-session-rail-title">录制会话列表</div>
+                      <span className="evidence-session-count-tag">
+                        {dashboard.sessions.length > 0 ? (
+                          sessionSearchQuery.trim()
+                            ? `${filteredSessions.length}/${dashboard.sessions.length}`
+                            : `${dashboard.sessions.length} 个会话`
+                        ) : '0'}
+                      </span>
+                    </div>
+
+                    <div className="evidence-session-search-wrapper">
+                      <input
+                        type="text"
+                        className="evidence-session-search-input"
+                        placeholder="搜索会话名称或ID…"
+                        value={sessionSearchQuery}
+                        onChange={(e) => setSessionSearchQuery(e.target.value)}
+                        aria-label="搜索会话"
+                      />
+                      {sessionSearchQuery ? (
+                        <button
+                          type="button"
+                          className="evidence-session-search-clear"
+                          onClick={() => setSessionSearchQuery('')}
+                          aria-label="清除搜索"
+                          title="清除搜索"
+                        >
+                          ✕
+                        </button>
+                      ) : null}
+                    </div>
+
                     {historicalSessionIds.length > 0 ? (
                         <div className="evidence-session-toolbar">
                           <label className="evidence-session-check">
@@ -615,8 +661,10 @@ export function RecorderPage() {
                     ) : null}
                     {dashboard.sessions.length === 0 ? (
                       <div className="evidence-session-empty">暂无会话，开始录制后会显示在这里。</div>
+                    ) : filteredSessions.length === 0 ? (
+                      <div className="evidence-session-empty">未匹配到“{sessionSearchQuery}”的会话</div>
                     ) : (
-                      dashboard.sessions.map((session) => {
+                      filteredSessions.map((session) => {
                         const selectedId = dashboard.selectedSessionId ?? dashboard.activeSession?.sessionId;
                         const isSelected = session.sessionId === selectedId;
                         const isLive = session.status === 'active' || session.status === 'paused';
@@ -652,13 +700,35 @@ export function RecorderPage() {
                               className="evidence-session-copy"
                               onClick={() => dashboard.selectSession(session.sessionId)}
                             >
-                              <strong>
-                                {session.name?.trim() || formatSessionListTime(session.startedAtMs)}
-                                {isLive ? ' · LIVE' : ` · ${formatSessionDuration(session)}`}
-                              </strong>
+                              <div className="evidence-session-row-headline">
+                                <strong>
+                                  {session.name?.trim() || formatSessionListTime(session.startedAtMs)}
+                                  {isLive ? ' · LIVE' : ` · ${formatSessionDuration(session)}`}
+                                </strong>
+                                {isLive ? (
+                                  <span className="evidence-session-live-pulse" title="正在录制">
+                                    <span className="pulse-dot" />
+                                    LIVE
+                                  </span>
+                                ) : null}
+                              </div>
                               <span className="evidence-session-sub">
                                 {isLive ? '当前录制会话' : formatSessionListTime(session.startedAtMs)}
                               </span>
+                            </button>
+                            <button
+                              type="button"
+                              className="evidence-session-item-copy-btn"
+                              title={`复制会话ID: ${session.sessionId}`}
+                              aria-label={`复制会话ID: ${session.sessionId}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void navigator.clipboard.writeText(session.sessionId).then(() => {
+                                  showToast(`已复制会话ID: ${session.sessionId.slice(0, 8)}…`);
+                                });
+                              }}
+                            >
+                              📋
                             </button>
                           </div>
                         );
@@ -666,16 +736,10 @@ export function RecorderPage() {
                     )}
                   </aside>
                   <div className="evidence-layout-b-main">
-                    <RecordingReviewPanel
+                    <HistorySessionPanel
                       session={dashboard.selectedSession ?? dashboard.activeSession}
-                      isRecording={runtime.isRecording}
-                      enabled={semanticRecordingEnabled}
-                      preWindowSeconds={config.defectPreWindowSeconds}
-                      postWindowSeconds={config.defectPostWindowSeconds}
-                      onPlaybackFocusChange={setPlaybackFocus}
                       onError={setError}
-                      toUiErrorMessage={toUiErrorMessage}
-                      onOpenSettings={() => setActiveTab('settings')}
+                      onNotice={showToast}
                       onMetaSaved={() => { void dashboard.refresh(); }}
                     />
                   </div>

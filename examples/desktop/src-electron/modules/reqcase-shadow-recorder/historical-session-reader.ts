@@ -465,6 +465,9 @@ function normalizeHistoricalVideoSegment(
     mimeType: stringValue(record, 'mimeType'),
     encoderName: stringValue(record, 'encoderName'),
     isPlayable: booleanValue(record, 'isPlayable') ?? (status === 'ready' && !!fileStats?.isFile()),
+    playbackUrl: fileStats?.isFile() && filePath
+      ? `reqcase-media://local/?path=${encodeURIComponent(filePath)}`
+      : undefined,
   };
 }
 

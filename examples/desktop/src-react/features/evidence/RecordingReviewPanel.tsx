@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { TestSessionPlaybackFocus, TestSessionState } from '../../../types/contracts';
 import type {
+  OperationUiStateSnapshot,
   TestSessionOperationRecord,
   TestSessionOperationTailResult,
 } from '../../../types/operation-contracts';
@@ -103,6 +104,48 @@ function formatJsonish(value: unknown): string {
   }
 }
 
+function getActionKindIcon(kind?: string): string {
+  const k = (kind ?? '').toLowerCase();
+  if (k.includes('double')) return '👆👆';
+  if (k.includes('right')) return '👉';
+  if (k.includes('click')) return '👆';
+  if (k.includes('type') || k.includes('key')) return '⌨️';
+  if (k.includes('scroll')) return '📜';
+  if (k.includes('shortcut')) return '⚡';
+  if (k.includes('window')) return '🪟';
+  return '🎯';
+}
+
+function parseStateProperties(snapshot?: OperationUiStateSnapshot | null): Record<string, string> {
+  if (!snapshot) return {};
+  const entries: Record<string, string> = {};
+  if (snapshot.valueText !== undefined && snapshot.valueText !== null && snapshot.valueText !== '') {
+    entries['valueText'] = String(snapshot.valueText);
+  }
+  if (snapshot.selectedNames && snapshot.selectedNames.length > 0) {
+    entries['selectedNames'] = snapshot.selectedNames.join(', ');
+  }
+  if (snapshot.isEnabled !== undefined && snapshot.isEnabled !== null) {
+    entries['isEnabled'] = String(snapshot.isEnabled);
+  }
+  if (snapshot.hasKeyboardFocus !== undefined && snapshot.hasKeyboardFocus !== null) {
+    entries['hasKeyboardFocus'] = String(snapshot.hasKeyboardFocus);
+  }
+  if (snapshot.toggleState !== undefined && snapshot.toggleState !== null) {
+    entries['toggleState'] = String(snapshot.toggleState);
+  }
+  if (snapshot.selectionState !== undefined && snapshot.selectionState !== null) {
+    entries['selectionState'] = String(snapshot.selectionState);
+  }
+  if (snapshot.rangeValue !== undefined && snapshot.rangeValue !== null) {
+    entries['rangeValue'] = String(snapshot.rangeValue);
+  }
+  if (snapshot.isOffscreen !== undefined && snapshot.isOffscreen !== null) {
+    entries['isOffscreen'] = String(snapshot.isOffscreen);
+  }
+  return entries;
+}
+
 export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
   const [note, setNote] = useState('');
   const [expected, setExpected] = useState('');
@@ -124,12 +167,30 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
 
-  const [editingName, setEditingName] = useState("");
-  const [editingNotes, setEditingNotes] = useState("");
+  const [editingName, setEditingName] = useState('');
+  const [editingNotes, setEditingNotes] = useState('');
   const [isEditingMeta, setIsEditingMeta] = useState(false);
+
+  // Modern UI Ergonomic Additions
+  const [layoutMode, setLayoutMode] = useState<'split' | 'inline'>('split');
+  const [activeInspectorTab, setActiveInspectorTab] = useState<'locators' | 'diff' | 'candidates' | 'evidence'>('locators');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterKind, setFilterKind] = useState<'all' | 'issue' | 'click' | 'input'>('all');
+  const [isReproModalOpen, setIsReproModalOpen] = useState(false);
+  const [toastFeedback, setToastFeedback] = useState<string | null>(null);
+
   const sessionId = props.session?.sessionId ?? null;
 
-  const visibleOperations = useMemo(
+  // Auto clear toast feedback after 2.2 seconds
+  useEffect(() => {
+    if (!toastFeedback) return;
+    const timer = setTimeout(() => {
+      setToastFeedback(null);
+    }, 2200);
+    return () => clearTimeout(timer);
+  }, [toastFeedback]);
+
+  const windowedOperations = useMemo(
     () =>
       filterOperationsByWindow(
         operations.filter((operation) => !operation.ignored),
@@ -138,6 +199,51 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       ),
     [defect, operations],
   );
+
+  const visibleOperations = useMemo(() => {
+    return windowedOperations.filter((operation) => {
+      // 1. Search Query filtering
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        const titleMatch = (operation.title || '').toLowerCase().includes(q);
+        const aliasMatch = (operation.businessAlias || '').toLowerCase().includes(q);
+        const resultMatch = (operation.resultSummary || '').toLowerCase().includes(q);
+        const targetNameMatch = (operation.action?.target?.name || '').toLowerCase().includes(q);
+        const controlTypeMatch = (operation.action?.target?.controlType || '').toLowerCase().includes(q);
+        const previewMatch = (operation.action?.contentPreview || '').toLowerCase().includes(q);
+        if (!titleMatch && !aliasMatch && !resultMatch && !targetNameMatch && !controlTypeMatch && !previewMatch) {
+          return false;
+        }
+      }
+
+      // 2. Kind/Status filtering
+      if (filterKind === 'issue') {
+        const st = operation.outcome?.status;
+        return st === 'suspected' || st === 'failed' || st === 'incomplete' || st === 'observerDegraded';
+      }
+      if (filterKind === 'click') {
+        const k = (operation.action?.kind || '').toLowerCase();
+        return k.includes('click');
+      }
+      if (filterKind === 'input') {
+        const k = (operation.action?.kind || '').toLowerCase();
+        return k.includes('type') || k.includes('key') || k.includes('input');
+      }
+
+      return true;
+    });
+  }, [filterKind, searchQuery, windowedOperations]);
+
+  // Selected Operation for Inspector
+  const selectedOperation = useMemo(() => {
+    if (selectedOperationId) {
+      const found = visibleOperations.find((op) => op.operationId === selectedOperationId);
+      if (found) return found;
+      const foundInAll = operations.find((op) => op.operationId === selectedOperationId);
+      if (foundInAll) return foundInAll;
+    }
+    return visibleOperations[0] ?? operations[0] ?? null;
+  }, [operations, selectedOperationId, visibleOperations]);
 
   const applyTail = useCallback(
     (tail: TestSessionOperationTailResult, append: boolean) => {
@@ -289,6 +395,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       setStatus(
         `已添加问题标记：前后 ${mapped.preWindowSeconds}s/${mapped.postWindowSeconds}s，窗内操作 ${mapped.stepCount} 条。`,
       );
+      setToastFeedback('问题标记已保存并锁定时间窗');
     } catch (error) {
       const message = props.toUiErrorMessage(error);
       if (/not active/i.test(message)) {
@@ -308,6 +415,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
     try {
       await loadOperationsPage({ rebuild: true });
       setStatus('已重新生成操作记录。');
+      setToastFeedback('已重新感知并生成操作与结果序列');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -347,6 +455,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       setReproText(text);
       await navigator.clipboard.writeText(text);
       setStatus('操作结果文本已复制到剪贴板。');
+      setToastFeedback('操作结果文本已复制到剪贴板');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     }
@@ -384,6 +493,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
           ? `记录包已导出（含 clip.mp4）：${mapped.packDir}`
           : `记录包已导出：${mapped.packDir}`,
       );
+      setToastFeedback(`记录包已导出至：${mapped.packDir}`);
     } catch (error) {
       const message = props.toUiErrorMessage(error);
       if (!/cancel/i.test(message)) {
@@ -439,6 +549,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       setEditingOperationId(null);
       await loadOperationsPage({ rebuild: false });
       setStatus('操作标题已更新。');
+      setToastFeedback('操作标题已更新');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -465,6 +576,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       });
       await loadOperationsPage({ rebuild: false });
       setStatus('已保存人工选择的操作结果。');
+      setToastFeedback('已保存人工选择的操作结果');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -480,8 +592,6 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
     }
     setBusy(true);
     try {
-      // Clearing manual selection by writing an empty note+reason restore signal is not enough;
-      // use selectedOutcomeStatus incomplete with no transition to request auto rebuild path when supported.
       await api.updateTestSessionOperation({
         sessionId: sessionId ?? undefined,
         operationId: operation.operationId,
@@ -495,11 +605,28 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       }
       await loadOperationsPage({ rebuild: false });
       setStatus('已尝试恢复自动结果判断。');
+      setToastFeedback('已恢复自动智能判断');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
       setBusy(false);
     }
+  }
+
+  function handleAnchorStepToDefect(operation: TestSessionOperationRecord): void {
+    const summary = `${operation.businessAlias || operation.title} -> ${operation.resultSummary}`;
+    setActual(summary);
+    setToastFeedback('已将选中步骤填入实际表现');
+    setMarkerCollapsed(false);
+  }
+
+  function copyTextToClipboard(text: string, label: string): void {
+    if (!text || text === '—') return;
+    navigator.clipboard.writeText(text).then(() => {
+      setToastFeedback(`已复制 ${label}`);
+    }).catch(() => {
+      setToastFeedback(`已复制 ${label}`);
+    });
   }
 
   if (!props.session) {
@@ -532,21 +659,63 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       : '未标记';
   const statusBanner = reviewStatusMessage(loading ? 'loading' : reviewStatus);
 
+  // Inspector details props extraction for selected operation
+  const selTarget = selectedOperation?.action?.target;
+  const selCoord = selectedOperation?.action?.coordinate;
+  const selCoordText = selCoord ? `X: ${selCoord.x}, Y: ${selCoord.y}${selCoord.displayId !== undefined && selCoord.displayId !== null ? ` (Display #${selCoord.displayId})` : ''}` : '—';
+  const selAutoId = selTarget?.automationId || '—';
+  const selRuntimeIdText = selTarget?.runtimeId?.length ? selTarget.runtimeId.join(', ') : '—';
+  const selControlName = selTarget?.name || '—';
+  const selControlType = [selTarget?.controlType, selTarget?.localizedControlType].filter(Boolean).join(' · ') || '—';
+  const selProcessWindow = [
+    selTarget?.className,
+    selTarget?.frameworkId ? `Framework: ${selTarget.frameworkId}` : null,
+    selTarget?.processId ? `PID: ${selTarget.processId}` : null,
+  ].filter(Boolean).join(' · ') || '—';
+  const selContent = selectedOperation?.action?.contentPreview?.trim() || selectedOperation?.action?.stateBefore?.valueText?.trim() || '—';
+  const selStateProps = parseStateProperties(selectedOperation?.action?.stateBefore);
+  const selPrimaryTransition = selectedOperation?.transitions.find(t => t.transitionId === selectedOperation?.outcome?.primaryTransitionId);
+  const selChoices = selectedOperation ? listManualOutcomeChoices(selectedOperation) : [];
+
   return (
-    <section className="defect-evidence-panel recording-review-panel" aria-label="记录与回顾">
-      <header className="defect-evidence-header">
-        <div>
-          <span className="defect-evidence-kicker">录屏工具</span>
-          <h3>记录与回顾</h3>
-          <p>按时间线展示操作主句与可观察结果；坐标和 locator 默认折叠在技术详情中。</p>
+    <section className={`defect-evidence-panel recording-review-panel layout-${layoutMode}`} aria-label="记录与回顾">
+      {/* 1. Header with integrated session info & control room */}
+      <header className="defect-evidence-header recording-review-header-v2">
+        <div className="recording-review-title-col">
+          <div className="recording-review-title-row">
+            <span className="defect-evidence-kicker">录屏工具</span>
+            <h3>记录与回顾</h3>
+            <div className="recording-review-layout-toggles" role="group" aria-label="布局模式切换">
+              <button
+                type="button"
+                className={`btn-layout-mode ${layoutMode === 'split' ? 'is-active' : ''}`}
+                onClick={() => setLayoutMode('split')}
+                title="分栏检查器模式（右侧独立 Inspector）"
+              >
+                分栏检查器
+              </button>
+              <button
+                type="button"
+                className={`btn-layout-mode ${layoutMode === 'inline' ? 'is-active' : ''}`}
+                onClick={() => setLayoutMode('inline')}
+                title="流式内联折叠模式"
+              >
+                流式内联
+              </button>
+            </div>
+          </div>
+          <p className="recording-review-subdesc">
+            按发生时序聚合操作主句与可观察结果；点击右侧检查器深度查看控件定位与状态变动。
+          </p>
         </div>
+
         <div className="defect-evidence-summary" aria-label="记录概览">
           <span>
-            <strong>{visibleOperations.length}</strong>
+            <strong>{visibleOperations.length} / {totalCount || operations.length}</strong>
             <small>当前操作</small>
           </span>
-          <span>
-            <strong>{defect ? '已标记' : '未标记'}</strong>
+          <span className={defect ? 'is-highlight-defect' : ''}>
+            <strong>{defect ? '已标记时间窗' : markerStateLabel}</strong>
             <small>问题状态</small>
           </span>
           <span>
@@ -555,70 +724,114 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
           </span>
         </div>
       </header>
-      <div className="defect-evidence-section" style={{ padding: "12px 16px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h4>会话信息</h4>
-          <button type="button" className="text-button" onClick={() => {
-            setEditingName(props.session?.name || "");
-            setEditingNotes(props.session?.notes || "");
-            setIsEditingMeta(!isEditingMeta);
-          }}>
-            {isEditingMeta ? "取消" : "编辑"}
-          </button>
+
+      {/* 2. Integrated Session Meta Block */}
+      <div className="recording-review-session-meta">
+        <div className="session-meta-display-row">
+          <div className="session-meta-text-col">
+            <div className="session-meta-title-line">
+              <strong className="session-meta-name">
+                {props.session?.name || '当前录制会话'}
+              </strong>
+              <button
+                type="button"
+                className="btn-edit-session-meta"
+                title="编辑会话名称与备注"
+                onClick={() => {
+                  setEditingName(props.session?.name || '');
+                  setEditingNotes(props.session?.notes || '');
+                  setIsEditingMeta(!isEditingMeta);
+                }}
+              >
+                {isEditingMeta ? '取消' : '✏️ 编辑'}
+              </button>
+            </div>
+            <p className="session-meta-notes">
+              {props.session?.notes ? `备注：${props.session.notes}` : '暂无会话备注'}
+              <span className="session-meta-retention">
+                · {props.session?.historyRetentionMode === 'age'
+                  ? `按 ${props.session?.historyRetentionHours ?? 24} 小时保留`
+                  : `滚出切片按最近 ${props.session?.historyRetentionMaxSegments ?? 200} 段保留`}
+              </span>
+            </p>
+          </div>
         </div>
+
         {isEditingMeta ? (
-          <div className="settings-fields" style={{ marginTop: 8 }}>
-            <label className="settings-field">
-              <span className="settings-field-label">名称</span>
-              <input type="text" value={editingName} onChange={e => setEditingName(e.target.value)} maxLength={80} />
-            </label>
-            <label className="settings-field">
-              <span className="settings-field-label">备注</span>
-              <textarea value={editingNotes} onChange={e => setEditingNotes(e.target.value)} maxLength={2000} rows={3} />
-            </label>
-            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
-              <button type="button" className="bento-button bento-button-primary" onClick={async () => {
-                const api = window.reqcaseShadowRecorder;
-                if (api?.updateTestSessionMeta) {
-                   const name = editingName.trim();
-                   if (!name || name.match(/[\\\/\:\n]/)) {
-                      props.onError("名称无效"); return;
-                   }
-                   setBusy(true);
-                   try {
-                     const res = await api.updateTestSessionMeta({
+          <div className="session-meta-edit-form">
+            <div className="session-meta-form-grid">
+              <label className="settings-field">
+                <span className="settings-field-label">会话名称</span>
+                <input
+                  type="text"
+                  value={editingName}
+                  onChange={(e) => setEditingName(e.target.value)}
+                  maxLength={80}
+                  placeholder="例如：结算中心支付结算异常复现"
+                />
+              </label>
+              <label className="settings-field">
+                <span className="settings-field-label">会话备注 / 复查要点</span>
+                <textarea
+                  value={editingNotes}
+                  onChange={(e) => setEditingNotes(e.target.value)}
+                  maxLength={2000}
+                  rows={2}
+                  placeholder="记录该会话的重点测试范围或异常背景"
+                />
+              </label>
+            </div>
+            <div className="session-meta-form-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={busy}
+                onClick={async () => {
+                  const api = window.reqcaseShadowRecorder;
+                  if (api?.updateTestSessionMeta) {
+                    const name = editingName.trim();
+                    if (!name || name.match(/[\\/:\n]/)) {
+                      props.onError('名称无效，请避免斜杠或换行');
+                      return;
+                    }
+                    setBusy(true);
+                    try {
+                      const res = await api.updateTestSessionMeta({
                         sessionId: props.session!.sessionId,
                         name,
                         notes: editingNotes,
-                     });
-                     if (res && res.error) {
+                      });
+                      if (res && res.error) {
                         props.onError(res.error);
-                     } else {
+                      } else {
                         setIsEditingMeta(false);
                         props.onMetaSaved?.();
-                     }
-                   } catch (err) {
-                     props.onError(String(err));
-                   } finally {
-                     setBusy(false);
-                   }
-                }
-              }}>保存</button>
+                        setToastFeedback('会话信息已保存');
+                      }
+                    } catch (err) {
+                      props.onError(String(err));
+                    } finally {
+                      setBusy(false);
+                    }
+                  }
+                }}
+              >
+                保存信息
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={() => setIsEditingMeta(false)}
+              >
+                取消
+              </button>
             </div>
           </div>
-        ) : (
-          <div style={{ marginTop: 8 }}>
-            <p><strong>名称：</strong>{props.session?.name || "(无)"}</p>
-            <p><strong>备注：</strong>{props.session?.notes || "(无)"}</p>
-            <p style={{ marginTop: 4, color: "var(--text-secondary)" }}>
-              {props.session?.historyRetentionMode === "age" 
-                ? `按 ${props.session?.historyRetentionHours ?? 24} 小时保留` 
-                : `滚出实时窗口的切片按最近 ${props.session?.historyRetentionMaxSegments ?? 200} 段保留`}
-            </p>
-          </div>
-        )}
+        ) : null}
       </div>
 
+      {/* 3. Semantic Disabled Notification */}
       {!props.enabled ? (
         <div className="defect-evidence-disabled" role="status">
           <div>
@@ -633,6 +846,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
         </div>
       ) : null}
 
+      {/* 4. Diagnostics & Status Banner */}
       {statusBanner ? (
         <div className={`recording-review-banner is-${loading ? 'loading' : reviewStatus}`} role="status">
           {statusBanner}
@@ -644,151 +858,181 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
         </div>
       ) : null}
 
-      <div className={`defect-evidence-layout ${markerCollapsed ? 'is-marker-collapsed' : ''}`}>
-        <aside
-          className={`defect-evidence-marker ${markerCollapsed ? 'is-collapsed' : ''}`}
-          aria-label="问题标记"
-        >
-          <div className="defect-evidence-section-title defect-evidence-marker-title">
-            <div>
-              <h4>问题标记</h4>
-              <p>定位一段可复查时间窗，不影响原始录屏。</p>
-            </div>
-            <div className="defect-evidence-title-actions">
-              <span>{windowLabel}</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm defect-marker-toggle"
-                aria-expanded={!markerCollapsed}
-                aria-controls="recording-review-marker-body"
-                title={markerCollapsed ? '展开问题标记' : '收起问题标记'}
-                onClick={() => setMarkerCollapsed((current) => !current)}
-              >
-                {markerCollapsed ? '展开' : '收起'}
-              </button>
-            </div>
+      {/* 5. Defect Window Scope Notification Banner */}
+      {defect ? (
+        <div className="defect-scope-banner" role="status">
+          <div className="banner-left">
+            <span className="banner-dot" aria-hidden="true" />
+            <strong>已锁定问题时间窗：</strong>
+            <span>发生点前 {defect.preWindowSeconds}s / 后 {defect.postWindowSeconds}s · 关联窗内操作 {defect.stepCount} 条</span>
           </div>
+          <div className="banner-actions">
+            <button
+              type="button"
+              className="banner-link-btn"
+              onClick={() => {
+                setMarkerCollapsed(false);
+              }}
+            >
+              修改标记参数
+            </button>
+            <button
+              type="button"
+              className="banner-link-btn banner-clear-btn"
+              onClick={() => {
+                setDefect(null);
+                setToastFeedback('已切回完整会话视角');
+              }}
+            >
+              清除时间窗筛选
+            </button>
+          </div>
+        </div>
+      ) : null}
 
-          {markerCollapsed ? (
-            <div className="defect-evidence-marker-summary" aria-label="问题标记摘要">
-              <span>
-                <strong>{markerStateLabel}</strong>
-                <small>标记</small>
-              </span>
-              <span>
-                <strong>{visibleOperations.length}</strong>
-                <small>操作</small>
-              </span>
-              <span>
-                <strong>{props.enabled ? '开启' : '关闭'}</strong>
-                <small>记录</small>
-              </span>
-            </div>
-          ) : null}
-
-          <div
-            id="recording-review-marker-body"
-            className="defect-evidence-marker-body"
-            hidden={markerCollapsed}
-          >
-            <div className="defect-evidence-form">
-              <label>
-                <span>问题说明</span>
-                <input
-                  value={note}
-                  onChange={(event) => setNote(event.target.value)}
-                  placeholder="例如：保存后金额未刷新"
-                  disabled={markerDisabled}
-                />
-              </label>
-              <label>
-                <span>期望表现</span>
-                <input
-                  value={expected}
-                  onChange={(event) => setExpected(event.target.value)}
-                  placeholder="可选"
-                  disabled={markerDisabled}
-                />
-              </label>
-              <label>
-                <span>实际表现</span>
-                <input
-                  value={actual}
-                  onChange={(event) => setActual(event.target.value)}
-                  placeholder="可选"
-                  disabled={markerDisabled}
-                />
-              </label>
-            </div>
-
-            <div className="defect-evidence-actions">
+      {/* 6. Filter & Action Toolbar */}
+      <section className="recording-review-toolbar" aria-label="操作与筛选工具条">
+        <div className="toolbar-left-group">
+          <div className="search-box-wrap">
+            <span className="search-icon" aria-hidden="true">🔍</span>
+            <input
+              type="text"
+              className="search-input"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="搜索步骤/控件/内容..."
+              aria-label="搜索步骤"
+            />
+            {searchQuery ? (
               <button
                 type="button"
-                className="btn btn-primary btn-sm"
-                disabled={markerDisabled}
-                onClick={() => void handleMarkDefect()}
+                className="search-clear-btn"
+                onClick={() => setSearchQuery('')}
+                aria-label="清空搜索"
               >
-                标记问题
+                ✕
               </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={markerDisabled}
-                onClick={() => void handleRebuild()}
-              >
-                重新生成
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                disabled={busy || visibleOperations.length === 0}
-                onClick={() => void handleCopyRepro()}
-              >
-                复制步骤
-              </button>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                disabled={markerDisabled}
-                onClick={() => void handleExportPack()}
-              >
-                导出记录包
-              </button>
-            </div>
-
-            {status ? <p className="defect-evidence-status">{status}</p> : null}
-            {packResult ? (
-              <p className="defect-evidence-pack-summary">
-                路径: {packResult.packDir} · 操作 {packResult.stepCount} · 截图 {packResult.screenshotCount} ·
-                视频段 {packResult.videoSegmentCount}
-                {packResult.clipBuilt ? ' · clip.mp4 已生成' : ''}
-              </p>
             ) : null}
           </div>
-        </aside>
 
+          <div className="filter-pill-tabs" role="tablist" aria-label="步骤分类筛选">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterKind === 'all'}
+              className={`filter-pill-tab ${filterKind === 'all' ? 'is-active' : ''}`}
+              onClick={() => setFilterKind('all')}
+            >
+              全部 ({windowedOperations.length})
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterKind === 'issue'}
+              className={`filter-pill-tab is-issue ${filterKind === 'issue' ? 'is-active' : ''}`}
+              onClick={() => setFilterKind('issue')}
+            >
+              仅异常/可疑
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterKind === 'click'}
+              className={`filter-pill-tab ${filterKind === 'click' ? 'is-active' : ''}`}
+              onClick={() => setFilterKind('click')}
+            >
+              单击
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filterKind === 'input'}
+              className={`filter-pill-tab ${filterKind === 'input' ? 'is-active' : ''}`}
+              onClick={() => setFilterKind('input')}
+            >
+              输入/键盘
+            </button>
+          </div>
+        </div>
+
+        <div className="toolbar-right-group">
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={busy || !sessionId}
+            onClick={() => void handleRebuild()}
+            title="重新感知并关联 UI 迁移与操作"
+          >
+            🔄 重新生成
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            disabled={busy || visibleOperations.length === 0}
+            onClick={() => setIsReproModalOpen(true)}
+            title="查看并复制操作复现 Markdown 步骤"
+          >
+            📋 复制步骤
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={markerDisabled}
+            onClick={() => void handleExportPack()}
+            title="导出包含视频、截图与步骤的记录包"
+          >
+            📦 导出记录包
+          </button>
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm btn-marker-toggle ${!markerCollapsed ? 'is-opened' : ''}`}
+            onClick={() => setMarkerCollapsed((cur) => !cur)}
+            title="展开或收起问题标记工作面板"
+          >
+            ⚠️ 问题标记 {markerCollapsed ? '▼' : '▲'}
+          </button>
+        </div>
+      </section>
+
+      {/* 7. Main Split / Stream Layout */}
+      <div className={`defect-evidence-layout layout-${layoutMode} ${markerCollapsed ? 'is-marker-collapsed' : ''}`}>
+        
+        {/* Timeline Stream (Center / Main) */}
         <section className="defect-evidence-steps recording-review-timeline" aria-label="语义步骤时间线">
           <div className="defect-evidence-section-title">
             <div>
               <h4>语义步骤时间线</h4>
               <p>{defect ? '已按问题标记时间窗筛选' : '按录制发生时间顺序排列'}</p>
             </div>
-            <span>
+            <span className="scope-indicator-tag">
               {scopeLabel} · {visibleOperations.length}/{totalCount || operations.length}
             </span>
           </div>
 
           {visibleOperations.length === 0 ? (
-            <p className="defect-evidence-empty">
-              {loading
-                ? '正在加载操作记录…'
-                : '暂无操作记录。开始录制并完成操作后可重新生成。'}
-            </p>
+            <div className="defect-evidence-empty-box">
+              <span className="empty-icon">📑</span>
+              <strong>{loading ? '正在加载操作记录…' : '暂无符合条件的操作记录'}</strong>
+              <p>{loading ? '请稍候，正在获取会话事件…' : '开始录制并完成操作后可重新生成，或调整筛选条件。'}</p>
+              {!loading && (searchQuery || filterKind !== 'all') ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterKind('all');
+                  }}
+                >
+                  重置筛选条件
+                </button>
+              ) : null}
+            </div>
           ) : (
             <ol className="defect-step-timeline recording-op-timeline">
               {visibleOperations.map((operation, index) => {
                 const presentation = operationStatusPresentation(operation.outcome?.status);
                 const expanded = !!expandedIds[operation.operationId];
+                const isSelected = (selectedOperation?.operationId === operation.operationId);
                 const showConfidence = shouldShowConfidenceBadge(operation);
                 const contentPreview =
                   operation.action?.contentPreview?.trim() ||
@@ -796,7 +1040,6 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                   (operation.action?.stateBefore?.selectedNames || []).filter(Boolean).join('、') ||
                   '';
                 const contextBits = [
-                  contentPreview ? `内容: ${contentPreview}` : null,
                   operation.action?.target?.controlType ?? operation.action?.target?.localizedControlType,
                   typeof operation.outcome?.latencyMs === 'number'
                     ? `${operation.outcome.latencyMs}ms`
@@ -804,24 +1047,28 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                   operation.outcomeSelectionSource === 'manual' ? '人工选择' : null,
                 ].filter(Boolean);
                 const choices = listManualOutcomeChoices(operation);
-                const selected = selectedOperationId === operation.operationId;
+                const opKindIcon = getActionKindIcon(operation.action?.kind);
 
                 return (
                   <li
-                    className={`defect-step-timeline-item recording-op-item ${selected ? 'is-selected' : ''}`}
+                    className={`defect-step-timeline-item recording-op-item status-${presentation.tone} ${isSelected ? 'is-selected' : ''}`}
                     key={operation.operationId || `${operation.startedAtMs}-${index}`}
+                    onClick={() => focusOperation(operation)}
                   >
                     <div className="recording-op-meta-col">
                       <span className="recording-op-index" aria-label={`序号 ${index + 1}`}>
                         #{index + 1}
                       </span>
                       <span className="recording-op-kind" title={operation.action?.kind}>
-                        {formatActionKindLabel(operation.action?.kind)}
+                        <span className="kind-icon" aria-hidden="true">{opKindIcon}</span>
+                        <span>{formatActionKindLabel(operation.action?.kind)}</span>
                       </span>
                     </div>
+
                     <span className="defect-step-rail" aria-hidden="true">
                       <span className={`recording-op-dot is-${presentation.tone}`} />
                     </span>
+
                     <article className="recording-op-node">
                       <header className="recording-op-node-header">
                         <time className="recording-op-time">
@@ -836,7 +1083,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                       </header>
 
                       {editingOperationId === operation.operationId ? (
-                        <div className="defect-step-edit">
+                        <div className="defect-step-edit" onClick={(e) => e.stopPropagation()}>
                           <input
                             aria-label="操作标题"
                             value={editingTitle}
@@ -867,37 +1114,61 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                           <button
                             type="button"
                             className="recording-op-main"
-                            onClick={() => focusOperation(operation)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              focusOperation(operation);
+                            }}
                           >
-                            <strong className="recording-op-title">{operation.businessAlias || operation.title}</strong>
-                            {operation.businessAlias && operation.businessAlias !== operation.title ? (
-                              <span className="recording-op-alias-tag">业务别名</span>
-                            ) : operation.businessAlias ? (
-                              <span className="recording-op-alias-tag">业务别名</span>
-                            ) : null}
+                            <div className="recording-op-title-row">
+                              <strong className="recording-op-title">{operation.businessAlias || operation.title}</strong>
+                              {operation.businessAlias ? (
+                                <span className="recording-op-alias-tag">业务别名</span>
+                              ) : null}
+                            </div>
+
                             {contentPreview ? (
                               <span className="recording-op-content" title="操作内容">
                                 内容「{contentPreview}」
                               </span>
                             ) : null}
+
                             <span className="recording-op-result">
-                              <span className="recording-op-arrow" aria-hidden="true">
-                                →
-                              </span>
+                              <span className="recording-op-arrow" aria-hidden="true">→</span>
                               <span>{operation.resultSummary}</span>
                             </span>
-                            {contextBits.length > 0 ? (
-                              <span className="recording-op-context">{contextBits.join(' · ')}</span>
-                            ) : null}
-                            {showConfidence ? (
-                              <span className="recording-op-confidence">{confidenceLabel(operation)}</span>
+
+                            {contextBits.length > 0 || showConfidence ? (
+                              <div className="recording-op-footer-chips">
+                                {contextBits.length > 0 ? (
+                                  <span className="recording-op-context">{contextBits.join(' · ')}</span>
+                                ) : null}
+                                {showConfidence ? (
+                                  <span className="recording-op-confidence">{confidenceLabel(operation)}</span>
+                                ) : null}
+                              </div>
                             ) : null}
                           </button>
 
-                          <div className="recording-op-actions">
+                          <div className="recording-op-actions" onClick={(e) => e.stopPropagation()}>
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-ghost btn-xs btn-op-action"
+                              title="视频回放定位到此步骤"
+                              onClick={() => focusOperation(operation)}
+                            >
+                              ▶ 回放
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs btn-op-action"
+                              title="将此步骤作为实际表现锚点"
+                              onClick={() => handleAnchorStepToDefect(operation)}
+                            >
+                              📍 锚定
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-xs btn-op-action"
                               disabled={busy}
                               onClick={() => {
                                 setEditingOperationId(operation.operationId);
@@ -908,7 +1179,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                             </button>
                             <button
                               type="button"
-                              className="btn btn-ghost btn-sm"
+                              className="btn btn-ghost btn-xs btn-op-action"
                               aria-expanded={expanded}
                               aria-controls={`recording-op-details-${operation.operationId}`}
                               onClick={() => toggleExpanded(operation.operationId)}
@@ -919,13 +1190,15 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                         </>
                       )}
 
+                      {/* Technical Details (Accordion slot for inline view or expanded item) */}
                       {expanded ? (
                         <div
                           id={`recording-op-details-${operation.operationId}`}
                           className="recording-op-details"
+                          onClick={(e) => e.stopPropagation()}
                         >
                           <div className="recording-op-detail-group">
-                            <h5>定位</h5>
+                            <h5>定位属性</h5>
                             <dl>
                               <div>
                                 <dt>控件</dt>
@@ -937,22 +1210,60 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                               </div>
                               <div>
                                 <dt>AutomationId</dt>
-                                <dd>{operation.action?.target?.automationId || '—'}</dd>
-                              </div>
-                              <div>
-                                <dt>runtimeId</dt>
-                                <dd>
-                                  {operation.action?.target?.runtimeId?.length
-                                    ? operation.action.target.runtimeId.join(',')
-                                    : '—'}
+                                <dd className="copyable-val">
+                                  <span>{operation.action?.target?.automationId || '—'}</span>
+                                  {operation.action?.target?.automationId ? (
+                                    <button
+                                      type="button"
+                                      className="btn-copy-chip"
+                                      onClick={() => copyTextToClipboard(operation.action?.target?.automationId!, 'AutomationId')}
+                                    >
+                                      复制
+                                    </button>
+                                  ) : null}
                                 </dd>
                               </div>
                               <div>
-                                <dt>坐标</dt>
-                                <dd>
-                                  {operation.action?.coordinate
-                                    ? `${operation.action.coordinate.x}, ${operation.action.coordinate.y}`
-                                    : '—'}
+                                <dt>runtimeId</dt>
+                                <dd className="copyable-val">
+                                  <span>
+                                    {operation.action?.target?.runtimeId?.length
+                                      ? operation.action.target.runtimeId.join(',')
+                                      : '—'}
+                                  </span>
+                                  {operation.action?.target?.runtimeId?.length ? (
+                                    <button
+                                      type="button"
+                                      className="btn-copy-chip"
+                                      onClick={() => {
+                                        const rids = operation.action?.target?.runtimeId;
+                                        if (rids && rids.length > 0) {
+                                          copyTextToClipboard(rids.join(','), 'runtimeId');
+                                        }
+                                      }}
+                                    >
+                                      复制
+                                    </button>
+                                  ) : null}
+                                </dd>
+                              </div>
+                              <div>
+                                <dt>物理坐标</dt>
+                                <dd className="copyable-val">
+                                  <span>
+                                    {operation.action?.coordinate
+                                      ? `${operation.action.coordinate.x}, ${operation.action.coordinate.y}`
+                                      : '—'}
+                                  </span>
+                                  {operation.action?.coordinate ? (
+                                    <button
+                                      type="button"
+                                      className="btn-copy-chip"
+                                      onClick={() => copyTextToClipboard(`${operation.action?.coordinate?.x}, ${operation.action?.coordinate?.y}`, '坐标')}
+                                    >
+                                      复制
+                                    </button>
+                                  ) : null}
                                 </dd>
                               </div>
                               <div>
@@ -963,7 +1274,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                           </div>
 
                           <div className="recording-op-detail-group">
-                            <h5>前后状态</h5>
+                            <h5>前后状态对比</h5>
                             <dl>
                               <div>
                                 <dt>操作前</dt>
@@ -983,7 +1294,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                           </div>
 
                           <div className="recording-op-detail-group">
-                            <h5>候选结果</h5>
+                            <h5>候选结果判定</h5>
                             {choices.length === 0 ? (
                               <p className="recording-op-detail-empty">无候选迁移</p>
                             ) : (
@@ -1018,7 +1329,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                           </div>
 
                           <div className="recording-op-detail-group">
-                            <h5>Reason / 证据</h5>
+                            <h5>Reason / 证据链</h5>
                             <p>
                               {(operation.outcome.reasonCodes ?? []).join(', ') ||
                                 (operation.action.targetReasonCodes ?? []).join(', ') ||
@@ -1077,8 +1388,527 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
             </div>
           ) : null}
         </section>
+
+        {/* Right Inspector & Defect Marker Column (Inspector Mode) */}
+        <aside className="defect-evidence-inspector-col" aria-label="技术详情检查器与问题标记">
+          {/* Pro Step Inspector */}
+          {selectedOperation && layoutMode === 'split' ? (
+            <section className="recording-op-inspector" aria-label="当前选中步骤检查器">
+              <header className="inspector-panel-header">
+                <div className="inspector-panel-title-row">
+                  <div className="inspector-panel-title">
+                    <span className="inspector-label-tag">🔬 步骤检查器</span>
+                    <span className="inspector-index-chip">
+                      #{visibleOperations.findIndex(o => o.operationId === selectedOperation.operationId) + 1 || 1}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-xs btn-seek-video"
+                    onClick={() => focusOperation(selectedOperation)}
+                    title="播放器定位到此步骤发生时刻"
+                  >
+                    ▶ 定位视频
+                  </button>
+                </div>
+                <div className="inspector-panel-op-title" title={selectedOperation.businessAlias || selectedOperation.title}>
+                  {selectedOperation.businessAlias || selectedOperation.title}
+                </div>
+
+                <nav className="inspector-nav-tabs" role="tablist" aria-label="检查器视图切换">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeInspectorTab === 'locators'}
+                    className={`inspector-nav-tab ${activeInspectorTab === 'locators' ? 'is-active' : ''}`}
+                    onClick={() => setActiveInspectorTab('locators')}
+                  >
+                    UI 定位
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeInspectorTab === 'diff'}
+                    className={`inspector-nav-tab ${activeInspectorTab === 'diff' ? 'is-active' : ''}`}
+                    onClick={() => setActiveInspectorTab('diff')}
+                  >
+                    前后对比
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeInspectorTab === 'candidates'}
+                    className={`inspector-nav-tab ${activeInspectorTab === 'candidates' ? 'is-active' : ''}`}
+                    onClick={() => setActiveInspectorTab('candidates')}
+                  >
+                    候选判定
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={activeInspectorTab === 'evidence'}
+                    className={`inspector-nav-tab ${activeInspectorTab === 'evidence' ? 'is-active' : ''}`}
+                    onClick={() => setActiveInspectorTab('evidence')}
+                  >
+                    证据链路
+                  </button>
+                </nav>
+              </header>
+
+              <div className="inspector-panel-body">
+                {/* Tab 1: Locators & Coordinates */}
+                {activeInspectorTab === 'locators' ? (
+                  <div className="inspector-tab-view">
+                    <div className="inspector-group-box">
+                      <div className="inspector-group-header">
+                        <span>目标控件属性</span>
+                        <span className="group-header-sub">UIA 智能感知</span>
+                      </div>
+                      <div className="prop-keyval-table">
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">控件名称</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v" title={selControlName}>{selControlName}</span>
+                            {selControlName !== '—' ? (
+                              <button
+                                type="button"
+                                className="btn-copy-chip"
+                                onClick={() => copyTextToClipboard(selControlName, '控件名称')}
+                              >
+                                复制
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">控件类型</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v">{selControlType}</span>
+                          </div>
+                        </div>
+
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">AutomationId</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v" title={selAutoId}>{selAutoId}</span>
+                            {selAutoId !== '—' ? (
+                              <button
+                                type="button"
+                                className="btn-copy-chip"
+                                onClick={() => copyTextToClipboard(selAutoId, 'AutomationId')}
+                              >
+                                复制
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">runtimeId</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v" title={selRuntimeIdText}>{selRuntimeIdText}</span>
+                            {selRuntimeIdText !== '—' ? (
+                              <button
+                                type="button"
+                                className="btn-copy-chip"
+                                onClick={() => copyTextToClipboard(selRuntimeIdText, 'runtimeId')}
+                              >
+                                复制
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">物理坐标</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v">{selCoordText}</span>
+                            {selCoord ? (
+                              <button
+                                type="button"
+                                className="btn-copy-chip"
+                                onClick={() => copyTextToClipboard(`${selCoord.x}, ${selCoord.y}`, '坐标')}
+                              >
+                                复制
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">所属窗口/进程</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v" title={selProcessWindow}>{selProcessWindow}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="inspector-group-box">
+                      <div className="inspector-group-header">
+                        <span>操作捕获内容</span>
+                      </div>
+                      <div className="prop-keyval-table">
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">输入/捕获文本</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v" style={{ color: 'var(--accent-primary)' }}>{selContent}</span>
+                          </div>
+                        </div>
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">动作类型</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v">{formatActionKindLabel(selectedOperation.action?.kind)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Tab 2: Visual Diff Before vs After */}
+                {activeInspectorTab === 'diff' ? (
+                  <div className="inspector-tab-view">
+                    <div className="inspector-group-box">
+                      <div className="inspector-group-header">
+                        <span>属性级变动对比 (Visual Diff)</span>
+                      </div>
+
+                      <div className="diff-card-grid">
+                        <div className="diff-card-col diff-col-before">
+                          <div className="diff-card-col-title">操作前 (Before)</div>
+                          {Object.keys(selStateProps).length === 0 ? (
+                            <div className="diff-empty-text">未记录快照属性</div>
+                          ) : (
+                            <div className="diff-props-list">
+                              {Object.entries(selStateProps).map(([k, v]) => (
+                                <div className="diff-prop-item" key={k}>
+                                  <span className="diff-prop-key">{k}:</span>
+                                  <span className="diff-prop-val">{v}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="diff-card-col diff-col-after">
+                          <div className="diff-card-col-title">主迁移结果 (After)</div>
+                          {selPrimaryTransition ? (
+                            <div className="diff-props-list">
+                              <div className="diff-prop-item">
+                                <span className="diff-prop-key">属性:</span>
+                                <span className="diff-prop-val is-accent">{selPrimaryTransition.property}</span>
+                              </div>
+                              <div className="diff-prop-item">
+                                <span className="diff-prop-key">变动前:</span>
+                                <span className="diff-prop-val">{formatJsonish(selPrimaryTransition.before)}</span>
+                              </div>
+                              <div className="diff-prop-item">
+                                <span className="diff-prop-key">变动后:</span>
+                                <span className="diff-prop-val is-highlight">{formatJsonish(selPrimaryTransition.after)}</span>
+                              </div>
+                              {selPrimaryTransition.kind ? (
+                                <div className="diff-prop-item">
+                                  <span className="diff-prop-key">类型:</span>
+                                  <span className="diff-prop-val">{selPrimaryTransition.kind}</span>
+                                </div>
+                              ) : null}
+                            </div>
+                          ) : (
+                            <div className="diff-empty-text">
+                              {selectedOperation.resultSummary || '未关联明确迁移'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="inspector-group-box">
+                      <div className="inspector-group-header">
+                        <span>迁移指标</span>
+                      </div>
+                      <div className="prop-keyval-table">
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">主迁移 ID</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v">{selectedOperation.outcome?.primaryTransitionId || '—'}</span>
+                          </div>
+                        </div>
+                        <div className="prop-keyval-row">
+                          <span className="prop-k">可观测延迟</span>
+                          <div className="prop-v-wrap">
+                            <span className="prop-v">
+                              {typeof selectedOperation.outcome?.latencyMs === 'number'
+                                ? `${selectedOperation.outcome.latencyMs} ms`
+                                : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Tab 3: Candidate Decisions */}
+                {activeInspectorTab === 'candidates' ? (
+                  <div className="inspector-tab-view">
+                    <div className="inspector-group-box">
+                      <div className="inspector-group-header">
+                        <span>候选迁移结果选择</span>
+                        <span className="group-header-sub">
+                          来源: {selectedOperation.outcomeSelectionSource === 'manual' ? '人工选择' : '自动推断'}
+                        </span>
+                      </div>
+
+                      {selChoices.length === 0 ? (
+                        <p className="recording-op-detail-empty">该步骤未生成备选迁移</p>
+                      ) : (
+                        <div className="candidate-cards-list">
+                          {selChoices.map((choice) => (
+                            <div
+                              key={choice.transitionId}
+                              className={`candidate-card-item ${choice.transitionId === selectedOperation.outcome?.primaryTransitionId ? 'is-primary' : ''}`}
+                            >
+                              <div className="candidate-card-content">
+                                <strong>{choice.label}</strong>
+                                <span className="candidate-card-sub">
+                                  ID: {choice.transitionId}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-xs"
+                                disabled={busy || choice.transitionId === selectedOperation.outcome?.primaryTransitionId}
+                                onClick={() => void handleSelectCandidate(selectedOperation, choice.transitionId)}
+                              >
+                                {choice.transitionId === selectedOperation.outcome?.primaryTransitionId ? '当前结果' : '选为结果'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {selectedOperation.outcomeSelectionSource === 'manual' ? (
+                        <div className="restore-auto-wrap">
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            disabled={busy}
+                            onClick={() => void handleRestoreAuto(selectedOperation)}
+                          >
+                            ↺ 恢复自动判断
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* Tab 4: Evidence Timeline & Telemetry */}
+                {activeInspectorTab === 'evidence' ? (
+                  <div className="inspector-tab-view">
+                    <div className="inspector-group-box">
+                      <div className="inspector-group-header">
+                        <span>佐证物与诊断码</span>
+                        <span className="group-header-sub">点击可跳转视频回放</span>
+                      </div>
+
+                      <div className="reason-codes-wrap">
+                        <span className="reason-codes-label">Reason Codes:</span>
+                        <span className="reason-codes-val">
+                          {(selectedOperation.outcome.reasonCodes ?? []).join(', ') ||
+                            (selectedOperation.action.targetReasonCodes ?? []).join(', ') ||
+                            '—'}
+                        </span>
+                      </div>
+
+                      <div className="evidence-timeline-cards">
+                        {(selectedOperation.evidence ?? []).slice(0, 20).map((evidence) => {
+                          const relMs = Math.max(
+                            0,
+                            evidence.occurredAtMs -
+                              (selectedOperation.startedAtMs - selectedOperation.relativeMsFromSessionStart),
+                          );
+                          const icon =
+                            evidence.kind === 'screenshot' || evidence.kind === 'thumbnail'
+                              ? '🖼️'
+                              : evidence.kind === 'stateTransition'
+                                ? '🌲'
+                                : '📄';
+
+                          return (
+                            <button
+                              key={evidence.evidenceId}
+                              type="button"
+                              className="evidence-card-btn"
+                              onClick={() => {
+                                props.onPlaybackFocusChange?.({
+                                  eventId: evidence.sourceId || selectedOperation.operationId,
+                                  sessionId: selectedOperation.sessionId || sessionId || '',
+                                  occurredAtMs: evidence.occurredAtMs || selectedOperation.startedAtMs,
+                                });
+                              }}
+                            >
+                              <div className="evidence-card-left">
+                                <span className="evidence-card-icon" aria-hidden="true">{icon}</span>
+                                <div className="evidence-card-text">
+                                  <strong>{evidence.kind}</strong>
+                                  <span>{evidence.role}</span>
+                                </div>
+                              </div>
+                              <time className="evidence-card-time">
+                                {formatRelativeOperationTime(relMs)}
+                              </time>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {/* Defect Marker & Pack Export Panel */}
+          <aside
+            className={`defect-evidence-marker ${markerCollapsed ? 'is-collapsed' : ''}`}
+            aria-label="问题标记"
+          >
+            <div className="defect-evidence-section-title defect-evidence-marker-title">
+              <div>
+                <h4>问题标记与导出</h4>
+                <p>定位一段可复查时间窗并导出完整记录包。</p>
+              </div>
+              <div className="defect-evidence-title-actions">
+                <span>{windowLabel}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm defect-marker-toggle"
+                  aria-expanded={!markerCollapsed}
+                  aria-controls="recording-review-marker-body"
+                  title={markerCollapsed ? '展开问题标记' : '收起问题标记'}
+                  onClick={() => setMarkerCollapsed((current) => !current)}
+                >
+                  {markerCollapsed ? '展开' : '收起'}
+                </button>
+              </div>
+            </div>
+
+            {markerCollapsed ? (
+              <div className="defect-evidence-marker-summary" aria-label="问题标记摘要">
+                <span>
+                  <strong>{markerStateLabel}</strong>
+                  <small>标记</small>
+                </span>
+                <span>
+                  <strong>{visibleOperations.length}</strong>
+                  <small>操作</small>
+                </span>
+                <span>
+                  <strong>{props.enabled ? '开启' : '关闭'}</strong>
+                  <small>记录</small>
+                </span>
+              </div>
+            ) : null}
+
+            <div
+              id="recording-review-marker-body"
+              className="defect-evidence-marker-body"
+              hidden={markerCollapsed}
+            >
+              <div className="defect-evidence-form">
+                <label>
+                  <span>问题说明</span>
+                  <input
+                    value={note}
+                    onChange={(event) => setNote(event.target.value)}
+                    placeholder="例如：保存后金额未刷新"
+                    disabled={markerDisabled}
+                  />
+                </label>
+                <label>
+                  <span>期望表现</span>
+                  <input
+                    value={expected}
+                    onChange={(event) => setExpected(event.target.value)}
+                    placeholder="可选"
+                    disabled={markerDisabled}
+                  />
+                </label>
+                <label>
+                  <span>实际表现</span>
+                  <div className="actual-input-wrap">
+                    <input
+                      value={actual}
+                      onChange={(event) => setActual(event.target.value)}
+                      placeholder="可选，可点击步骤右侧「📍 锚定」自动填入"
+                      disabled={markerDisabled}
+                    />
+                    {selectedOperation ? (
+                      <button
+                        type="button"
+                        className="btn-fill-actual"
+                        title="将选中步骤填入实际表现"
+                        onClick={() => handleAnchorStepToDefect(selectedOperation)}
+                      >
+                        填入选中步
+                      </button>
+                    ) : null}
+                  </div>
+                </label>
+              </div>
+
+              <div className="defect-evidence-actions">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={markerDisabled}
+                  onClick={() => void handleMarkDefect()}
+                >
+                  标记问题
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={markerDisabled}
+                  onClick={() => void handleRebuild()}
+                >
+                  重新生成
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={busy || visibleOperations.length === 0}
+                  onClick={() => void handleCopyRepro()}
+                >
+                  复制步骤
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  disabled={markerDisabled}
+                  onClick={() => void handleExportPack()}
+                >
+                  导出记录包
+                </button>
+              </div>
+
+              {status ? <p className="defect-evidence-status">{status}</p> : null}
+              {packResult ? (
+                <p className="defect-evidence-pack-summary">
+                  路径: {packResult.packDir} · 操作 {packResult.stepCount} · 截图 {packResult.screenshotCount} ·
+                  视频段 {packResult.videoSegmentCount}
+                  {packResult.clipBuilt ? ' · clip.mp4 已生成' : ''}
+                </p>
+              ) : null}
+            </div>
+          </aside>
+        </aside>
       </div>
 
+      {/* 8. Bottom Repro Panel (Backward Compatibility & Easy Review) */}
       {reproText ? (
         <section className="defect-evidence-repro-panel" aria-label="操作结果文本">
           <div className="defect-evidence-section-title">
@@ -1086,9 +1916,76 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
               <h4>操作结果文本</h4>
               <p>用于粘贴到工单、测试记录或沟通上下文（操作 → 结果 → 耗时）。</p>
             </div>
+            <button
+              type="button"
+              className="btn btn-secondary btn-xs"
+              onClick={() => copyTextToClipboard(reproText, '操作结果文本')}
+            >
+              复制文本
+            </button>
           </div>
           <pre className="defect-evidence-repro">{reproText}</pre>
         </section>
+      ) : null}
+
+      {/* 9. Repro Steps Markdown Modal */}
+      {isReproModalOpen ? (
+        <div className="recording-review-modal-overlay" onClick={() => setIsReproModalOpen(false)}>
+          <div className="recording-review-modal-box" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-box-header">
+              <div>
+                <strong>操作复现步骤 (Markdown)</strong>
+                <p>已按时间窗与当前筛选结果组织，可直接粘贴至缺陷工单或报告</p>
+              </div>
+              <button
+                type="button"
+                className="btn-modal-close"
+                onClick={() => setIsReproModalOpen(false)}
+                aria-label="关闭"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="modal-box-body">
+              <pre className="modal-repro-pre">
+                {reproText || buildOperationReproText({
+                  sessionId,
+                  operations: visibleOperations,
+                  defectNote: note.trim() || actual.trim() || undefined,
+                  windowStartMs: defect?.windowStartMs,
+                  windowEndMs: defect?.windowEndMs,
+                  markedAtMs: defect?.markedAtMs,
+                })}
+              </pre>
+            </div>
+            <div className="modal-box-footer">
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={() => setIsReproModalOpen(false)}
+              >
+                关闭
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={async () => {
+                  await handleCopyRepro();
+                  setIsReproModalOpen(false);
+                }}
+              >
+                复制到剪贴板
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* 10. Lightweight Toast Feedback Pill */}
+      {toastFeedback ? (
+        <div className="recording-review-toast" role="status" aria-live="polite">
+          <span>{toastFeedback}</span>
+        </div>
       ) : null}
     </section>
   );

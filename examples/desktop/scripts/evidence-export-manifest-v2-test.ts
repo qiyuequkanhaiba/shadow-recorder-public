@@ -63,54 +63,19 @@ async function run(): Promise<void> {
       { session, events, videoStreams: [], videoSegments: [] },
     );
 
-    const manifestV2Path = path.join(result.exportDir!, 'manifest.v2.json');
-    assert.ok(existsSync(manifestV2Path));
-    assert.equal(result.manifestV2Path, manifestV2Path);
-    assert.equal(result.manifestV2RelativePath, 'manifest.v2.json');
-
-    const manifest = JSON.parse(readFileSync(manifestV2Path, 'utf-8')) as {
-      version: number;
-      session_id: string;
-      created_at_ms: number;
-      app_version: string;
-      native_version: string;
-      capture_config: { targetCaptureMode?: string };
-      operations_schema_version: number;
-      operations_builder_version: string;
-      operations_kind: string;
-      operations_json_path: string;
-      operations_csv_path: string;
-      files: Array<{ relative_path: string; bytes: number; sha256: string }>;
+    assert.equal(existsSync(path.join(result.exportDir!, 'manifest.v2.json')), false);
+    assert.equal(existsSync(path.join(result.exportDir!, 'summary.html')), false);
+    assert.equal(result.eventsLogRelativePath, 'events.json');
+    const exportedEvents = JSON.parse(readFileSync(result.eventsLogPath!, 'utf-8')) as {
+      sessionId: string;
+      records: Array<{ eventId: string }>;
     };
-    assert.equal(manifest.version, 2);
-    assert.equal(manifest.session_id, session.sessionId);
-    assert.equal(manifest.created_at_ms, result.generatedAtMs);
-    assert.equal(manifest.app_version, '0.1.1');
-    assert.equal(manifest.native_version, '0.1.0');
-    assert.equal(manifest.capture_config.targetCaptureMode, 'target_display');
-    assert.equal(manifest.operations_schema_version, 1);
-    assert.equal(manifest.operations_builder_version, 'evidence-timeline-v1');
-    assert.equal(manifest.operations_kind, 'reqcase.test-session-operation-records');
-    assert.equal(manifest.operations_json_path, 'operations.json');
-    assert.equal(manifest.operations_csv_path, 'operations.csv');
-    assert.ok(manifest.files.some((entry) => entry.relative_path === 'manifest.json'));
-    assert.ok(manifest.files.some((entry) => entry.relative_path === 'sha256-manifest.json'));
-    assert.ok(manifest.files.every((entry) => entry.relative_path !== 'manifest.v2.json'));
-
+    assert.equal(exportedEvents.sessionId, session.sessionId);
+    assert.equal(exportedEvents.records[0]?.eventId, 'evt-1');
     const operations = JSON.parse(readFileSync(result.operationsJsonPath!, 'utf-8')) as {
-      schemaVersion: number;
-      kind: string;
-      builderVersion: string;
+      records: unknown[];
     };
-    assert.equal(operations.schemaVersion, manifest.operations_schema_version);
-    assert.equal(operations.kind, manifest.operations_kind);
-    assert.equal(operations.builderVersion, manifest.operations_builder_version);
-
-    const checksumManifest = JSON.parse(readFileSync(result.checksumManifestPath!, 'utf-8')) as {
-      files: Array<{ relativePath: string }>;
-    };
-    assert.ok(checksumManifest.files.some((entry) => entry.relativePath === 'manifest.json'));
-    assert.ok(checksumManifest.files.every((entry) => entry.relativePath !== 'manifest.v2.json'));
+    assert.deepEqual(operations.records, []);
 
     console.log('[evidence-export-manifest-v2-test] PASS');
   } finally {

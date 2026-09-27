@@ -31,6 +31,7 @@ const SHA256_MANIFEST_KIND = 'reqcase.sha256-manifest';
 type EvidenceExportContext = {
   session: ReqCaseShadowRecorderTestSessionState;
   events: ReqCaseShadowRecorderTestSessionTimelineEvent[];
+  operations?: unknown[];
   videoStreams: ReqCaseShadowRecorderTestSessionVideoStream[];
   videoSegments: ReqCaseShadowRecorderTestSessionVideoSegment[];
 };
@@ -122,147 +123,32 @@ export async function exportTestSessionEvidence(
     filteredVideoArtifacts.streams,
     playableSegments,
   );
-  const eventsLogRelativePath = 'events-timeline.md';
+  const eventsLogRelativePath = 'events.json';
   const eventsLogPath = path.resolve(exportDir, eventsLogRelativePath);
-  const eventsCopyStats = await exportTimelineMarkdown(
+  const eventsCopyStats = await exportEventsJson(
     eventsLogPath,
     orderedEvents,
     filteredVideoArtifacts.streams,
     playableSegments,
     context.session,
+    generatedAtMs,
   );
-  const copyStats = {
-    fileCount: videoCopyStats.fileCount + eventsCopyStats.fileCount,
-    byteCount: videoCopyStats.byteCount + eventsCopyStats.byteCount,
-  };
-
-  const manifestRelativePath = 'manifest.json';
-  const manifestV2RelativePath = 'manifest.v2.json';
-  const summaryHtmlRelativePath = 'summary.html';
   const operationsJsonRelativePath = 'operations.json';
-  const operationsCsvRelativePath = 'operations.csv';
-  const checksumManifestRelativePath = 'sha256-manifest.json';
-
-  const manifestPath = path.resolve(exportDir, manifestRelativePath);
-  const manifestV2Path = path.resolve(exportDir, manifestV2RelativePath);
-  const summaryHtmlPath = path.resolve(exportDir, summaryHtmlRelativePath);
   const operationsJsonPath = path.resolve(exportDir, operationsJsonRelativePath);
-  const operationsCsvPath = path.resolve(exportDir, operationsCsvRelativePath);
-  const checksumManifestPath = path.resolve(exportDir, checksumManifestRelativePath);
-
-  const viewModel = buildEvidenceViewModel({
-    events: orderedEvents,
-    playableSegments,
-    sourceSessionDir,
-  });
-  const operationRecords = orderedEvents.map((event) =>
-    buildEvidenceExportLogRecord(event, viewModel.playableSegmentViews),
-  );
-  await writeFile(
-    operationsJsonPath,
-    JSON.stringify({
-      schemaVersion: OPERATION_RECORDS_SCHEMA_VERSION,
-      kind: OPERATION_RECORDS_KIND,
-      builderVersion: OPERATION_RECORDS_BUILDER_VERSION,
-      generatedAtMs,
-      sessionId: context.session.sessionId,
-      records: operationRecords,
-    }, null, 2),
-    'utf-8',
-  );
-  await writeFile(operationsCsvPath, buildOperationsCsv(operationRecords), 'utf-8');
-  await writeFile(
-    summaryHtmlPath,
-    renderEvidenceHtml({
-      session: context.session,
-      generatedAtMs,
-      copyStats,
-      eventCount,
-      stepEventCount,
-      videoStreams: filteredVideoArtifacts.streams,
-      videoSegments: filteredVideoArtifacts.segments,
-      viewModel,
-      manifestPath: manifestRelativePath,
-      operationsJsonPath: operationsJsonRelativePath,
-      operationsCsvPath: operationsCsvRelativePath,
-      checksumManifestPath: checksumManifestRelativePath,
-    }),
-    'utf-8',
-  );
-
-  const checksumEntries = await buildArchiveChecksumEntries(exportDir);
-  const manifest = buildEvidenceManifest({
-    createdAt: new Date(generatedAtMs).toISOString(),
-    app: { name: 'ReqCase Shadow Recorder' },
-    session: {
-      sessionId: context.session.sessionId,
-      name: context.session.name,
-      status: context.session.status,
-      startedAtMs: context.session.startedAtMs,
-      endedAtMs: context.session.endedAtMs,
-      targetCaptureMode: context.session.targetCaptureMode,
-      privacyAcknowledgedAt,
-    },
-    files: [
-      { relativePath: videoDirRelativePath, role: 'video-directory' },
-      { relativePath: eventsLogRelativePath, role: 'events-timeline' },
-      { relativePath: manifestRelativePath, role: 'manifest' },
-      { relativePath: manifestV2RelativePath, role: 'manifest-v2' },
-      { relativePath: summaryHtmlRelativePath, role: 'summary-html' },
-      { relativePath: operationsJsonRelativePath, role: 'operations-json' },
-      { relativePath: operationsCsvRelativePath, role: 'operations-csv' },
-      { relativePath: checksumManifestRelativePath, role: 'sha256-manifest' },
-    ],
-    checksums: checksumEntries,
-    operations: {
-      schemaVersion: OPERATION_RECORDS_SCHEMA_VERSION,
-      builderVersion: OPERATION_RECORDS_BUILDER_VERSION,
-      kind: OPERATION_RECORDS_KIND,
-      jsonRelativePath: operationsJsonRelativePath,
-      csvRelativePath: operationsCsvRelativePath,
-    },
-  });
-  await writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
-
-  const checksumEntriesBeforeChecksumManifest = await buildArchiveChecksumEntries(exportDir);
-  await writeFile(
-    checksumManifestPath,
-    JSON.stringify({
-      schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
-      kind: SHA256_MANIFEST_KIND,
-      generatedAtMs,
-      files: checksumEntriesBeforeChecksumManifest,
-    }, null, 2),
-    'utf-8',
-  );
-
-  const finalChecksumEntries = await buildArchiveChecksumEntries(exportDir, { includeChecksumManifest: true });
-  const manifestV2 = buildEvidenceManifestV2({
+  const operationRecords = context.operations ?? [];
+  const operationsPayload = JSON.stringify({
+    schemaVersion: OPERATION_RECORDS_SCHEMA_VERSION,
+    kind: OPERATION_RECORDS_KIND,
+    generatedAtMs,
     sessionId: context.session.sessionId,
-    createdAtMs: generatedAtMs,
-    appVersion: '0.1.1',
-    nativeVersion: '0.1.0',
-    os: os.platform(),
-    captureConfig: {
-      recordingProfile: context.session.recordingProfile,
-      encoderPreference: context.session.encoderPreference,
-      targetCaptureMode: context.session.targetCaptureMode,
-      targetDisplayId: context.session.targetDisplayId,
-      targetDisplayIds: context.session.targetDisplayIds,
-    },
-    operationsSchemaVersion: OPERATION_RECORDS_SCHEMA_VERSION,
-    operationsBuilderVersion: OPERATION_RECORDS_BUILDER_VERSION,
-    operationsKind: OPERATION_RECORDS_KIND,
-    operationsJsonRelativePath,
-    operationsCsvRelativePath,
-    checksums: finalChecksumEntries,
-  });
-  await writeFile(manifestV2Path, JSON.stringify(manifestV2, null, 2), 'utf-8');
-  const checksumManifestStats = await stat(checksumManifestPath);
-  const finalCopyStats = {
-    fileCount: finalChecksumEntries.length + 1,
-    byteCount: finalChecksumEntries.reduce((total, entry) => total + entry.sizeBytes, 0) + checksumManifestStats.size,
+    records: operationRecords,
+  }, null, 2);
+  await writeFile(operationsJsonPath, operationsPayload, 'utf-8');
+  const copyStats = {
+    fileCount: videoCopyStats.fileCount + eventsCopyStats.fileCount + 1,
+    byteCount: videoCopyStats.byteCount + eventsCopyStats.byteCount + Buffer.byteLength(operationsPayload, 'utf-8'),
   };
+  const finalCopyStats = copyStats;
 
   if (outputMode === 'zip') {
     const zipPath = path.resolve(targetDir, resolveZipFileName(input.zipFileName, bundleName));
@@ -276,13 +162,10 @@ export async function exportTestSessionEvidence(
       artifactPath: zipPath,
       zipPath,
       videoDirRelativePath,
+      eventsLogPath,
       eventsLogRelativePath,
-      summaryHtmlRelativePath,
+      operationsJsonPath,
       operationsJsonRelativePath,
-      operationsCsvRelativePath,
-      manifestV2RelativePath,
-      checksumManifestRelativePath,
-      checksumEntryCount: finalChecksumEntries.length,
       generatedAtMs,
       eventCount,
       stepEventCount,
@@ -305,18 +188,8 @@ export async function exportTestSessionEvidence(
     videoDirRelativePath,
     eventsLogPath,
     eventsLogRelativePath,
-    manifestPath,
-    manifestV2Path,
-    manifestV2RelativePath,
-    summaryHtmlPath,
-    summaryHtmlRelativePath,
     operationsJsonPath,
     operationsJsonRelativePath,
-    operationsCsvPath,
-    operationsCsvRelativePath,
-    checksumManifestPath,
-    checksumManifestRelativePath,
-    checksumEntryCount: finalChecksumEntries.length,
     generatedAtMs,
     eventCount,
     stepEventCount,
@@ -533,12 +406,13 @@ async function exportEventsNdjson(
   };
 }
 
-async function exportTimelineMarkdown(
+async function exportEventsJson(
   targetPath: string,
   events: ReqCaseShadowRecorderTestSessionTimelineEvent[],
   videoStreams: ReqCaseShadowRecorderTestSessionVideoStream[],
   playableSegments: ReqCaseShadowRecorderTestSessionVideoSegment[],
   session: ReqCaseShadowRecorderTestSessionState,
+  generatedAtMs: number,
 ): Promise<CopyStats> {
   const displayLabelById = new Map(
     videoStreams
@@ -570,16 +444,20 @@ async function exportTimelineMarkdown(
     .map((event, index) => {
       const matchedVideo = matchedVideoByEventId.get(event.eventId);
       const displayId = event.displayId ?? matchedVideo?.displayId ?? '';
+      const videoFile = matchedVideo?.videoFile ?? '';
       return {
+        eventId: event.eventId,
         sequence: index + 1,
+        occurredAtMs: event.occurredAtMs,
         occurredAtIso: new Date(event.occurredAtMs).toISOString(),
-        occurredAtLocal: new Date(event.occurredAtMs).toLocaleString('zh-CN', { hour12: false }),
         elapsedMs: Math.max(0, event.occurredAtMs - session.startedAtMs),
         displayId,
         displayLabel: displayId ? (displayLabelById.get(displayId) ?? displayId) : '',
         logCategory: event.logCategory,
         level: resolveLogLevel(event),
         eventType: event.eventType,
+        title: event.title ?? '',
+        message: event.message ?? '',
         summary: buildEventSummary(event),
         detail: buildEventDetail(event),
         processName: event.processName ?? '',
@@ -587,11 +465,17 @@ async function exportTimelineMarkdown(
         action: event.action ?? '',
         streamId: matchedVideo?.streamId ?? '',
         segmentId: matchedVideo?.segmentId ?? '',
-        videoFile: matchedVideo?.videoFile ?? '',
+        videoFile: videoFile ? `video/${videoFile}` : '',
       };
     });
 
-  const payload = buildTimelineMarkdown(session, records);
+  const payload = JSON.stringify({
+    schemaVersion: EVIDENCE_EXPORT_SCHEMA_VERSION,
+    kind: 'reqcase.test-session-events',
+    generatedAtMs,
+    sessionId: session.sessionId,
+    records,
+  }, null, 2);
   await mkdir(path.dirname(targetPath), { recursive: true });
   await writeFile(targetPath, payload, 'utf-8');
 

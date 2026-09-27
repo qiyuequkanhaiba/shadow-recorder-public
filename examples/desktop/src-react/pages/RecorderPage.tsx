@@ -11,6 +11,8 @@ import type {
 import type { ConfigApplyFeedback } from '../components/RecorderControlPanel';
 import { RecorderPlaybackStage } from '../components/RecorderPlaybackStage';
 import { HistorySessionPanel } from '../features/evidence/HistorySessionPanel';
+import { RecordingReviewPanel } from '../features/evidence/RecordingReviewPanel';
+import type { RecordingReviewPanelProps } from '../features/evidence/RecordingReviewPanel';
 import { SettingsWorkspace } from '../features/settings/SettingsWorkspace';
 import { useRecorderBootstrap } from '../hooks/useRecorderBootstrap';
 import { useRecorderDashboardSnapshot } from '../hooks/useRecorderDashboardSnapshot';
@@ -76,6 +78,7 @@ export function RecorderPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [historySelection, setHistorySelection] = useState<string[]>([]);
   const [sessionSearchQuery, setSessionSearchQuery] = useState('');
+  const [semanticReviewSessionId, setSemanticReviewSessionId] = useState<string | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const noopHydrateFromSettings = useCallback(() => {}, []);
 
@@ -349,6 +352,9 @@ export function RecorderPage() {
       ? '继续录制'
       : '暂停录制';
 
+  const semanticRecordingEnabled = config.semanticRecordingEnabled ?? !!config.defectEvidenceEnabled;
+  const historySession = dashboard.selectedSession ?? dashboard.activeSession;
+  const showSemanticReview = semanticReviewSessionId != null && semanticReviewSessionId === historySession?.sessionId;
   const historicalSessionIds = dashboard.sessions
     .filter((session) => session.status !== 'active' && session.status !== 'paused')
     .map((session) => session.sessionId);
@@ -431,7 +437,7 @@ export function RecorderPage() {
                 onClick={() => setActiveTab('evidence')}
               >
                 <span className="tab-icon">📑</span>
-                <span className="tab-text">历史记录</span>
+                <span className="tab-text">记录与回顾</span>
                 {historicalSessionIds.length > 0 ? <span className="capsule-badge">{historicalSessionIds.length}</span> : null}
               </button>
               <button
@@ -736,12 +742,41 @@ export function RecorderPage() {
                     )}
                   </aside>
                   <div className="evidence-layout-b-main">
-                    <HistorySessionPanel
-                      session={dashboard.selectedSession ?? dashboard.activeSession}
-                      onError={setError}
-                      onNotice={showToast}
-                      onMetaSaved={() => { void dashboard.refresh(); }}
-                    />
+                    {showSemanticReview ? (
+                      <div className="history-semantic-review">
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setSemanticReviewSessionId(null)}
+                        >
+                          返回历史记录
+                        </button>
+                        <RecordingReviewPanel
+                          session={historySession}
+                          isRecording={runtime.isRecording}
+                          enabled
+                          preWindowSeconds={config.defectPreWindowSeconds}
+                          postWindowSeconds={config.defectPostWindowSeconds}
+                          onPlaybackFocusChange={setPlaybackFocus}
+                          onError={setError}
+                          toUiErrorMessage={toUiErrorMessage}
+                          onMetaSaved={() => { void dashboard.refresh(); }}
+                        />
+                      </div>
+                    ) : (
+                      <HistorySessionPanel
+                        session={historySession}
+                        semanticEnabled={semanticRecordingEnabled}
+                        onOpenSemanticReview={() => {
+                          if (historySession) {
+                            setSemanticReviewSessionId(historySession.sessionId);
+                          }
+                        }}
+                        onError={setError}
+                        onNotice={showToast}
+                        onMetaSaved={() => { void dashboard.refresh(); }}
+                      />
+                    )}
                   </div>
                 </div>
               </section>

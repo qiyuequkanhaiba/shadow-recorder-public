@@ -25,6 +25,18 @@ const ICONS = {
   export: createIconSvg(
     '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line>',
   ),
+  spinner: createIconSvg(
+    '<path d="M21 12a9 9 0 1 1-6.219-8.56"></path>',
+    'toolbar-icon-spin',
+  ),
+  check: createIconSvg(
+    '<polyline points="20 6 9 17 4 12"></polyline>',
+    'toolbar-icon-check',
+  ),
+  warning: createIconSvg(
+    '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line>',
+    'toolbar-icon-warning',
+  ),
   main: createIconSvg(
     '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line>',
   ),
@@ -487,8 +499,70 @@ export function createFloatingToolbarHtml(input: {
         opacity: 1;
         transform: translate(-50%, -50%);
       }
+      @keyframes toolbarSpin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .toolbar-icon-spin {
+        animation: toolbarSpin 0.75s linear infinite;
+        transform-origin: center;
+        color: #38bdf8 !important;
+      }
+      @keyframes toolbarCheckBounce {
+        0% { transform: scale(0.5); opacity: 0; }
+        60% { transform: scale(1.15); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      .toolbar-icon-check {
+        animation: toolbarCheckBounce 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        transform-origin: center;
+        color: #22c55e !important;
+      }
+      @keyframes toolbarShake {
+        0%, 100% { transform: translateX(0); }
+        20%, 60% { transform: translateX(-2.5px); }
+        40%, 80% { transform: translateX(2.5px); }
+      }
+      .btn-export.is-error {
+        animation: toolbarShake 0.32s ease;
+      }
+      .toolbar-icon-warning {
+        color: #f59e0b !important;
+      }
+      .btn-export.is-exporting {
+        pointer-events: none;
+        opacity: 1 !important;
+      }
+      .island-progress-hairline {
+        position: absolute;
+        left: 6px;
+        right: 6px;
+        bottom: 0;
+        height: 1.5px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, #38bdf8, transparent);
+        background-size: 200% 100%;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+        z-index: 6;
+      }
+      .island.is-exporting .island-progress-hairline {
+        opacity: 1;
+        animation: hairlineShimmer 1.2s linear infinite;
+      }
+      .island.is-exported .island-progress-hairline {
+        opacity: 1;
+        background: #22c55e;
+        box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+        transition: opacity 0.5s ease;
+      }
+      @keyframes hairlineShimmer {
+        0% { background-position: 200% 0; }
+        100% { background-position: -200% 0; }
+      }
       @media (prefers-reduced-motion: reduce) {
-        .island, .island-inner, .slim-btn, .btn, .status-dot, .status-dot::after, .capsule-slim-deck, .actions, .collapsed-waveform, .waveform-bar, .toast-status-banner {
+        .island, .island-inner, .slim-btn, .btn, .status-dot, .status-dot::after, .capsule-slim-deck, .actions, .collapsed-waveform, .waveform-bar, .toast-status-banner, .toolbar-icon-spin, .toolbar-icon-check, .btn-export.is-error, .island-progress-hairline {
           transition: none !important;
           animation: none !important;
         }
@@ -498,6 +572,7 @@ export function createFloatingToolbarHtml(input: {
   <body>
     <div id="island-container">
       <div class="island" id="island" data-state="${initialState}" data-collapsed="${initialCollapsed ? 'true' : 'false'}">
+        <div class="island-progress-hairline" id="island-progress" aria-hidden="true"></div>
         <div class="island-inner" id="island-inner">
           <div class="capsule-core-cluster status-capsule" id="drag-handle"
             title="按住可直接拖拽；鼠标悬停展开工具条"
@@ -1326,6 +1401,55 @@ export function createFloatingToolbarHtml(input: {
         }, ms);
       };
 
+      let exportStateTimer = null;
+      const setExportButtonState = (state, tooltip) => {
+        if (!buttons.export) return;
+        buttons.export.classList.remove('is-exporting', 'is-exported', 'is-error');
+        island.classList.remove('is-exporting', 'is-exported');
+        if (exportStateTimer != null) {
+          window.clearTimeout(exportStateTimer);
+          exportStateTimer = null;
+        }
+
+        if (state === 'exporting') {
+          buttons.export.classList.add('is-exporting');
+          island.classList.add('is-exporting');
+          buttons.export.innerHTML = '${ICONS.spinner}';
+          buttons.export.setAttribute('title', tooltip || '正在导出证据 ZIP…');
+          buttons.export.setAttribute('aria-label', tooltip || '正在导出证据 ZIP…');
+        } else if (state === 'exported') {
+          buttons.export.classList.add('is-exported');
+          island.classList.add('is-exported');
+          buttons.export.innerHTML = '${ICONS.check}';
+          buttons.export.setAttribute('title', tooltip || '已导出证据 ZIP');
+          buttons.export.setAttribute('aria-label', tooltip || '已导出证据 ZIP');
+          exportStateTimer = window.setTimeout(() => {
+            buttons.export.classList.remove('is-exported');
+            island.classList.remove('is-exported');
+            buttons.export.innerHTML = '${ICONS.export}';
+            buttons.export.setAttribute('title', '导出证据 ZIP');
+            buttons.export.setAttribute('aria-label', '导出证据 ZIP');
+            exportStateTimer = null;
+          }, 2400);
+        } else if (state === 'error') {
+          buttons.export.classList.add('is-error');
+          buttons.export.innerHTML = '${ICONS.warning}';
+          buttons.export.setAttribute('title', tooltip || '暂无视频可导出');
+          buttons.export.setAttribute('aria-label', tooltip || '暂无视频可导出');
+          exportStateTimer = window.setTimeout(() => {
+            buttons.export.classList.remove('is-error');
+            buttons.export.innerHTML = '${ICONS.export}';
+            buttons.export.setAttribute('title', '导出证据 ZIP');
+            buttons.export.setAttribute('aria-label', '导出证据 ZIP');
+            exportStateTimer = null;
+          }, 1800);
+        } else {
+          buttons.export.innerHTML = '${ICONS.export}';
+          buttons.export.setAttribute('title', '导出证据 ZIP');
+          buttons.export.setAttribute('aria-label', '导出证据 ZIP');
+        }
+      };
+
       const runExport = (event) => {
         if (event) {
           event.preventDefault();
@@ -1333,18 +1457,23 @@ export function createFloatingToolbarHtml(input: {
         }
         if (busy) return;
         if (buttons.export.disabled || !canExport) {
-          flashStatus('暂无视频');
+          setExportButtonState('error', '暂无视频');
           return;
         }
         void runTask(async () => {
           if (!api.exportTestSessionEvidence) throw new Error('No export API');
-          flashStatus('正在导出…', 4000);
-          await api.exportTestSessionEvidence({
-            targetDir: '',
-            outputMode: 'zip',
-            privacyAcknowledgedAt: new Date().toISOString(),
-          });
-          flashStatus('已导出', 2000);
+          setExportButtonState('exporting', '正在导出证据 ZIP…');
+          try {
+            await api.exportTestSessionEvidence({
+              targetDir: '',
+              outputMode: 'zip',
+              privacyAcknowledgedAt: new Date().toISOString(),
+            });
+            setExportButtonState('exported', '已导出证据 ZIP');
+          } catch (err) {
+            setExportButtonState('error', '导出失败');
+            throw err;
+          }
         });
       };
       buttons.export.addEventListener('click', (event) => runExport(event));

@@ -369,11 +369,9 @@ async function validateSession(
     );
     assert(exportResult.exportDir, 'evidence export did not return an export directory');
     for (const relativePath of [
-      'summary.html',
+      'video/recording.mp4',
       'operations.json',
-      'operations.csv',
-      'manifest.json',
-      'manifest.v2.json',
+      'events.json',
     ]) {
       assert(
         existsSync(path.join(exportResult.exportDir, relativePath)),

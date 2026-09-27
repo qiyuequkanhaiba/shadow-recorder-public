@@ -202,70 +202,32 @@ async function run(): Promise<void> {
       && existsSync(path.join(result.videoDirPath, 'recording.mp4')),
     );
     assert.equal(result.videoDirRelativePath, 'video');
-    assert.equal(result.eventsLogRelativePath, 'events-timeline.md');
-    assert.ok(result.manifestPath && existsSync(result.manifestPath));
-    assert.ok(result.summaryHtmlPath && existsSync(result.summaryHtmlPath));
+    assert.equal(result.eventsLogRelativePath, 'events.json');
     assert.ok(result.operationsJsonPath && existsSync(result.operationsJsonPath));
-    assert.ok(result.operationsCsvPath && existsSync(result.operationsCsvPath));
-    assert.ok(result.checksumManifestPath && existsSync(result.checksumManifestPath));
-    assert.equal(result.summaryHtmlRelativePath, 'summary.html');
     assert.equal(result.operationsJsonRelativePath, 'operations.json');
-    assert.equal(result.operationsCsvRelativePath, 'operations.csv');
-    assert.equal(result.checksumManifestRelativePath, 'sha256-manifest.json');
-    assert.ok((result.checksumEntryCount ?? 0) >= 5);
+    assert.equal(existsSync(path.join(result.exportDir!, 'summary.html')), false);
+    assert.equal(existsSync(path.join(result.exportDir!, 'operations.csv')), false);
+    assert.equal(existsSync(path.join(result.exportDir!, 'manifest.json')), false);
+    assert.equal(existsSync(path.join(result.exportDir!, 'manifest.v2.json')), false);
+    assert.equal(existsSync(path.join(result.exportDir!, 'sha256-manifest.json')), false);
 
-    const exportedEvents = readFileSync(result.eventsLogPath!, 'utf-8');
-    assert.match(exportedEvents, /^# Evidence Smoke 事件时间线/m);
-    assert.match(exportedEvents, /显示器: Primary Display \(`display-primary`\)/);
-    assert.match(exportedEvents, /事件类型: `session_started`/);
-    assert.match(exportedEvents, /事件类型: `step_captured`/);
-    assert.match(exportedEvents, /对应视频: `video\/recording\.mp4`/);
+    const exportedEvents = JSON.parse(readFileSync(result.eventsLogPath!, 'utf-8')) as {
+      records: Array<{ eventType: string; videoFile: string }>;
+    };
+    assert.ok(exportedEvents.records.some((record) => record.eventType === 'session_started'));
+    assert.ok(exportedEvents.records.some((record) => record.eventType === 'step_captured' && record.videoFile === 'video/recording.mp4'));
     assert.equal(result.eventCount, 2);
     assert.equal(result.stepEventCount, 1);
     assert.equal(result.playableVideoSegmentCount, 1);
 
-    const manifest = JSON.parse(readFileSync(result.manifestPath!, 'utf-8')) as {
-      version: number;
-      session: {
-        sessionId: string;
-        privacyAcknowledgedAt?: string;
-      };
-      operations?: {
-        schemaVersion: number;
-        builderVersion: string;
-        kind: string;
-        jsonRelativePath: string;
-        csvRelativePath: string;
-      };
-    };
-    assert.equal(manifest.version, 1);
-    assert.equal(manifest.session.sessionId, session.sessionId);
-    assert.equal(manifest.session.privacyAcknowledgedAt, privacyAcknowledgedAt);
-    assert.deepEqual(manifest.operations, {
-      schemaVersion: 1,
-      builderVersion: 'evidence-timeline-v1',
-      kind: 'reqcase.test-session-operation-records',
-      jsonRelativePath: 'operations.json',
-      csvRelativePath: 'operations.csv',
-    });
-
     const operations = JSON.parse(readFileSync(result.operationsJsonPath!, 'utf-8')) as {
       schemaVersion: number;
       kind: string;
-      builderVersion: string;
+      records: unknown[];
     };
-    assert.equal(operations.schemaVersion, manifest.operations?.schemaVersion);
-    assert.equal(operations.kind, manifest.operations?.kind);
-    assert.equal(operations.builderVersion, manifest.operations?.builderVersion);
-
-    const summaryHtml = readFileSync(result.summaryHtmlPath!, 'utf-8');
-    assert.match(summaryHtml, /Evidence Smoke/);
-    assert.match(summaryHtml, /operations\.json/);
-
-    const checksumManifest = JSON.parse(readFileSync(result.checksumManifestPath!, 'utf-8')) as { files: Array<{ relativePath: string }> };
-    assert.ok(checksumManifest.files.some((entry) => entry.relativePath === 'manifest.json'));
-    assert.ok(checksumManifest.files.some((entry) => entry.relativePath === 'summary.html'));
-    assert.ok(checksumManifest.files.some((entry) => entry.relativePath === 'operations.json'));
+    assert.equal(operations.schemaVersion, 1);
+    assert.equal(operations.kind, 'reqcase.test-session-operation-records');
+    assert.deepEqual(operations.records, []);
 
     const directManifest = buildEvidenceManifest({
       app: { name: 'shadow-recorder-test' },
@@ -309,7 +271,7 @@ async function run(): Promise<void> {
     assert.match(directHtml, /matched-only/);
 
     const directChecksums = await buildChecksumEntries(result.exportDir!);
-    assert.ok(directChecksums.some((entry) => entry.relativePath === 'summary.html'));
+    assert.ok(directChecksums.some((entry) => entry.relativePath === 'events.json'));
 
     const zipResult = await exportTestSessionEvidence(
       {
@@ -338,7 +300,7 @@ async function run(): Promise<void> {
     assert.equal(zipResult.videoDirPath, undefined);
     assert.equal(zipResult.eventsLogPath, undefined);
     assert.equal(zipResult.videoDirRelativePath, 'video');
-    assert.equal(zipResult.eventsLogRelativePath, 'events-timeline.md');
+    assert.equal(zipResult.eventsLogRelativePath, 'events.json');
     assert.equal(zipResult.summaryHtmlPath, undefined);
     assert.equal(zipResult.checksumManifestPath, undefined);
     assert.equal(zipResult.artifactSha256Path, undefined);

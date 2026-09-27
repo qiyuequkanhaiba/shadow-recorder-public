@@ -62,7 +62,8 @@ function testRecorderPageMountsRecordingReviewPanel(): void {
     source,
     /activeTab === 'evidence'\s*\?\s*\(\s*<section[\s\S]*id="panel-evidence"[\s\S]*aria-labelledby="tab-evidence"[\s\S]*<HistorySessionPanel/,
   );
-  assert.ok(source.includes('session={dashboard.selectedSession ?? dashboard.activeSession}'));
+  assert.ok(source.includes('const historySession = dashboard.selectedSession ?? dashboard.activeSession'));
+  assert.ok(source.includes('session={historySession}'));
   assert.ok(!source.includes('enabled={semanticRecordingEnabled}'));
   assert.ok(source.includes('onNotice={showToast}'));
   assert.ok(source.includes('onMetaSaved={() => { void dashboard.refresh(); }}'));

@@ -1211,6 +1211,20 @@ export class ReqCaseShadowRecorderService {
     return nativeExportTestDefectPack(input);
   }
 
+  private listExportOperations(sessionId: string): unknown[] {
+    const records: unknown[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 40; page += 1) {
+      const result = this.getSessionOperations({ sessionId, cursor, limit: 200 });
+      records.push(...(result.items ?? []));
+      if (!result.nextCursor || result.items.length === 0) {
+        break;
+      }
+      cursor = result.nextCursor;
+    }
+    return records;
+  }
+
   public async exportSessionEvidence(
     input: ReqCaseShadowRecorderTestSessionEvidenceExportInput,
   ): Promise<ReqCaseShadowRecorderTestSessionEvidenceExportResult> {
@@ -1233,6 +1247,7 @@ export class ReqCaseShadowRecorderService {
       {
         session,
         events: this.getSessionEvents(session.sessionId),
+        operations: this.listExportOperations(session.sessionId),
         videoStreams: this.getSessionVideoStreams(session.sessionId),
         videoSegments: this.getSessionVideoSegments(session.sessionId, undefined, undefined),
       },

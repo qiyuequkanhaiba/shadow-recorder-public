@@ -319,10 +319,14 @@ async function assertSessionMatrix(session: ReqCaseShadowRecorderTestSessionStat
   assert.ok(exportResult.operationsJsonPath && existsSync(exportResult.operationsJsonPath));
 
   const operationsJson = JSON.parse(readFileSync(exportResult.operationsJsonPath!, 'utf8')) as {
-    records: Array<{ matchedVideoRelativePath?: string; seekSeconds?: number }>;
+    records: unknown[];
   };
-  assert.equal(operationsJson.records[1].matchedVideoRelativePath, 'video/streams/vs-primary/segment-0001.mp4');
-  assert.equal(operationsJson.records[1].seekSeconds, 1.25);
+  assert.deepEqual(operationsJson.records, []);
+  const eventsJson = JSON.parse(readFileSync(exportResult.eventsLogPath!, 'utf8')) as {
+    records: Array<{ eventType: string; videoFile: string }>;
+  };
+  assert.equal(eventsJson.records.length, 2);
+  assert.equal(eventsJson.records[1].videoFile, 'video/recording.mp4');
 
   assertFingerprintsEqual(before, fingerprintDirectory(session.sessionDir!));
 }

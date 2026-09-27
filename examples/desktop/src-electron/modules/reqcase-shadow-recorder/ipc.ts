@@ -960,8 +960,13 @@ export function registerReqCaseShadowRecorderIpc(
     );
   });
 
-  handleTrusted(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidence, async (_event, rawInput: unknown) => {
+  handleTrusted(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidence, async (event, rawInput: unknown) => {
     const input = parseTestSessionEvidenceExportInput(rawInput);
+    const reportProgress = (progress: { percent: number; message: string }) => {
+      if (!event.sender.isDestroyed()) {
+        event.sender.send(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidenceProgress, progress);
+      }
+    };
     let targetDir = input.targetDir;
     if (!targetDir) {
       if (input.outputMode === 'zip') {
@@ -973,11 +978,12 @@ export function registerReqCaseShadowRecorderIpc(
         if (result.canceled || !result.filePath) {
           throw new Error('Export canceled by user');
         }
+        reportProgress({ percent: 8, message: '正在准备导出' });
         return service.exportSessionEvidence({
           ...input,
           targetDir: path.dirname(result.filePath),
           zipFileName: path.basename(result.filePath),
-        });
+        }, reportProgress);
       }
 
       const result = await dialog.showOpenDialog({
@@ -989,7 +995,8 @@ export function registerReqCaseShadowRecorderIpc(
       }
       targetDir = result.filePaths[0];
     }
-    return service.exportSessionEvidence({ ...input, targetDir });
+    reportProgress({ percent: 8, message: '正在准备导出' });
+    return service.exportSessionEvidence({ ...input, targetDir }, reportProgress);
   });
 
   handleTrusted(REQCASE_SHADOW_RECORDER_CHANNELS.appendTestSessionNote, async (_event, rawInput: unknown) => {

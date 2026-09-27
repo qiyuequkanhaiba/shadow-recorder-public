@@ -1227,6 +1227,7 @@ export class ReqCaseShadowRecorderService {
 
   public async exportSessionEvidence(
     input: ReqCaseShadowRecorderTestSessionEvidenceExportInput,
+    onProgress?: (progress: { percent: number; message: string }) => void,
   ): Promise<ReqCaseShadowRecorderTestSessionEvidenceExportResult> {
     const sessions = this.listSessions();
     const session = input.sessionId
@@ -1251,6 +1252,7 @@ export class ReqCaseShadowRecorderService {
         videoStreams: this.getSessionVideoStreams(session.sessionId),
         videoSegments: this.getSessionVideoSegments(session.sessionId, undefined, undefined),
       },
+      onProgress,
     );
   }
 

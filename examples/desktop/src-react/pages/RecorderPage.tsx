@@ -76,6 +76,8 @@ export function RecorderPage() {
   const [availableDisplays, setAvailableDisplays] = useState<TestSessionDisplayTarget[]>([]);
   const [displaysLoading, setDisplaysLoading] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [toastTone, setToastTone] = useState<'info' | 'success' | 'error' | 'progress'>('info');
+  const [toastPercent, setToastPercent] = useState<number | null>(null);
   const [historySelection, setHistorySelection] = useState<string[]>([]);
   const [sessionSearchQuery, setSessionSearchQuery] = useState('');
   const [semanticReviewSessionId, setSemanticReviewSessionId] = useState<string | null>(null);
@@ -123,16 +125,31 @@ export function RecorderPage() {
   const lastElapsedTickRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
-  function showToast(message: string): void {
+  function showToast(message: string, tone: 'info' | 'success' | 'error' | 'progress' = 'info', percent?: number): void {
     setToastMessage(message);
+    setToastTone(tone);
+    setToastPercent(tone === 'progress' ? Math.max(0, Math.min(100, percent ?? 0)) : null);
     if (toastTimerRef.current) {
       window.clearTimeout(toastTimerRef.current);
+      toastTimerRef.current = null;
+    }
+    if (tone === 'progress') {
+      return;
     }
     toastTimerRef.current = window.setTimeout(() => {
       setToastMessage((current) => (current === message ? null : current));
       toastTimerRef.current = null;
     }, 2600);
   }
+
+  useEffect(() => {
+    const unsubscribe = window.reqcaseShadowRecorder.onExportProgress?.((progress) => {
+      showToast(progress.message, 'progress', progress.percent);
+    });
+    return () => {
+      unsubscribe?.();
+    };
+  }, []);
 
   async function runBusyTask(task: () => Promise<void>): Promise<boolean> {
     setBusy(true);
@@ -392,9 +409,14 @@ export function RecorderPage() {
         zipFileName: `${bundleName}.zip`,
         privacyAcknowledgedAt: new Date().toISOString(),
       });
-      showToast(`已导出会话证据包：${result.zipPath || result.artifactPath || '完成'}`);
+      showToast(`已导出：${result.zipPath || result.artifactPath || '完成'}`, 'success');
     } catch (exportErr) {
-      setError(toUiErrorMessage(exportErr));
+      const message = toUiErrorMessage(exportErr);
+      if (/cancel/i.test(message)) {
+        showToast('已取消导出', 'info');
+      } else {
+        showToast(message, 'error');
+      }
     } finally {
       setBusy(false);
     }
@@ -761,6 +783,7 @@ export function RecorderPage() {
                           onError={setError}
                           toUiErrorMessage={toUiErrorMessage}
                           onMetaSaved={() => { void dashboard.refresh(); }}
+                          onNotice={showToast}
                         />
                       </div>
                     ) : (
@@ -807,8 +830,13 @@ export function RecorderPage() {
             ) : null}
           </div>
           {toastMessage ? (
-            <div className="mac-toast show" role="status" aria-live="polite">
+            <div className={`mac-toast show is-${toastTone}`} role="status" aria-live="polite">
               <span>{toastMessage}</span>
+              {toastTone === 'progress' ? (
+                <span className="mac-toast-progress" aria-hidden="true">
+                  <span style={{ width: `${toastPercent ?? 0}%` }} />
+                </span>
+              ) : null}
             </div>
           ) : null}
         </div>

@@ -61,6 +61,7 @@ const REQCASE_SHADOW_RECORDER_CHANNELS = {
   getTestSessionVideoSegmentsTail: 'reqcase:shadow-recorder:get-test-session-video-segments-tail',
   getTestSessionVideoSegmentsForTimestamp: 'reqcase:shadow-recorder:get-test-session-video-segments-for-timestamp',
   exportTestSessionEvidence: 'reqcase:shadow-recorder:export-test-session-evidence',
+  exportTestSessionEvidenceProgress: 'reqcase:shadow-recorder:export-test-session-evidence-progress',
   appendTestSessionNote: 'reqcase:shadow-recorder:append-test-session-note',
   appendTestSessionLog: 'reqcase:shadow-recorder:append-test-session-log',
   purgeTestSessionEvents: 'reqcase:shadow-recorder:purge-test-session-events',
@@ -164,6 +165,9 @@ export type ReqCaseShadowRecorderRendererApi = {
   exportTestSessionEvidence?: (
     input?: ReqCaseShadowRecorderEvidenceExportRequest,
   ) => Promise<ReqCaseShadowRecorderTestSessionEvidenceExportResult>;
+  onExportProgress?: (
+    handler: (progress: { percent: number; message: string }) => void,
+  ) => () => void;
   getTestSessionEvents: (input?: {
     sessionId?: string;
     limit?: number;
@@ -254,6 +258,15 @@ const api: ReqCaseShadowRecorderRendererApi = {
     ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getTestSessionVideoSegmentsForTimestamp, input),
   exportTestSessionEvidence: (input) =>
     ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidence, input),
+  onExportProgress: (handler) => {
+    const listener = (_event: unknown, progress: { percent: number; message: string }) => {
+      handler(progress);
+    };
+    ipcRenderer.on(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidenceProgress, listener);
+    return () => {
+      ipcRenderer.removeListener(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidenceProgress, listener);
+    };
+  },
   getTestSessionEvents: (input) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getTestSessionEvents, input),
   getTestSessionEventsTail: (input) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getTestSessionEventsTail, input),
   appendTestSessionNote: (input) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.appendTestSessionNote, input),

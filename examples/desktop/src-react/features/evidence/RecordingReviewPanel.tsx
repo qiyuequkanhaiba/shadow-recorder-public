@@ -56,6 +56,7 @@ export type RecordingReviewPanelProps = {
   toUiErrorMessage: (error: unknown) => string;
   onOpenSettings?: () => void;
   onMetaSaved?: () => void;
+  onNotice?: (message: string) => void;
 };
 
 function getApi(): any {
@@ -178,10 +179,16 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
   const [filterKind, setFilterKind] = useState<'all' | 'issue' | 'click' | 'input'>('all');
   const [isReproModalOpen, setIsReproModalOpen] = useState(false);
   const [toastFeedback, setToastFeedback] = useState<string | null>(null);
+  function notify(message: string): void {
+    if (props.onNotice) {
+      props.onNotice(message);
+      return;
+    }
+    setToastFeedback(message);
+  }
 
   const sessionId = props.session?.sessionId ?? null;
 
-  // Auto clear toast feedback after 2.2 seconds
   useEffect(() => {
     if (!toastFeedback) return;
     const timer = setTimeout(() => {
@@ -395,7 +402,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       setStatus(
         `已添加问题标记：前后 ${mapped.preWindowSeconds}s/${mapped.postWindowSeconds}s，窗内操作 ${mapped.stepCount} 条。`,
       );
-      setToastFeedback('问题标记已保存并锁定时间窗');
+      notify('问题标记已保存并锁定时间窗');
     } catch (error) {
       const message = props.toUiErrorMessage(error);
       if (/not active/i.test(message)) {
@@ -415,7 +422,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
     try {
       await loadOperationsPage({ rebuild: true });
       setStatus('已重新生成操作记录。');
-      setToastFeedback('已重新感知并生成操作与结果序列');
+      notify('已重新感知并生成操作与结果序列');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -455,7 +462,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       setReproText(text);
       await navigator.clipboard.writeText(text);
       setStatus('操作结果文本已复制到剪贴板。');
-      setToastFeedback('操作结果文本已复制到剪贴板');
+      notify('操作结果文本已复制到剪贴板');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     }
@@ -493,7 +500,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
           ? `记录包已导出（含 clip.mp4）：${mapped.packDir}`
           : `记录包已导出：${mapped.packDir}`,
       );
-      setToastFeedback(`记录包已导出至：${mapped.packDir}`);
+      notify(`记录包已导出至：${mapped.packDir}`);
     } catch (error) {
       const message = props.toUiErrorMessage(error);
       if (!/cancel/i.test(message)) {
@@ -549,7 +556,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       setEditingOperationId(null);
       await loadOperationsPage({ rebuild: false });
       setStatus('操作标题已更新。');
-      setToastFeedback('操作标题已更新');
+      notify('操作标题已更新');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -576,7 +583,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       });
       await loadOperationsPage({ rebuild: false });
       setStatus('已保存人工选择的操作结果。');
-      setToastFeedback('已保存人工选择的操作结果');
+      notify('已保存人工选择的操作结果');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -605,7 +612,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
       }
       await loadOperationsPage({ rebuild: false });
       setStatus('已尝试恢复自动结果判断。');
-      setToastFeedback('已恢复自动智能判断');
+      notify('已恢复自动智能判断');
     } catch (error) {
       props.onError(props.toUiErrorMessage(error));
     } finally {
@@ -616,16 +623,16 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
   function handleAnchorStepToDefect(operation: TestSessionOperationRecord): void {
     const summary = `${operation.businessAlias || operation.title} -> ${operation.resultSummary}`;
     setActual(summary);
-    setToastFeedback('已将选中步骤填入实际表现');
+    notify('已将选中步骤填入实际表现');
     setMarkerCollapsed(false);
   }
 
   function copyTextToClipboard(text: string, label: string): void {
     if (!text || text === '—') return;
     navigator.clipboard.writeText(text).then(() => {
-      setToastFeedback(`已复制 ${label}`);
+      notify(`已复制 ${label}`);
     }).catch(() => {
-      setToastFeedback(`已复制 ${label}`);
+      notify(`已复制 ${label}`);
     });
   }
 
@@ -806,7 +813,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
                       } else {
                         setIsEditingMeta(false);
                         props.onMetaSaved?.();
-                        setToastFeedback('会话信息已保存');
+                        notify('会话信息已保存');
                       }
                     } catch (err) {
                       props.onError(String(err));
@@ -881,7 +888,7 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
               className="banner-link-btn banner-clear-btn"
               onClick={() => {
                 setDefect(null);
-                setToastFeedback('已切回完整会话视角');
+                notify('已切回完整会话视角');
               }}
             >
               清除时间窗筛选

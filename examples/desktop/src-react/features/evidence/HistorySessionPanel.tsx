@@ -7,7 +7,7 @@ type HistorySessionPanelProps = {
   semanticEnabled?: boolean;
   onOpenSemanticReview?: () => void;
   onError: (message: string) => void;
-  onNotice: (message: string) => void;
+  onNotice: (message: string, tone?: 'info' | 'success' | 'error') => void;
   onMetaSaved?: () => void;
 };
 
@@ -239,7 +239,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
       }
       setEditing(false);
       props.onMetaSaved?.();
-      props.onNotice('会话信息已保存');
+      props.onNotice('会话信息已保存', 'success');
     } catch (error) {
       props.onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -265,13 +265,13 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
         zipFileName: `${bundleName}.zip`,
         privacyAcknowledgedAt: new Date().toISOString(),
       });
-      props.onNotice(`已导出会话：${result.zipPath || result.artifactPath || bundleName}`);
+      props.onNotice(`已导出：${result.zipPath || result.artifactPath || bundleName}`, 'success');
     } catch (error) {
       if (isExportCanceled(error)) {
-        props.onNotice('已取消导出');
+        props.onNotice('已取消导出', 'info');
         return;
       }
-      props.onError(error instanceof Error ? error.message : String(error));
+      props.onNotice(error instanceof Error ? error.message : String(error), 'error');
     } finally {
       setBusy(false);
       setIsExporting(false);

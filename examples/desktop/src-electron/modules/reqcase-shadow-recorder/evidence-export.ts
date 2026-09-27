@@ -80,9 +80,15 @@ type EvidenceExportLogRecord = {
   matchLabel: string;
 };
 
+export type EvidenceExportProgress = {
+  percent: number;
+  message: string;
+};
+
 export async function exportTestSessionEvidence(
   input: ReqCaseShadowRecorderTestSessionEvidenceExportInput,
   context: EvidenceExportContext,
+  onProgress?: (progress: EvidenceExportProgress) => void,
 ): Promise<ReqCaseShadowRecorderTestSessionEvidenceExportResult> {
   const targetDir = input.targetDir.trim();
   if (!targetDir) {
@@ -117,14 +123,21 @@ export async function exportTestSessionEvidence(
   );
   const videoDirRelativePath = 'video';
   const videoDirPath = path.resolve(exportDir, videoDirRelativePath);
+  onProgress?.({ percent: 12, message: '正在准备录像' });
   const videoCopyStats = await exportMergedPlaybackVideos(
     sourceSessionDir,
     videoDirPath,
     filteredVideoArtifacts.streams,
     playableSegments,
+    (index, total) => {
+      const percent = 12 + Math.round(58 * ((index + 1) / Math.max(total, 1)));
+      onProgress?.({ percent, message: total > 1 ? `正在合成录像 ${index + 1}/${total}` : '正在合成录像' });
+    },
   );
+  onProgress?.({ percent: 74, message: '正在写入操作记录' });
   const eventsLogRelativePath = 'events.json';
   const eventsLogPath = path.resolve(exportDir, eventsLogRelativePath);
+  onProgress?.({ percent: 84, message: '正在写入事件记录' });
   const eventsCopyStats = await exportEventsJson(
     eventsLogPath,
     orderedEvents,
@@ -151,6 +164,7 @@ export async function exportTestSessionEvidence(
   const finalCopyStats = copyStats;
 
   if (outputMode === 'zip') {
+    onProgress?.({ percent: 93, message: '正在打包' });
     const zipPath = path.resolve(targetDir, resolveZipFileName(input.zipFileName, bundleName));
     await createArchiveZip(exportDir, zipPath);
     await rm(workingRoot, { recursive: true, force: true });
@@ -591,6 +605,7 @@ async function exportMergedPlaybackVideos(
   targetVideoDir: string,
   videoStreams: ReqCaseShadowRecorderTestSessionVideoStream[],
   playableSegments: ReqCaseShadowRecorderTestSessionVideoSegment[],
+  onStream?: (index: number, total: number) => void,
 ): Promise<CopyStats> {
   const segmentsByStream = new Map<string, ReqCaseShadowRecorderTestSessionVideoSegment[]>();
   for (const segment of playableSegments) {
@@ -612,6 +627,7 @@ async function exportMergedPlaybackVideos(
   const multipleStreams = streamEntries.length > 1;
 
   for (const [index, entry] of streamEntries.entries()) {
+    onStream?.(index, streamEntries.length);
     const outputFileName = buildMergedVideoFileName(entry.stream, index, multipleStreams);
     const outputPath = path.resolve(targetVideoDir, outputFileName);
     await mkdir(path.dirname(outputPath), { recursive: true });

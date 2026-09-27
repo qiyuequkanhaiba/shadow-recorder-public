@@ -538,14 +538,20 @@ export function createFloatingToolbarHtml(input: {
         left: 6px;
         right: 6px;
         bottom: 0;
-        height: 1.5px;
+        height: 3px;
         border-radius: 999px;
-        background: linear-gradient(90deg, transparent, #38bdf8, #818cf8, #38bdf8, transparent);
-        background-size: 200% 100%;
+        background: rgba(148, 163, 184, 0.28);
         opacity: 0;
         pointer-events: none;
+        overflow: hidden;
         transition: opacity 0.25s ease;
         z-index: 6;
+      }
+      .island-progress-hairline span {
+        display: block;
+        height: 100%;
+        width: 0;
+        background: #38bdf8;
       }
       .island.is-exporting .island-progress-hairline {
         opacity: 1;
@@ -572,7 +578,7 @@ export function createFloatingToolbarHtml(input: {
   <body>
     <div id="island-container">
       <div class="island" id="island" data-state="${initialState}" data-collapsed="${initialCollapsed ? 'true' : 'false'}">
-        <div class="island-progress-hairline" id="island-progress" aria-hidden="true"></div>
+        <div class="island-progress-hairline" id="island-progress" aria-hidden="true"><span id="export-progress-fill"></span></div>
         <div class="island-inner" id="island-inner">
           <div class="capsule-core-cluster status-capsule" id="drag-handle"
             title="按住可直接拖拽；鼠标悬停展开工具条"
@@ -603,6 +609,20 @@ export function createFloatingToolbarHtml(input: {
     </div>
     <script>
       const api = window.reqcaseShadowRecorder;
+      const exportProgressFill = document.getElementById('export-progress-fill');
+      if (api && api.onExportProgress) {
+        api.onExportProgress((progress) => {
+          const label = progress.percent + '% ' + progress.message;
+          setExportButtonState('exporting', label);
+          if (statusToast) {
+            statusToast.textContent = label;
+            statusToast.classList.add('is-visible');
+          }
+          if (exportProgressFill) {
+            exportProgressFill.style.width = Math.max(0, Math.min(100, progress.percent)) + '%';
+          }
+        });
+      }
       const island = document.getElementById('island');
       const islandInner = document.getElementById('island-inner');
       const islandContainer = document.getElementById('island-container');

@@ -3656,17 +3656,19 @@ button.recording-op-evidence-link:focus-visible {
    -------------------------------------------------------------------------- */
 .recording-review-toast {
   position: fixed;
-  bottom: 24px;
+  bottom: 28px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--surface-elevated, #0f172a);
-  border: 1px solid var(--accent-primary);
-  box-shadow: var(--shadow-lg);
-  padding: 7px 16px;
-  border-radius: var(--radius-pill);
-  color: var(--text-primary);
+  min-width: 220px;
+  max-width: min(440px, calc(100% - 32px));
+  background: rgba(15, 23, 42, 0.95);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: #e0f2fe;
   font-size: 12px;
   font-weight: 600;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
   z-index: 9999;
   pointer-events: none;
 }

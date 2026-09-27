@@ -15,6 +15,7 @@ export const REQCASE_SHADOW_RECORDER_CHANNELS = {
   getTestSessionVideoSegmentsTail: 'reqcase:shadow-recorder:get-test-session-video-segments-tail',
   getTestSessionVideoSegmentsForTimestamp: 'reqcase:shadow-recorder:get-test-session-video-segments-for-timestamp',
   exportTestSessionEvidence: 'reqcase:shadow-recorder:export-test-session-evidence',
+  exportTestSessionEvidenceProgress: 'reqcase:shadow-recorder:export-test-session-evidence-progress',
   appendTestSessionNote: 'reqcase:shadow-recorder:append-test-session-note',
   appendTestSessionLog: 'reqcase:shadow-recorder:append-test-session-log',
   markTestDefect: 'reqcase:shadow-recorder:mark-test-defect',

@@ -26,6 +26,8 @@ export interface ShadowRecorderNativeOperationBinding {
     limit?: number,
   ): ShadowRecorderNativeOperationTailResult;
   rebuildTestSessionOperations?(sessionId?: string): TestSessionOperationRecord[];
+  updateTestSessionMeta?(input?: any): any;
+
   updateTestSessionOperation?(input?: TestSessionOperationUpdateInput): TestSessionOperationRecord;
   getTestSessionSteps?(sessionId?: string, limit?: number): unknown[];
   setSemanticAliasProfile?(profile?: unknown): unknown;

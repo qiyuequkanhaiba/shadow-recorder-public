@@ -15,6 +15,8 @@ import {
   hasTestSessionOperationRebuildApi,
   hasTestSessionOperationUpdateApi,
   rebuildTestSessionOperations as nativeRebuildTestSessionOperations,
+  updateTestSessionMeta as nativeUpdateTestSessionMeta,
+
   updateTestSessionOperation as nativeUpdateTestSessionOperation,
   getTestSessionSteps as nativeGetTestSessionSteps,
   rebuildTestSessionSteps as nativeRebuildTestSessionSteps,
@@ -162,6 +164,44 @@ function mapLegacyOperationActionKind(
   return 'manualMark';
 }
 
+function normalizeHistoryRetentionMode(value: unknown): 'age' | 'count' {
+  return value === 'age' ? 'age' : 'count';
+}
+
+function clampHistoryRetentionHours(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 24;
+  }
+  return Math.max(1, Math.min(168, Math.trunc(parsed)));
+}
+
+function clampHistoryRetentionMaxSegments(value: unknown): number {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 200;
+  }
+  return Math.max(10, Math.min(2000, Math.trunc(parsed)));
+}
+
+function sessionNameError(value: unknown): string | null {
+  const trimmed = String(value ?? '').trim();
+  if (!trimmed || [...trimmed].length > 80 || /[\\/:\n\r]/.test(trimmed)) {
+    return 'Invalid session name';
+  }
+  return null;
+}
+
+function sessionNotesError(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value !== 'string' || [...value].length > 2000) {
+    return 'Session notes exceed 2000 characters';
+  }
+  return null;
+}
+
 export class ReqCaseShadowRecorderService {
   private recording = false;
   private currentConfig: ReqCaseShadowRecorderConfig = {
@@ -173,6 +213,9 @@ export class ReqCaseShadowRecorderService {
     debounceMs: 90,
     recordingWindowSeconds: 90,
     segmentDurationSeconds: 5,
+    historyRetentionMode: 'count',
+    historyRetentionHours: 24,
+    historyRetentionMaxSegments: 200,
   };
   private pushPublisher: ((step: ReqCaseShadowRecorderStep) => void) | null = null;
   private pushBound = false;
@@ -297,6 +340,15 @@ export class ReqCaseShadowRecorderService {
       recordingProfile: input.recordingProfile ?? this.currentConfig.recordingProfile ?? 'balanced',
       encoderPreference: input.encoderPreference ?? this.currentConfig.encoderPreference ?? 'auto',
       showMouseInVideo: input.showMouseInVideo ?? this.currentConfig.showMouseInVideo ?? false,
+      historyRetentionMode: normalizeHistoryRetentionMode(
+        input.historyRetentionMode ?? this.currentConfig.historyRetentionMode,
+      ),
+      historyRetentionHours: clampHistoryRetentionHours(
+        input.historyRetentionHours ?? this.currentConfig.historyRetentionHours,
+      ),
+      historyRetentionMaxSegments: clampHistoryRetentionMaxSegments(
+        input.historyRetentionMaxSegments ?? this.currentConfig.historyRetentionMaxSegments,
+      ),
     };
   }
 
@@ -855,6 +907,55 @@ export class ReqCaseShadowRecorderService {
     return this.toLegacyOperationRecord(updatedStep, input.sessionId, 0);
   }
 
+  public updateTestSessionMeta(input: any = {}) {
+    try {
+      return nativeUpdateTestSessionMeta(input);
+    } catch (e) {
+      if (String(e).includes("SessionNotFound")) {
+        if (input.sessionId) {
+           const path = require("path");
+           const fs = require("fs");
+           const sessionDir = this.resolveManagedSessionDir(input.sessionId);
+           if (!sessionDir) return { error: "SessionDir not found" };
+           const sessionJson = path.join(sessionDir, "session.json");
+           if (fs.existsSync(sessionJson)) {
+              try {
+                const record = JSON.parse(fs.readFileSync(sessionJson, "utf8"));
+                if (input.name !== undefined) {
+                   const nameError = sessionNameError(input.name);
+                   if (nameError) {
+                      return { error: nameError };
+                   }
+                   record.name = String(input.name).trim();
+                }
+                if (input.notes !== undefined) {
+                   const notesError = sessionNotesError(input.notes);
+                   if (notesError) {
+                      return { error: notesError };
+                   }
+                   record.notes = input.notes;
+                }
+                if (input.historyRetentionMode !== undefined) {
+                  record.historyRetentionMode = normalizeHistoryRetentionMode(input.historyRetentionMode);
+                }
+                if (input.historyRetentionHours !== undefined) {
+                  record.historyRetentionHours = clampHistoryRetentionHours(input.historyRetentionHours);
+                }
+                if (input.historyRetentionMaxSegments !== undefined) {
+                  record.historyRetentionMaxSegments = clampHistoryRetentionMaxSegments(input.historyRetentionMaxSegments);
+                }
+                fs.writeFileSync(sessionJson, JSON.stringify(record, null, 2));
+                return record;
+              } catch (err) {
+                return { error: String(err) };
+              }
+           }
+        }
+      }
+      return { error: String(e) };
+    }
+  }
+
   public updateTestSessionStep(input: any = {}) {
     return nativeUpdateTestSessionStep(input);
   }
@@ -1159,6 +1260,19 @@ export class ReqCaseShadowRecorderService {
       previousVideoConfig.showMouseInVideo !== nextVideoConfig.showMouseInVideo
     ) {
       updateActiveTestSessionVideoConfig(nextVideoConfig);
+    }
+    try {
+       const active = getActiveTestSession();
+       if (active?.sessionId) {
+         nativeUpdateTestSessionMeta({
+            sessionId: active.sessionId,
+            historyRetentionMode: normalizeHistoryRetentionMode(config.historyRetentionMode),
+            historyRetentionHours: clampHistoryRetentionHours(config.historyRetentionHours),
+            historyRetentionMaxSegments: clampHistoryRetentionMaxSegments(config.historyRetentionMaxSegments),
+         });
+       }
+    } catch (e) {
+       console.warn("Failed to update retention settings on active session", e);
     }
   }
 

@@ -24,6 +24,8 @@ export const REQCASE_SHADOW_RECORDER_CHANNELS = {
   rebuildTestSessionSteps: 'reqcase:shadow-recorder:rebuild-test-session-steps',
   renderTestSessionReproSteps: 'reqcase:shadow-recorder:render-test-session-repro-steps',
   exportTestDefectPack: 'reqcase:shadow-recorder:export-test-defect-pack',
+  updateTestSessionMeta: 'reqcase:shadow-recorder:update-test-session-meta',
+
   updateTestSessionStep: 'reqcase:shadow-recorder:update-test-session-step',
   setSemanticAliasProfile: 'reqcase:shadow-recorder:set-semantic-alias-profile',
   getSemanticAliasProfile: 'reqcase:shadow-recorder:get-semantic-alias-profile',

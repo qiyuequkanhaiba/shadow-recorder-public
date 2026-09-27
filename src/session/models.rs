@@ -57,6 +57,9 @@ pub struct TestSessionStartOptions {
     pub encoder_preference: Option<String>,
     pub show_mouse_in_video: Option<bool>,
     pub notes: Option<String>,
+    pub history_retention_mode: Option<String>,
+    pub history_retention_hours: Option<u32>,
+    pub history_retention_max_segments: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +83,9 @@ pub struct TestSessionRecord {
     #[serde(default = "default_show_mouse_in_video")]
     pub show_mouse_in_video: bool,
     pub notes: Option<String>,
+    pub history_retention_mode: Option<String>,
+    pub history_retention_hours: Option<u32>,
+    pub history_retention_max_segments: Option<u32>,
     pub target_process_name: Option<String>,
     pub target_pid: Option<u32>,
     pub target_hwnd: Option<String>,
@@ -141,6 +147,11 @@ impl TestSessionRecord {
             encoder_preference: normalized_encoder_preference,
             show_mouse_in_video,
             notes: normalized_notes,
+            history_retention_mode: Some(normalize_history_retention_mode(options.history_retention_mode)),
+            history_retention_hours: Some(options.history_retention_hours.unwrap_or(24).clamp(1, 168)),
+            history_retention_max_segments: Some(
+                options.history_retention_max_segments.unwrap_or(200).clamp(10, 2000),
+            ),
             target_process_name: normalized_target_process_name,
             target_pid: options.target_pid,
             target_hwnd: normalized_target_hwnd,
@@ -148,6 +159,13 @@ impl TestSessionRecord {
             target_display_ids: normalized_target_display_ids,
             target_capture_mode: normalized_capture_mode,
         }
+    }
+}
+
+fn normalize_history_retention_mode(value: Option<String>) -> String {
+    match value.as_deref().map(str::trim) {
+        Some("age") => "age".to_string(),
+        _ => "count".to_string(),
     }
 }
 
@@ -369,6 +387,8 @@ pub struct TestSessionVideoSegmentRecord {
     pub encoder_name: Option<String>,
     #[serde(default)]
     pub is_playable: bool,
+    #[serde(default)]
+    pub retention_tier: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

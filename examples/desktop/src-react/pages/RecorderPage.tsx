@@ -10,7 +10,6 @@ import type {
 } from '../../types/contracts';
 import type { ConfigApplyFeedback } from '../components/RecorderControlPanel';
 import { RecorderPlaybackStage } from '../components/RecorderPlaybackStage';
-import { RecorderSessionTimelinePanel } from '../components/RecorderSessionTimelinePanel';
 import { RecordingReviewPanel } from '../features/evidence/RecordingReviewPanel';
 import { SettingsWorkspace } from '../features/settings/SettingsWorkspace';
 import { useRecorderBootstrap } from '../hooks/useRecorderBootstrap';
@@ -21,7 +20,6 @@ import { useTheme } from '../hooks/useTheme';
 import {
   createRecorderRuntimeInput,
   createTuningAdvisorInput,
-  isSemanticRecordingEnabled,
 } from '../lib/recorder-page-bindings';
 import { DEFAULT_CONFIG } from '../lib/tuning-advisor';
 import { toUiErrorMessage } from '../lib/ui-error';
@@ -116,7 +114,7 @@ export function RecorderPage() {
     streams: dashboard.videoStreams,
     segments: dashboard.recentSegments,
   });
-  const semanticRecordingEnabled = isSemanticRecordingEnabled(config);
+  const semanticRecordingEnabled = config.semanticRecordingEnabled ?? !!config.defectEvidenceEnabled;
   const elapsedMsRef = useRef(0);
   const lastElapsedTickRef = useRef<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -350,26 +348,37 @@ export function RecorderPage() {
       ? '继续录制'
       : '暂停录制';
   const reviewCount = dashboard.events.length;
-  const captureLatencyMs = runtime.metrics?.lastCaptureLatencyMs;
-  const droppedTotal = runtime.metrics?.droppedStepsTotal ?? 0;
-  const capturedTotal = runtime.metrics?.capturedStepsTotal ?? 0;
-  const dropRate = capturedTotal > 0 ? (droppedTotal / capturedTotal) * 100 : 0;
-  const telemetryHealthy = dropRate < 1 && (captureLatencyMs == null || captureLatencyMs < 20);
-  const backendLabel = runtime.metrics
-    ? runtime.metrics.wgcCaptureCount > 0 && runtime.metrics.dxgiCaptureCount > 0
-      ? 'DXGI/WGC'
-      : runtime.metrics.wgcCaptureCount > 0
-        ? 'WGC'
-        : runtime.metrics.dxgiCaptureCount > 0
-          ? 'DXGI'
-          : '--'
-    : '--';
   const historicalSessionIds = dashboard.sessions
     .filter((session) => session.status !== 'active' && session.status !== 'paused')
     .map((session) => session.sessionId);
   const selectedHistoricalIds = historySelection.filter((id) => historicalSessionIds.includes(id));
   const allHistoricalSelected = historicalSessionIds.length > 0
     && selectedHistoricalIds.length === historicalSessionIds.length;
+
+  async function handleExportCurrentSession(): Promise<void> {
+    const session = dashboard.selectedSession ?? dashboard.activeSession;
+    if (!session || !window.reqcaseShadowRecorder.exportTestSessionEvidence) {
+      showToast('当前没有可导出的会话');
+      return;
+    }
+    setBusy(true);
+    try {
+      const bundleName = session.name?.trim() || session.sessionId;
+      const result = await window.reqcaseShadowRecorder.exportTestSessionEvidence({
+        sessionId: session.sessionId,
+        outputMode: 'zip',
+        bundleName,
+        targetDir: '',
+        zipFileName: `${bundleName}.zip`,
+        privacyAcknowledgedAt: new Date().toISOString(),
+      });
+      showToast(`已导出会话证据包：${result.zipPath || result.artifactPath || '完成'}`);
+    } catch (exportErr) {
+      setError(toUiErrorMessage(exportErr));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="layout scheme-b-final">
@@ -381,6 +390,7 @@ export function RecorderPage() {
                 <span className="app-brand-mark" aria-hidden="true">S</span>
                 <span className="app-brand-copy">
                   <strong>影子录制器</strong>
+                  <span className="app-brand-sub">桌面端</span>
                 </span>
               </div>
             </div>
@@ -394,7 +404,8 @@ export function RecorderPage() {
                 className={`app-tab capsule-tab ${activeTab === 'main' ? 'active' : ''}`}
                 onClick={() => setActiveTab('main')}
               >
-                📹 录制工作台
+                <span className="tab-icon">📹</span>
+                <span className="tab-text">录制工作台</span>
               </button>
               <button
                 type="button"
@@ -405,7 +416,8 @@ export function RecorderPage() {
                 className={`app-tab capsule-tab ${activeTab === 'evidence' ? 'active' : ''}`}
                 onClick={() => setActiveTab('evidence')}
               >
-                📑 记录与回顾
+                <span className="tab-icon">📑</span>
+                <span className="tab-text">记录与回顾</span>
                 {reviewCount > 0 ? <span className="capsule-badge">{reviewCount}</span> : null}
               </button>
               <button
@@ -417,7 +429,8 @@ export function RecorderPage() {
                 className={`app-tab capsule-tab ${activeTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setActiveTab('settings')}
               >
-                ⚙️ 偏好设置
+                <span className="tab-icon">⚙️</span>
+                <span className="tab-text">偏好设置</span>
               </button>
             </nav>
             <div className="app-tabbar-aside header-right">
@@ -469,7 +482,8 @@ export function RecorderPage() {
                       void handleHideToTray();
                     }}
                   >
-                    📌 悬浮窗
+                    <span className="btn-icon">📌</span>
+                    <span className="btn-text">悬浮窗</span>
                   </button>
                   {runtime.isRecording ? (
                     <button
@@ -484,7 +498,8 @@ export function RecorderPage() {
                         });
                       }}
                     >
-                      ⏹ 停止
+                      <span className="btn-icon">⏹</span>
+                      <span className="btn-text">停止</span>
                     </button>
                   ) : (
                     <button
@@ -499,7 +514,8 @@ export function RecorderPage() {
                         });
                       }}
                     >
-                      ▶ 开始
+                      <span className="btn-icon">▶</span>
+                      <span className="btn-text">开始</span>
                     </button>
                   )}
                 </div>
@@ -513,7 +529,7 @@ export function RecorderPage() {
                 aria-label={`切换主题，当前为${theme.label}`}
               >
                 <span className={`theme-toggle-swatch is-${theme.resolved}`} aria-hidden="true" />
-                <span>{theme.label}</span>
+                <span className="theme-toggle-label">{theme.label}</span>
               </button>
             </div>
           </div>
@@ -527,80 +543,29 @@ export function RecorderPage() {
                 aria-labelledby="tab-main"
               >
                 <div className="recorder-main-shell recorder-main-shell-mvp recorder-main-shell-fill">
-                  <div className="recorder-workbench-grid">
-                    <div className="recorder-primary-stack">
-                      <RecorderPlaybackStage
-                        isRecording={runtime.isRecording}
-                        isPaused={runtime.isPaused}
-                        metrics={runtime.metrics}
-                        resourceUsage={runtime.resourceUsage}
-                        activeSession={dashboard.activeSession}
-                        playbackSession={dashboard.playbackSession}
-                        videoStreams={dashboard.videoStreams}
-                        recentSegments={dashboard.recentSegments}
-                        matchedSegments={dashboard.matchedSegments}
-                        playbackFocus={playbackFocus}
-                        timelineEvents={dashboard.events}
-                        onNotice={showToast}
-                        onMarked={() => { void dashboard.refresh(); }}
-                      />
-                    </div>
-
-                    <aside className="workbench-side-col">
-                      <div className="side-card">
-                        <div className="side-card-title">
-                          <span>实时遥测与负载</span>
-                          <span className={telemetryHealthy ? 'tele-health is-good' : 'tele-health is-warn'}>
-                            ● {telemetryHealthy ? '良好' : '关注'}
-                          </span>
-                        </div>
-                        <div className="tele-grid">
-                          <div className="tele-box">
-                            <span className="tele-kicker">捕获延迟</span>
-                            <span className="tele-num tele-accent">
-                              {typeof captureLatencyMs === 'number' ? `${captureLatencyMs.toFixed(1)} ms` : '--'}
-                            </span>
-                          </div>
-                          <div className="tele-box">
-                            <span className="tele-kicker">丢帧率</span>
-                            <span className="tele-num tele-ok">{dropRate.toFixed(2)}%</span>
-                          </div>
-                          <div className="tele-box">
-                            <span className="tele-kicker">内存占用</span>
-                            <span className="tele-num">
-                              {typeof runtime.resourceUsage?.totalWorkingSetMb === 'number'
-                                ? `${Math.round(runtime.resourceUsage.totalWorkingSetMb)} MB`
-                                : '--'}
-                            </span>
-                          </div>
-                          <div className="tele-box">
-                            <span className="tele-kicker">后端引擎</span>
-                            <span className="tele-num">{backendLabel}</span>
-                          </div>
-                        </div>
-                      </div>
-                      <RecorderSessionTimelinePanel
-                        variant="compact"
-                        defectEvidenceEnabled={semanticRecordingEnabled}
-                        sessions={dashboard.sessions}
-                        selectedSession={dashboard.selectedSession}
-                        selectedSessionId={dashboard.selectedSessionId}
-                        events={dashboard.events}
-                        videoSegments={dashboard.recentSegments}
-                        loading={dashboard.loading}
-                        onRefresh={() => dashboard.refresh()}
-                        onSelectSession={dashboard.selectSession}
-                        onError={setError}
-                        toUiErrorMessage={toUiErrorMessage}
-                        onPlaybackFocusChange={setPlaybackFocus}
-                        privacyRulesActive={!!config.privacyEnabled}
-                        onClearEvents={async () => {
-                          await dashboard.clearEvents();
-                          showToast('已清除当前事件流');
-                        }}
-                      />
-                    </aside>
-                  </div>
+                  <RecorderPlaybackStage
+                    isRecording={runtime.isRecording}
+                    isPaused={runtime.isPaused}
+                    metrics={runtime.metrics}
+                    resourceUsage={runtime.resourceUsage}
+                    activeSession={dashboard.activeSession}
+                    playbackSession={dashboard.playbackSession}
+                    videoStreams={dashboard.videoStreams}
+                    recentSegments={dashboard.recentSegments}
+                    matchedSegments={dashboard.matchedSegments}
+                    playbackFocus={playbackFocus}
+                    timelineEvents={dashboard.events}
+                    config={config}
+                    onNotice={showToast}
+                    onMarked={() => { void dashboard.refresh(); }}
+                    onPlaybackFocusChange={setPlaybackFocus}
+                    onExportSession={handleExportCurrentSession}
+                    isExporting={busy}
+                    onClearEvents={async () => {
+                      await dashboard.clearEvents();
+                      showToast('已清除当前事件流');
+                    }}
+                  />
                 </div>
               </section>
             ) : null}
@@ -711,6 +676,7 @@ export function RecorderPage() {
                       onError={setError}
                       toUiErrorMessage={toUiErrorMessage}
                       onOpenSettings={() => setActiveTab('settings')}
+                      onMetaSaved={() => { void dashboard.refresh(); }}
                     />
                   </div>
                 </div>

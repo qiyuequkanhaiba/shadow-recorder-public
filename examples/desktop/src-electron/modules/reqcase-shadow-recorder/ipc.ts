@@ -394,8 +394,6 @@ const DEFAULT_BASELINE_CONFIG: ReqCaseShadowRecorderConfig = {
   transportMode: 'push',
   streamPayload: 'meta_only',
   captureReuseEnabled: true,
-  privacyEnabled: true,
-  semanticPlaintextInputEnabled: false,
 };
 
 function createPresetConfig(
@@ -715,102 +713,102 @@ export function registerReqCaseShadowRecorderIpc(
     }
   };
   restorePersistedSemanticProfile();
-
-  const profileRecordId = (
-    profile: Record<string, unknown>,
-    sourceFileName: string,
-    fallbackIndex = 0,
-  ): string => {
-    const profileId = typeof profile.profileId === 'string' ? profile.profileId.trim() : '';
-    if (profileId) return profileId;
-    const name = typeof profile.name === 'string' ? profile.name.trim() : '';
-    if (name) return `name:${name}`;
-    const base = sourceFileName.replace(/\.json$/i, '').trim() || 'profile';
-    return `${base}-${fallbackIndex + 1}`;
-  };
-
-  const listSemanticProfiles = (): Array<{
-    id: string;
-    sourceFileName: string;
-    sourcePath?: string;
-    importedAtMs: number;
-    updatedAtMs?: number;
-    profile: Record<string, unknown>;
-  }> => {
-    const fromList = Array.isArray(runtimeSettings.semanticProfiles)
-      ? (runtimeSettings.semanticProfiles as any[])
-      : [];
-    if (fromList.length > 0) {
-      return fromList as any;
-    }
-    const legacy = runtimeSettings.semanticProfile as any;
-    if (legacy?.profile && typeof legacy.profile === 'object') {
-      const id =
-        typeof legacy.id === 'string' && legacy.id.trim()
-          ? legacy.id.trim()
-          : profileRecordId(legacy.profile, legacy.sourceFileName || 'imported-profile.json', 0);
-      return [
-        {
-          id,
-          sourceFileName: legacy.sourceFileName || 'imported-profile.json',
-          sourcePath: legacy.sourcePath,
-          importedAtMs: legacy.importedAtMs || Date.now(),
-          updatedAtMs: legacy.updatedAtMs,
-          profile: legacy.profile,
-        },
-      ];
-    }
-    return [];
-  };
-
-  const upsertSemanticProfile = (entry: {
-    id?: string;
-    sourceFileName: string;
-    sourcePath?: string;
-    profile: Record<string, unknown>;
-  }) => {
-    const list = listSemanticProfiles();
-    const id =
-      (entry.id && entry.id.trim()) ||
-      profileRecordId(entry.profile, entry.sourceFileName, list.length);
-    const now = Date.now();
-    const existingIndex = list.findIndex((item) => item.id === id);
-    const nextEntry = {
-      id,
-      sourceFileName: entry.sourceFileName,
-      sourcePath: entry.sourcePath,
-      importedAtMs: existingIndex >= 0 ? list[existingIndex].importedAtMs : now,
-      updatedAtMs: now,
-      profile: entry.profile,
-    };
-    const nextList =
-      existingIndex >= 0
-        ? list.map((item, index) => (index === existingIndex ? nextEntry : item))
-        : [...list, nextEntry];
-    runtimeSettings = {
-      ...runtimeSettings,
-      semanticProfiles: nextList,
-      activeSemanticProfileId: id,
-      semanticProfile: nextEntry,
-    };
-    return nextEntry;
-  };
-
-  const activateSemanticProfileById = (id: string): string | null => {
-    const list = listSemanticProfiles();
-    const found = list.find((item) => item.id === id);
-    if (!found?.profile) {
-      return null;
-    }
-    const restored = service.restoreSemanticProfileObject(found.profile);
-    runtimeSettings = {
-      ...runtimeSettings,
-      semanticProfiles: list,
-      activeSemanticProfileId: found.id,
-      semanticProfile: found,
-    };
-    return restored;
-  };
+
+  const profileRecordId = (
+    profile: Record<string, unknown>,
+    sourceFileName: string,
+    fallbackIndex = 0,
+  ): string => {
+    const profileId = typeof profile.profileId === 'string' ? profile.profileId.trim() : '';
+    if (profileId) return profileId;
+    const name = typeof profile.name === 'string' ? profile.name.trim() : '';
+    if (name) return `name:${name}`;
+    const base = sourceFileName.replace(/\.json$/i, '').trim() || 'profile';
+    return `${base}-${fallbackIndex + 1}`;
+  };
+
+  const listSemanticProfiles = (): Array<{
+    id: string;
+    sourceFileName: string;
+    sourcePath?: string;
+    importedAtMs: number;
+    updatedAtMs?: number;
+    profile: Record<string, unknown>;
+  }> => {
+    const fromList = Array.isArray(runtimeSettings.semanticProfiles)
+      ? (runtimeSettings.semanticProfiles as any[])
+      : [];
+    if (fromList.length > 0) {
+      return fromList as any;
+    }
+    const legacy = runtimeSettings.semanticProfile as any;
+    if (legacy?.profile && typeof legacy.profile === 'object') {
+      const id =
+        typeof legacy.id === 'string' && legacy.id.trim()
+          ? legacy.id.trim()
+          : profileRecordId(legacy.profile, legacy.sourceFileName || 'imported-profile.json', 0);
+      return [
+        {
+          id,
+          sourceFileName: legacy.sourceFileName || 'imported-profile.json',
+          sourcePath: legacy.sourcePath,
+          importedAtMs: legacy.importedAtMs || Date.now(),
+          updatedAtMs: legacy.updatedAtMs,
+          profile: legacy.profile,
+        },
+      ];
+    }
+    return [];
+  };
+
+  const upsertSemanticProfile = (entry: {
+    id?: string;
+    sourceFileName: string;
+    sourcePath?: string;
+    profile: Record<string, unknown>;
+  }) => {
+    const list = listSemanticProfiles();
+    const id =
+      (entry.id && entry.id.trim()) ||
+      profileRecordId(entry.profile, entry.sourceFileName, list.length);
+    const now = Date.now();
+    const existingIndex = list.findIndex((item) => item.id === id);
+    const nextEntry = {
+      id,
+      sourceFileName: entry.sourceFileName,
+      sourcePath: entry.sourcePath,
+      importedAtMs: existingIndex >= 0 ? list[existingIndex].importedAtMs : now,
+      updatedAtMs: now,
+      profile: entry.profile,
+    };
+    const nextList =
+      existingIndex >= 0
+        ? list.map((item, index) => (index === existingIndex ? nextEntry : item))
+        : [...list, nextEntry];
+    runtimeSettings = {
+      ...runtimeSettings,
+      semanticProfiles: nextList,
+      activeSemanticProfileId: id,
+      semanticProfile: nextEntry,
+    };
+    return nextEntry;
+  };
+
+  const activateSemanticProfileById = (id: string): string | null => {
+    const list = listSemanticProfiles();
+    const found = list.find((item) => item.id === id);
+    if (!found?.profile) {
+      return null;
+    }
+    const restored = service.restoreSemanticProfileObject(found.profile);
+    runtimeSettings = {
+      ...runtimeSettings,
+      semanticProfiles: list,
+      activeSemanticProfileId: found.id,
+      semanticProfile: found,
+    };
+    return restored;
+  };
 
   service.setPushPublisher((step) => {
     for (const webContents of options.getRendererTargets()) {
@@ -1274,6 +1272,22 @@ export function registerReqCaseShadowRecorderIpc(
   handleTrusted('reqcase:shadow-recorder:purge-test-session-events', async (_event, rawInput: unknown) => {
     const record = isRecord(rawInput) ? rawInput : {};
     return service.purgeTestSessionEvents(optionalString(record, 'sessionId'));
+  });
+
+  handleTrusted('reqcase:shadow-recorder:update-test-session-meta', async (_event, rawInput: unknown) => {
+    const record = isRecord(rawInput) ? rawInput : {};
+    const sessionId = optionalString(record, 'sessionId');
+    if (!sessionId) {
+      throw new Error('sessionId is required');
+    }
+    return service.updateTestSessionMeta({
+      sessionId,
+      name: record.name,
+      notes: record.notes,
+      historyRetentionMode: record.historyRetentionMode,
+      historyRetentionHours: record.historyRetentionHours,
+      historyRetentionMaxSegments: record.historyRetentionMaxSegments,
+    });
   });
 
   handleTrusted('reqcase:shadow-recorder:delete-test-session', async (_event, rawInput: unknown) => {

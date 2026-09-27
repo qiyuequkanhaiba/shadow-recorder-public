@@ -212,6 +212,22 @@ function sanitizeRecorderConfig(input: ReqCaseShadowRecorderConfig): ReqCaseShad
     output.maskRegions = maskRegions;
   }
 
+  if (input.historyRetentionMode === 'age' || input.historyRetentionMode === 'count') {
+    output.historyRetentionMode = input.historyRetentionMode;
+  } else {
+    delete output.historyRetentionMode;
+  }
+  if (typeof input.historyRetentionHours === 'number' && Number.isFinite(input.historyRetentionHours)) {
+    output.historyRetentionHours = Math.max(1, Math.min(168, Math.trunc(input.historyRetentionHours)));
+  } else {
+    delete output.historyRetentionHours;
+  }
+  if (typeof input.historyRetentionMaxSegments === 'number' && Number.isFinite(input.historyRetentionMaxSegments)) {
+    output.historyRetentionMaxSegments = Math.max(10, Math.min(2000, Math.trunc(input.historyRetentionMaxSegments)));
+  } else {
+    delete output.historyRetentionMaxSegments;
+  }
+
   return output;
 }
 

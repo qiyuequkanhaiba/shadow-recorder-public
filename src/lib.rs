@@ -597,6 +597,21 @@ pub fn export_test_defect_pack(
 }
 
 #[napi]
+pub fn update_test_session_meta(
+    input: crate::types::JsTestSessionMetaUpdateInput,
+) -> Result<crate::types::JsTestSessionRecord> {
+    TEST_SESSION_MANAGER
+        .update_session_meta(
+            &input.session_id,
+            input.name,
+            input.notes,
+            input.history_retention_mode,
+            input.history_retention_hours,
+            input.history_retention_max_segments,
+        )
+        .map(Into::into)
+        .map_err(|e| napi::Error::from_reason(e.to_string()))
+}
 pub fn update_test_session_step(
     input: Option<crate::types::JsTestSessionStepEditInput>,
 ) -> Result<crate::types::JsTestSessionStepRecord> {

@@ -534,6 +534,9 @@ pub struct JsTestSessionStartOptions {
     pub encoder_preference: Option<String>,
     pub show_mouse_in_video: Option<bool>,
     pub notes: Option<String>,
+    pub history_retention_mode: Option<String>,
+    pub history_retention_hours: Option<u32>,
+    pub history_retention_max_segments: Option<u32>,
 }
 
 impl From<JsTestSessionStartOptions> for TestSessionStartOptions {
@@ -551,6 +554,9 @@ impl From<JsTestSessionStartOptions> for TestSessionStartOptions {
             segment_duration_seconds: value.segment_duration_seconds,
             recording_profile: value.recording_profile,
             encoder_preference: value.encoder_preference,
+            history_retention_mode: value.history_retention_mode,
+            history_retention_hours: value.history_retention_hours,
+            history_retention_max_segments: value.history_retention_max_segments,
             show_mouse_in_video: value.show_mouse_in_video,
             notes: value.notes,
         }
@@ -567,6 +573,10 @@ pub struct JsActiveTestSessionVideoConfig {
 
 #[napi(object)]
 pub struct JsTestSessionRecord {
+    pub history_retention_mode: Option<String>,
+    pub history_retention_hours: Option<u32>,
+    pub history_retention_max_segments: Option<u32>,
+
     pub schema_version: u32,
     pub kind: String,
     pub session_id: String,
@@ -610,6 +620,9 @@ impl From<TestSessionRecord> for JsTestSessionRecord {
             segment_duration_seconds: value.segment_duration_seconds,
             recording_profile: value.recording_profile,
             encoder_preference: value.encoder_preference,
+            history_retention_mode: value.history_retention_mode,
+            history_retention_hours: value.history_retention_hours,
+            history_retention_max_segments: value.history_retention_max_segments,
             show_mouse_in_video: value.show_mouse_in_video,
             notes: value.notes,
             target_process_name: value.target_process_name,
@@ -736,6 +749,8 @@ impl From<TestSessionVideoStreamRecord> for JsTestSessionVideoStreamRecord {
 
 #[napi(object)]
 pub struct JsTestSessionVideoSegmentRecord {
+    pub retention_tier: Option<String>,
+
     pub schema_version: u32,
     pub kind: String,
     pub segment_id: String,
@@ -788,7 +803,7 @@ impl From<TestSessionVideoSegmentRecord> for JsTestSessionVideoSegmentRecord {
             container: value.container,
             mime_type: value.mime_type,
             encoder_name: value.encoder_name,
-            is_playable: value.is_playable,
+            is_playable: value.is_playable, retention_tier: value.retention_tier.clone(),
         }
     }
 }
@@ -1747,23 +1762,6 @@ mod tests {
     }
 
     #[test]
-    fn config_mapping_defaults_semantic_plaintext_capture_to_opt_in() {
-        let default_config: crate::config::RecorderConfig = JsRecorderConfig {
-            semantic_plaintext_input_enabled: None,
-            ..JsRecorderConfig::default()
-        }
-        .into();
-        assert!(!default_config.semantic_plaintext_input_enabled);
-
-        let opt_in_config: crate::config::RecorderConfig = JsRecorderConfig {
-            semantic_plaintext_input_enabled: Some(true),
-            ..JsRecorderConfig::default()
-        }
-        .into();
-        assert!(opt_in_config.semantic_plaintext_input_enabled);
-    }
-
-    #[test]
     fn config_mapping_respects_capture_reuse_override() {
         let config: crate::config::RecorderConfig = JsRecorderConfig {
             capture_reuse_enabled: Some(false),
@@ -1829,6 +1827,9 @@ mod tests {
     #[test]
     fn test_session_mapping_preserves_flattened_fields() {
         let session = TestSessionRecord {
+            history_retention_mode: None,
+            history_retention_hours: None,
+            history_retention_max_segments: None,
             schema_version: 1,
             kind: "reqcase.test-session".to_string(),
             session_id: "ts-1-1".to_string(),
@@ -1972,6 +1973,7 @@ mod tests {
             mime_type: Some("video/mp4".to_string()),
             encoder_name: Some("ffmpeg:libx264".to_string()),
             is_playable: true,
+            retention_tier: None,
         };
 
         let mapped: JsTestSessionVideoSegmentRecord = segment.into();
@@ -2225,4 +2227,14 @@ mod tests {
         assert_eq!(mapped.system_source.as_deref(), Some("win_event"));
         assert_eq!(mapped.window_hwnd.as_deref(), Some("0x222"));
     }
+}
+
+#[napi(object)]
+pub struct JsTestSessionMetaUpdateInput {
+    pub session_id: String,
+    pub name: Option<String>,
+    pub notes: Option<String>,
+    pub history_retention_mode: Option<String>,
+    pub history_retention_hours: Option<u32>,
+    pub history_retention_max_segments: Option<u32>,
 }

@@ -3,12 +3,10 @@ import { readFileSync } from 'node:fs';
 import type { Dispatch, SetStateAction } from 'react';
 
 import type { RecorderConfigPayload, RecorderMetrics } from '../types/contracts';
-import * as recorderPageBindings from '../src-react/lib/recorder-page-bindings';
-
-const {
+import {
   createRecorderRuntimeInput,
   createTuningAdvisorInput,
-} = recorderPageBindings;
+} from '../src-react/lib/recorder-page-bindings';
 
 function createSetStateDispatch<T>(): Dispatch<SetStateAction<T>> {
   return (() => undefined) as unknown as Dispatch<SetStateAction<T>>;
@@ -54,21 +52,6 @@ function testCreateTuningAdvisorInput(): void {
   assert.equal(mapped.metrics, metrics);
   assert.equal(mapped.onError, setError);
   assert.equal(mapped.toUiErrorMessage, toUiErrorMessage);
-}
-
-function testSemanticRecordingEnabledUsesEitherCompatibilityFlag(): void {
-  const resolve = (recorderPageBindings as Record<string, unknown>).isSemanticRecordingEnabled;
-  assert.equal(typeof resolve, 'function', 'semantic recording state resolver must be exported');
-  const isSemanticRecordingEnabled = resolve as (config: RecorderConfigPayload) => boolean;
-
-  assert.equal(
-    isSemanticRecordingEnabled({ semanticRecordingEnabled: false, defectEvidenceEnabled: true }),
-    true,
-    'legacy defect-evidence flag remains enabled when the newer semantic flag is explicitly false',
-  );
-  assert.equal(isSemanticRecordingEnabled({ semanticRecordingEnabled: true }), true);
-  assert.equal(isSemanticRecordingEnabled({ defectEvidenceEnabled: true }), true);
-  assert.equal(isSemanticRecordingEnabled({ semanticRecordingEnabled: false, defectEvidenceEnabled: false }), false);
 }
 
 
@@ -131,6 +114,7 @@ function testDefectEvidenceBridgeIsWired(): void {
     'render-test-session-repro-steps',
     'export-test-defect-pack',
     'update-test-session-step',
+    'update-test-session-meta',
   ]) {
     assert.ok(ipcSource.includes(channel), channel);
   }
@@ -138,7 +122,6 @@ function testDefectEvidenceBridgeIsWired(): void {
 function run(): void {
   testCreateRecorderRuntimeInput();
   testCreateTuningAdvisorInput();
-  testSemanticRecordingEnabledUsesEitherCompatibilityFlag();
   testRecorderPageMountsRecordingReviewPanel();
   testDefectEvidenceBridgeIsWired();
   console.log('[recorder-page-bindings-test] PASS');

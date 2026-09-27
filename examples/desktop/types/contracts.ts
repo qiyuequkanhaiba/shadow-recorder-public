@@ -157,6 +157,10 @@ export interface ReplayStepGenerateResult {
 }
 
 export interface RecorderConfigPayload {
+  historyRetentionMode?: 'age' | 'count';
+  historyRetentionHours?: number;
+  historyRetentionMaxSegments?: number;
+
   recordingWindowSeconds?: number;
   segmentDurationSeconds?: number;
   recordingProfile?: 'efficiency' | 'balanced' | 'smooth';

@@ -54,6 +54,7 @@ export type RecordingReviewPanelProps = {
   onError: (message: string) => void;
   toUiErrorMessage: (error: unknown) => string;
   onOpenSettings?: () => void;
+  onMetaSaved?: () => void;
 };
 
 function getApi(): any {
@@ -123,6 +124,9 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
   const [expandedIds, setExpandedIds] = useState<Record<string, boolean>>({});
   const [selectedOperationId, setSelectedOperationId] = useState<string | null>(null);
 
+  const [editingName, setEditingName] = useState("");
+  const [editingNotes, setEditingNotes] = useState("");
+  const [isEditingMeta, setIsEditingMeta] = useState(false);
   const sessionId = props.session?.sessionId ?? null;
 
   const visibleOperations = useMemo(
@@ -551,6 +555,69 @@ export function RecordingReviewPanel(props: RecordingReviewPanelProps) {
           </span>
         </div>
       </header>
+      <div className="defect-evidence-section" style={{ padding: "12px 16px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <h4>会话信息</h4>
+          <button type="button" className="text-button" onClick={() => {
+            setEditingName(props.session?.name || "");
+            setEditingNotes(props.session?.notes || "");
+            setIsEditingMeta(!isEditingMeta);
+          }}>
+            {isEditingMeta ? "取消" : "编辑"}
+          </button>
+        </div>
+        {isEditingMeta ? (
+          <div className="settings-fields" style={{ marginTop: 8 }}>
+            <label className="settings-field">
+              <span className="settings-field-label">名称</span>
+              <input type="text" value={editingName} onChange={e => setEditingName(e.target.value)} maxLength={80} />
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">备注</span>
+              <textarea value={editingNotes} onChange={e => setEditingNotes(e.target.value)} maxLength={2000} rows={3} />
+            </label>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button type="button" className="bento-button bento-button-primary" onClick={async () => {
+                const api = window.reqcaseShadowRecorder;
+                if (api?.updateTestSessionMeta) {
+                   const name = editingName.trim();
+                   if (!name || name.match(/[\\\/\:\n]/)) {
+                      props.onError("名称无效"); return;
+                   }
+                   setBusy(true);
+                   try {
+                     const res = await api.updateTestSessionMeta({
+                        sessionId: props.session!.sessionId,
+                        name,
+                        notes: editingNotes,
+                     });
+                     if (res && res.error) {
+                        props.onError(res.error);
+                     } else {
+                        setIsEditingMeta(false);
+                        props.onMetaSaved?.();
+                     }
+                   } catch (err) {
+                     props.onError(String(err));
+                   } finally {
+                     setBusy(false);
+                   }
+                }
+              }}>保存</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <p><strong>名称：</strong>{props.session?.name || "(无)"}</p>
+            <p><strong>备注：</strong>{props.session?.notes || "(无)"}</p>
+            <p style={{ marginTop: 4, color: "var(--text-secondary)" }}>
+              {props.session?.historyRetentionMode === "age" 
+                ? `按 ${props.session?.historyRetentionHours ?? 24} 小时保留` 
+                : `滚出实时窗口的切片按最近 ${props.session?.historyRetentionMaxSegments ?? 200} 段保留`}
+            </p>
+          </div>
+        )}
+      </div>
 
       {!props.enabled ? (
         <div className="defect-evidence-disabled" role="status">

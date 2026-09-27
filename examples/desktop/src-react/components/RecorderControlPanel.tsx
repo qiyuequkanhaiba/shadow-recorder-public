@@ -210,6 +210,50 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
               }}
             />
           </label>
+          <label className="settings-field">
+            <span className="settings-field-label">保留策略</span>
+            <select
+              value={props.config.historyRetentionMode ?? "count"}
+              onChange={(e) => {
+                props.setConfig((current) => ({
+                  ...current,
+                  historyRetentionMode: e.target.value as "age" | "count",
+                }));
+              }}
+            >
+              <option value="count">按段数保留</option>
+              <option value="age">按时间保留</option>
+            </select>
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">保留数值</span>
+            <input
+              type="number"
+              min={props.config.historyRetentionMode === "age" ? 1 : 10}
+              max={props.config.historyRetentionMode === "age" ? 168 : 2000}
+              value={props.config.historyRetentionMode === "age" 
+                ? (props.config.historyRetentionHours ?? 24) 
+                : (props.config.historyRetentionMaxSegments ?? 200)}
+              onChange={(e) => {
+                const raw = Number(e.target.value);
+                props.setConfig((current) => {
+                  if (current.historyRetentionMode === "age") {
+                    const historyRetentionHours = Number.isFinite(raw)
+                      ? Math.max(1, Math.min(168, Math.trunc(raw)))
+                      : 24;
+                    return { ...current, historyRetentionHours };
+                  }
+                  const historyRetentionMaxSegments = Number.isFinite(raw)
+                    ? Math.max(10, Math.min(2000, Math.trunc(raw)))
+                    : 200;
+                  return { ...current, historyRetentionMaxSegments };
+                });
+              }}
+            />
+            <span className="settings-field-suffix">
+              {props.config.historyRetentionMode === "age" ? "小时" : "段"}
+            </span>
+          </label>
 
           <label className="settings-field">
             <span className="settings-field-label">{t('config.segmentDurationSeconds')}</span>

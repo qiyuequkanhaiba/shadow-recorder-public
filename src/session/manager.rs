@@ -888,6 +888,68 @@ impl SessionManager {
             })
     }
 
+    fn validate_session_name(name: &str) -> bool {
+        let trimmed = name.trim();
+        if trimmed.is_empty() || trimmed.chars().count() > 80 {
+            return false;
+        }
+        if trimmed.contains('\\')
+            || trimmed.contains('/')
+            || trimmed.contains(':')
+            || trimmed.contains('\n')
+            || trimmed.contains('\r')
+        {
+            return false;
+        }
+        true
+    }
+
+    pub fn update_session_meta(
+        &self,
+        session_id: &str,
+        name: Option<String>,
+        notes: Option<String>,
+        history_retention_mode: Option<String>,
+        history_retention_hours: Option<u32>,
+        history_retention_max_segments: Option<u32>,
+    ) -> Result<TestSessionRecord, SessionError> {
+        let mut guard = self.state.lock().unwrap();
+        let session = guard.active.as_mut().filter(|s| s.session_id == session_id)
+            .ok_or_else(|| SessionError::SessionNotFound(session_id.to_string()))?;
+        if let Some(n) = name {
+            let trimmed = n.trim().to_string();
+            if !Self::validate_session_name(&trimmed) {
+                return Err(SessionError::InvalidLookup("Invalid session name".into()));
+            }
+            session.name = Some(trimmed);
+        }
+        let retention_config_changed = history_retention_mode.is_some()
+            || history_retention_hours.is_some()
+            || history_retention_max_segments.is_some();
+        if let Some(n) = notes {
+            if n.chars().count() > 2000 {
+                return Err(SessionError::InvalidLookup("Session notes exceed 2000 characters".into()));
+            }
+            session.notes = Some(n);
+        }
+        if let Some(m) = history_retention_mode {
+            let mode = m.trim();
+            if mode != "age" && mode != "count" {
+                return Err(SessionError::InvalidLookup("Invalid history retention mode".into()));
+            }
+            session.history_retention_mode = Some(mode.to_string());
+        }
+        if let Some(h) = history_retention_hours { session.history_retention_hours = Some(h.clamp(1, 168)); }
+        if let Some(m) = history_retention_max_segments { session.history_retention_max_segments = Some(m.clamp(10, 2000)); }
+        session.updated_at_ms = now_timestamp_ms();
+        persist_manifest(session)?;
+        let updated = session.clone();
+        drop(guard);
+        if retention_config_changed {
+            self.set_video_runtime_session(&updated);
+        }
+        Ok(updated)
+    }
     pub fn update_step(
         &self,
         input: TestSessionStepEditInput,
@@ -4679,6 +4741,7 @@ mod tests {
             mime_type: Some("video/mp4".to_string()),
             encoder_name: Some("ffmpeg:libx264".to_string()),
             is_playable: true,
+            retention_tier: None,
         }
     }
 }

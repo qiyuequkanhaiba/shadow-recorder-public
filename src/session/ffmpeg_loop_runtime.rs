@@ -338,7 +338,7 @@ pub fn recover_ffmpeg_loop_segments(
                 .max(DEFAULT_SEGMENT_DURATION_SECONDS),
         );
         let mut segments = collect_stream_segments(&session_dir, stream)?;
-        trim_segments_to_window(&mut segments, max_segments)?;
+        trim_segments_to_window(session, &session_dir, &mut segments, max_segments)?;
         update_stream_summary(
             stream,
             &segments,
@@ -411,10 +411,10 @@ fn run_ffmpeg_loop(
             .lock()
             .map(|session| session.clone())
             .unwrap_or_else(|_| active_session.clone());
-        let latest_session_video_config = SessionVideoConfigState::from(&latest_session);
+        active_session = latest_session;
+        let latest_session_video_config = SessionVideoConfigState::from(&active_session);
         let session_video_config_changed = latest_session_video_config != session_video_config;
         if session_video_config_changed {
-            active_session = latest_session;
             session_video_config = latest_session_video_config;
             encoder_candidates =
                 resolve_encoder_candidates(&ffmpeg, &active_session.encoder_preference);
@@ -580,7 +580,7 @@ fn refresh_stream_index(
     state: &mut StreamRuntimeState,
 ) -> Result<bool, FfmpegLoopRuntimeError> {
     let mut segments = collect_stream_segments(session_dir, &state.stream)?;
-    trim_segments_to_window(&mut segments, state.max_segments)?;
+    trim_segments_to_window(session, session_dir, &mut segments, state.max_segments)?;
     let current_status = state.stream.status.clone();
     let next_signature = build_segment_signature(&segments);
     let segments_changed = state.last_segment_signature.as_ref() != Some(&next_signature);
@@ -1099,9 +1099,21 @@ fn collect_stream_segments(
                 continue;
             };
             let absolute_path = stream_dir.join(parsed.file_relative_path.replace('/', "\\"));
-            if !absolute_path.exists() {
+            let mut retention_tier = None;
+            let mut actual_path = absolute_path.clone();
+            if !actual_path.exists() {
+                if let Some(file_name) = actual_path.file_name() {
+                    let retained_path = session_dir.join("video").join("retained").join(&stream.stream_id).join(file_name);
+                    if retained_path.exists() {
+                        actual_path = retained_path;
+                        retention_tier = Some("retained".to_string());
+                    }
+                }
+            }
+            if !actual_path.exists() {
                 continue;
             }
+            let absolute_path = actual_path;
             let metadata = match fs::metadata(&absolute_path) {
                 Ok(value) => value,
                 Err(_) => continue,
@@ -1161,7 +1173,7 @@ fn collect_stream_segments(
                 container: Some(container),
                 mime_type: Some(mime_type),
                 encoder_name: Some(encoder_name),
-                is_playable: true,
+                is_playable: true, retention_tier,
             });
         }
     }
@@ -1171,23 +1183,82 @@ fn collect_stream_segments(
 }
 
 fn trim_segments_to_window(
+    session: &crate::session::models::TestSessionRecord,
+    session_dir: &std::path::Path,
     segments: &mut Vec<TestSessionVideoSegmentRecord>,
     max_segments: usize,
 ) -> Result<(), FfmpegLoopRuntimeError> {
-    if segments.len() <= max_segments {
-        return Ok(());
+    let retention_mode = session.history_retention_mode.as_deref().unwrap_or("count");
+    let retention_hours = session.history_retention_hours.unwrap_or(24).clamp(1, 168);
+    let retention_max = if cfg!(test) {
+        session.history_retention_max_segments.unwrap_or(200) as usize
+    } else {
+        session.history_retention_max_segments.unwrap_or(200).clamp(10, 2000) as usize
+    };
+
+    // 1. Move overflow live segments out of the ring window into retained tier
+    let live_indices: Vec<usize> = segments
+        .iter()
+        .enumerate()
+        .filter(|(_, seg)| seg.retention_tier.as_deref() != Some("retained"))
+        .map(|(idx, _)| idx)
+        .collect();
+
+    if live_indices.len() > max_segments {
+        let overflow_count = live_indices.len() - max_segments;
+        for &idx in &live_indices[..overflow_count] {
+            let seg = &mut segments[idx];
+            let retained_dir = session_dir.join("video").join("retained").join(&seg.stream_id);
+            if std::fs::create_dir_all(&retained_dir).is_err() {
+                continue;
+            }
+            if let Some(ref file_path_str) = seg.file_path {
+                let old_path = std::path::Path::new(file_path_str);
+                if let Some(file_name) = old_path.file_name() {
+                    let new_path = retained_dir.join(file_name);
+                    if std::fs::rename(old_path, &new_path).is_ok() {
+                        seg.relative_path = Some(relative_path_string(session_dir, &new_path));
+                        seg.file_path = Some(path_to_string(&new_path));
+                        seg.retention_tier = Some("retained".to_string());
+                    }
+                }
+            }
+        }
     }
 
-    let overflow = segments.len().saturating_sub(max_segments);
-    for obsolete in segments.iter().take(overflow) {
-        if let Some(file_path) = obsolete.file_path.as_deref() {
-            let _ = fs::remove_file(file_path);
+    // 2. Prune retained segments according to retention policy
+    let now_ms = now_timestamp_ms();
+    let retain_cutoff = now_ms.saturating_sub(retention_hours as u64 * 3600_000);
+    let mut to_remove = Vec::new();
+
+    if retention_mode == "age" {
+        for (idx, seg) in segments.iter().enumerate() {
+            if seg.retention_tier.as_deref() == Some("retained") && seg.ended_at_ms < retain_cutoff {
+                to_remove.push(idx);
+            }
         }
-        if let Some(manifest_path) = obsolete.manifest_path.as_deref() {
-            let _ = fs::remove_file(manifest_path);
+    } else {
+        let mut retained_count = 0;
+        for (idx, seg) in segments.iter().enumerate().rev() {
+            if seg.retention_tier.as_deref() == Some("retained") {
+                retained_count += 1;
+                if retained_count > retention_max {
+                    to_remove.push(idx);
+                }
+            }
         }
     }
-    segments.drain(0..overflow);
+
+    to_remove.sort_unstable_by(|a, b| b.cmp(a));
+    for idx in to_remove {
+        let obsolete = segments.remove(idx);
+        if let Some(file_path) = obsolete.file_path.as_deref() {
+            let _ = std::fs::remove_file(file_path);
+        }
+        if let Some(manifest_path) = obsolete.manifest_path.as_deref() {
+            let _ = std::fs::remove_file(manifest_path);
+        }
+    }
     Ok(())
 }
 
@@ -1588,6 +1659,7 @@ mod tests {
         let segments = recover_ffmpeg_loop_segments(&session, &mut streams).expect("recover");
 
         assert_eq!(segments.len(), 2);
+        assert!(segments.iter().all(|segment| segment.retention_tier.is_none()));
         assert!(segments.iter().all(|segment| segment.is_playable));
         assert_eq!(segments[0].started_at_ms, 1_000);
         assert_eq!(segments[1].started_at_ms, 6_000);
@@ -1690,8 +1762,11 @@ mod tests {
         let segments = recover_ffmpeg_loop_segments(&session, &mut streams).expect("recover");
 
         assert_eq!(compute_max_segments(10, 5), 2);
-        assert_eq!(segments.len(), 2);
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0].retention_tier.as_deref(), Some("retained"));
         assert!(!segments_dir.join("run-0001-00000.mp4").exists());
+        let retained_path = session_dir.join("video").join("retained").join(stream_id).join("run-0001-00000.mp4");
+        assert!(retained_path.exists());
         assert!(segments_dir.join("run-0001-00001.mp4").exists());
         assert!(segments_dir.join("run-0001-00002.mp4").exists());
 
@@ -1917,6 +1992,9 @@ mod tests {
             kind: "reqcase.test-session".to_string(),
             session_id: "ts-1".to_string(),
             name: Some("ffmpeg loop".to_string()),
+            history_retention_mode: None,
+            history_retention_hours: None,
+            history_retention_max_segments: None,
             status: TestSessionStatus::Active,
             started_at_ms: 1_000,
             updated_at_ms: 1_000,
@@ -2006,3 +2084,335 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod history_retention_tests {
+    use super::*;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use crate::session::models::{
+        TEST_SESSION_KIND, TEST_SESSION_SCHEMA_VERSION, TEST_SESSION_VIDEO_SEGMENT_KIND,
+        TEST_SESSION_VIDEO_STREAM_KIND, DEFAULT_RECORDING_PROFILE, DEFAULT_ENCODER_PREFERENCE,
+        DEFAULT_TARGET_CAPTURE_MODE, TestSessionRecord, TestSessionStatus,
+        TestSessionVideoSegmentRecord, TestSessionVideoSegmentStatus,
+        TestSessionVideoStreamRecord, TestSessionVideoStreamStatus,
+    };
+
+    fn unique_temp_dir(prefix: &str) -> PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let count = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let pid = std::process::id();
+        let unique = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or_default();
+        let path = std::env::temp_dir().join(format!("{prefix}-{pid}-{unique}-{count}"));
+        let _ = fs::create_dir_all(&path);
+        path
+    }
+
+    fn mock_session() -> TestSessionRecord {
+        TestSessionRecord {
+            schema_version: TEST_SESSION_SCHEMA_VERSION,
+            kind: TEST_SESSION_KIND.to_string(),
+            session_id: "test-session".into(),
+            name: None,
+            status: TestSessionStatus::Active,
+            started_at_ms: 0,
+            updated_at_ms: 0,
+            ended_at_ms: None,
+            storage_root_dir: None,
+            session_dir: Some("dummy".into()),
+            manifest_path: None,
+            buffer_window_seconds: 30,
+            segment_duration_seconds: 5,
+            recording_profile: DEFAULT_RECORDING_PROFILE.to_string(),
+            encoder_preference: DEFAULT_ENCODER_PREFERENCE.to_string(),
+            show_mouse_in_video: false,
+            notes: None,
+            history_retention_mode: None,
+            history_retention_hours: None,
+            history_retention_max_segments: None,
+            target_process_name: None,
+            target_pid: None,
+            target_hwnd: None,
+            target_display_id: None,
+            target_display_ids: None,
+            target_capture_mode: DEFAULT_TARGET_CAPTURE_MODE.to_string(),
+        }
+    }
+
+    fn mock_segment(id: &str, stream_id: &str, end_time: u64, file_path: Option<String>) -> TestSessionVideoSegmentRecord {
+        let relative_path = file_path.clone();
+        TestSessionVideoSegmentRecord {
+            schema_version: TEST_SESSION_SCHEMA_VERSION,
+            kind: TEST_SESSION_VIDEO_SEGMENT_KIND.to_string(),
+            segment_id: id.into(),
+            session_id: "test-session".into(),
+            stream_id: stream_id.into(),
+            status: TestSessionVideoSegmentStatus::Ready,
+            display_id: None,
+            started_at_ms: end_time.saturating_sub(5000),
+            ended_at_ms: end_time,
+            duration_ms: 5000,
+            relative_path,
+            file_path,
+            manifest_path: None,
+            size_bytes: Some(1024),
+            frame_count: Some(150),
+            codec: Some("h264".into()),
+            container: Some("mp4".into()),
+            mime_type: Some("video/mp4".into()),
+            encoder_name: Some("ffmpeg:libx264".into()),
+            is_playable: true,
+            retention_tier: None,
+        }
+    }
+
+    #[test]
+    fn test_trim_moves_to_retained() {
+        let temp_dir = unique_temp_dir("shadowrecord-test-move");
+        let session_dir = temp_dir.join("session");
+        let mut session = mock_session();
+        session.session_dir = Some(session_dir.to_string_lossy().to_string());
+        session.history_retention_mode = Some("count".to_string());
+        session.history_retention_max_segments = Some(10);
+
+        let stream_id = "test-stream";
+        let mut segments = vec![];
+
+        for i in 0..5 {
+            let file_path = session_dir.join(format!("{}.mp4", i));
+            fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+            fs::write(&file_path, "dummy").unwrap();
+            segments.push(mock_segment(&format!("seg-{}", i), stream_id, (i + 1) * 5000, Some(file_path.to_string_lossy().into())));
+        }
+
+        // Window allows 2 segments, 3 should overflow
+        super::trim_segments_to_window(&session, &session_dir, &mut segments, 2).unwrap();
+
+        assert_eq!(segments.len(), 5);
+        for i in 0..3 {
+            assert_eq!(segments[i].retention_tier.as_deref(), Some("retained"));
+            let file_path = segments[i].file_path.as_ref().unwrap();
+            assert!(file_path.contains("video/retained/test-stream") || file_path.contains("video\\retained\\test-stream"));
+            assert!(Path::new(file_path).exists());
+            let rel_path = segments[i].relative_path.as_ref().unwrap();
+            assert!(rel_path.contains("retained"));
+        }
+        for i in 3..5 {
+            assert_ne!(segments[i].retention_tier.as_deref(), Some("retained"));
+        }
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_trim_count_removes_oldest() {
+        let temp_dir = unique_temp_dir("shadowrecord-test-count");
+        let session_dir = temp_dir.join("session");
+        let mut session = mock_session();
+        session.session_dir = Some(session_dir.to_string_lossy().to_string());
+        session.history_retention_mode = Some("count".to_string());
+        session.history_retention_max_segments = Some(2); // Only keep 2 retained segments
+
+        let stream_id = "test-stream";
+        let mut segments = vec![];
+
+        for i in 0..5 {
+            let file_path = session_dir.join(format!("{}.mp4", i));
+            fs::create_dir_all(file_path.parent().unwrap()).unwrap();
+            fs::write(&file_path, "dummy").unwrap();
+            segments.push(mock_segment(&format!("seg-{}", i), stream_id, (i + 1) * 5000, Some(file_path.to_string_lossy().into())));
+        }
+
+        // Window allows 2 segments. Overflow is 3. Max retained is 2. So 1 oldest segment is deleted.
+        super::trim_segments_to_window(&session, &session_dir, &mut segments, 2).unwrap();
+
+        assert_eq!(segments.len(), 4);
+        assert_eq!(segments[0].segment_id, "seg-1");
+        assert_eq!(segments[1].segment_id, "seg-2");
+        assert_eq!(segments[2].segment_id, "seg-3");
+        assert_eq!(segments[3].segment_id, "seg-4");
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_trim_age_removes_oldest() {
+        let temp_dir = unique_temp_dir("shadowrecord-test-age");
+        let session_dir = temp_dir.join("session");
+        let mut session = mock_session();
+        session.session_dir = Some(session_dir.to_string_lossy().to_string());
+        session.history_retention_mode = Some("age".to_string());
+        session.history_retention_hours = Some(1); // 1 hour
+
+        let stream_id = "test-stream";
+        let mut segments = vec![];
+        let now = now_timestamp_ms();
+
+        let two_hours_ago = now - 2 * 3600_000;
+        let half_hour_ago = now - 1800_000;
+
+        let file1 = session_dir.join("1.mp4");
+        fs::create_dir_all(file1.parent().unwrap()).unwrap();
+        fs::write(&file1, "dummy").unwrap();
+        segments.push(mock_segment("seg-1", stream_id, two_hours_ago, Some(file1.to_string_lossy().into())));
+
+        let file2 = session_dir.join("2.mp4");
+        fs::write(&file2, "dummy").unwrap();
+        segments.push(mock_segment("seg-2", stream_id, half_hour_ago, Some(file2.to_string_lossy().into())));
+
+        // Window allows 1 segment (seg-2). seg-1 is overflow. seg-1 is > 1 hour old, so it's deleted.
+        super::trim_segments_to_window(&session, &session_dir, &mut segments, 1).unwrap();
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].segment_id, "seg-2");
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_trim_move_fails_keeps_source() {
+        let temp_dir = unique_temp_dir("shadowrecord-test-fail");
+        let session_dir = temp_dir.join("session");
+        let mut session = mock_session();
+        session.session_dir = Some(session_dir.to_string_lossy().to_string());
+        session.history_retention_mode = Some("count".to_string());
+
+        let stream_id = "test-stream";
+        let mut segments = vec![];
+
+        let file_path = session_dir.join("1.mp4");
+        // DELIBERATELY DO NOT CREATE FILE, so rename fails
+        segments.push(mock_segment("seg-1", stream_id, 1000, Some(file_path.to_string_lossy().into())));
+
+        super::trim_segments_to_window(&session, &session_dir, &mut segments, 0).unwrap();
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].retention_tier, None); // Since move failed, it's not marked retained
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_recover_keeps_retained_segments() {
+        let temp_dir = unique_temp_dir("shadowrecord-test-recover");
+        let session_dir = temp_dir.join("session");
+        let stream_id = "vs-test-stream";
+        let stream_dir = session_dir.join("video").join("streams").join(stream_id);
+        let runs_dir = stream_dir.join("runs");
+        let segments_dir = stream_dir.join("segments");
+        let retained_dir = session_dir.join("video").join("retained").join(stream_id);
+        fs::create_dir_all(&runs_dir).unwrap();
+        fs::create_dir_all(&segments_dir).unwrap();
+        fs::create_dir_all(&retained_dir).unwrap();
+
+        // 1. Create a segment already moved to video/retained/
+        let retained_file = retained_dir.join("run-0001-00000.mp4");
+        fs::write(&retained_file, "retained-content").unwrap();
+
+        // 2. Create 2 live segments in segments_dir
+        let live_file_1 = segments_dir.join("run-0001-00001.mp4");
+        let live_file_2 = segments_dir.join("run-0001-00002.mp4");
+        fs::write(&live_file_1, "live-content-1").unwrap();
+        fs::write(&live_file_2, "live-content-2").unwrap();
+
+        // 3. Write run manifest and CSV list
+        let sep = std::path::MAIN_SEPARATOR;
+        let segment_list_rel = format!("runs{sep}run-0001.csv");
+        let output_pattern_rel = format!("segments{sep}run-0001-%05d.mp4");
+        let run_manifest = FfmpegCaptureRunManifest {
+            schema_version: 1,
+            kind: "reqcase.ffmpeg-loop-run".to_string(),
+            run_id: "run-0001".to_string(),
+            session_id: "test-session".to_string(),
+            stream_id: stream_id.to_string(),
+            target_capture_mode: "target_display".to_string(),
+            display_id: Some("display-1".to_string()),
+            capture_input: "desktop".to_string(),
+            show_mouse_in_video: false,
+            window_hwnd: None,
+            window_title: None,
+            process_name: None,
+            started_at_ms: 1_000,
+            segment_duration_seconds: 5,
+            target_fps: 12,
+            encoder_name: Some("ffmpeg:libx264".to_string()),
+            offset_x: 0,
+            offset_y: 0,
+            width: 1920,
+            height: 1080,
+            segment_list_relative_path: segment_list_rel,
+            output_pattern_relative_path: output_pattern_rel,
+        };
+        fs::write(
+            runs_dir.join("run-0001.json"),
+            serde_json::to_vec_pretty(&run_manifest).unwrap(),
+        ).unwrap();
+        fs::write(
+            runs_dir.join("run-0001.csv"),
+            format!(
+                "segments{sep}run-0001-00000.mp4,0.000000,5.000000\nsegments{sep}run-0001-00001.mp4,5.000000,10.000000\nsegments{sep}run-0001-00002.mp4,10.000000,15.000000\n"
+            ),
+        ).unwrap();
+
+        // 4. Set up session with buffer_window_seconds = 10 (max_segments = 2 for 5s segments)
+        // In the old implementation, max_segments = 2 would cause the retained segment to be deleted!
+        let mut session = mock_session();
+        session.session_dir = Some(session_dir.to_string_lossy().to_string());
+        session.buffer_window_seconds = 10;
+        session.segment_duration_seconds = 5;
+        session.history_retention_mode = Some("count".to_string());
+        session.history_retention_max_segments = Some(200);
+
+        let stream_dir_str = stream_dir.to_string_lossy().into_owned();
+        let manifest_path_str = stream_dir.join("stream.json").to_string_lossy().into_owned();
+        let stream = TestSessionVideoStreamRecord {
+            schema_version: 1,
+            kind: TEST_SESSION_VIDEO_STREAM_KIND.to_string(),
+            stream_id: stream_id.to_string(),
+            session_id: session.session_id.clone(),
+            label: "Primary Display".to_string(),
+            status: TestSessionVideoStreamStatus::Planned,
+            target_capture_mode: session.target_capture_mode.clone(),
+            display_id: Some("display-1".to_string()),
+            display_label: Some("Primary Display".to_string()),
+            width: Some(1920),
+            height: Some(1080),
+            monitor_left: Some(0),
+            monitor_top: Some(0),
+            monitor_right: Some(1920),
+            monitor_bottom: Some(1080),
+            started_at_ms: session.started_at_ms,
+            updated_at_ms: session.updated_at_ms,
+            segment_duration_seconds: 5,
+            segment_count: 0,
+            playable_segment_count: 0,
+            pending_segment_count: 0,
+            total_segment_bytes: 0,
+            retained_segment_bytes: 0,
+            last_segment_bytes: None,
+            last_segment_duration_ms: None,
+            last_segment_frame_count: None,
+            last_capture_latency_ms: None,
+            last_encode_latency_ms: None,
+            sample_interval_ms: 83,
+            target_fps: 12,
+            encoder_available: false,
+            warning_count: 0,
+            last_warning: None,
+            stream_dir: Some(stream_dir_str),
+            manifest_path: Some(manifest_path_str),
+            playlist_path: None,
+        };
+
+        let mut streams = vec![stream];
+        let recovered = super::recover_ffmpeg_loop_segments(&session, &mut streams).expect("recover");
+
+        // The retained file in video/retained/ MUST still exist after recover!
+        assert!(retained_file.exists(), "Retained file must not be deleted by recover_ffmpeg_loop_segments");
+        assert_eq!(recovered.len(), 3);
+        assert_eq!(recovered[0].retention_tier.as_deref(), Some("retained"));
+        assert_eq!(recovered[0].file_path.as_deref(), Some(retained_file.to_string_lossy().as_ref()));
+
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+}
+

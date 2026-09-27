@@ -1373,6 +1373,14 @@ export function exportTestDefectPack(input?: {
 }
 
 
+export function updateTestSessionMeta(input?: any) {
+  const binding = getBinding() as any;
+  if (typeof binding.updateTestSessionMeta !== "function") {
+    throw new Error("updateTestSessionMeta is unavailable in native binding");
+  }
+  return binding.updateTestSessionMeta(input);
+}
+
 export function updateTestSessionStep(input?: any) {
   const binding = getBinding() as any;
   if (typeof binding.updateTestSessionStep !== 'function') {

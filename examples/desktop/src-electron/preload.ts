@@ -149,6 +149,8 @@ export type ReqCaseShadowRecorderRendererApi = {
   rebuildTestSessionSteps?: (input?: any) => Promise<any[]>;
   renderTestSessionReproSteps?: (input?: any) => Promise<string>;
   exportTestDefectPack?: (input?: any) => Promise<any>;
+  updateTestSessionMeta?: (input?: any) => Promise<any>;
+
   updateTestSessionStep?: (input?: any) => Promise<any>;
   setSemanticAliasProfile?: (input?: any) => Promise<void>;
   getSemanticAliasProfile?: () => Promise<any>;
@@ -266,6 +268,9 @@ const api: ReqCaseShadowRecorderRendererApi = {
     rebuildTestSessionSteps: (input?: any) => ipcRenderer.invoke('reqcase:shadow-recorder:rebuild-test-session-steps', input),
     renderTestSessionReproSteps: (input?: any) => ipcRenderer.invoke('reqcase:shadow-recorder:render-test-session-repro-steps', input),
     exportTestDefectPack: (input?: any) => ipcRenderer.invoke('reqcase:shadow-recorder:export-test-defect-pack', input),
+
+    updateTestSessionMeta: (input?: any) => ipcRenderer.invoke('reqcase:shadow-recorder:update-test-session-meta', input),
+
     updateTestSessionStep: (input?: any) => ipcRenderer.invoke('reqcase:shadow-recorder:update-test-session-step', input),
     setSemanticAliasProfile: (input?: any) => ipcRenderer.invoke('reqcase:shadow-recorder:set-semantic-alias-profile', input),
     getSemanticAliasProfile: () => ipcRenderer.invoke('reqcase:shadow-recorder:get-semantic-alias-profile'),

@@ -1,6 +1,6 @@
 {
   "name": "shadow-recorder-desktop-example",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "private": true,
   "author": "ReqCase",
   "description": "Electron + React demo for shadow_recorder napi plugin",

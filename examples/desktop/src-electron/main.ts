@@ -44,6 +44,7 @@ import {
   scaleFloatingToolbarCoreSize,
   type FloatingToolbarVisualState,
 } from './floating-toolbar-layout';
+import { protectFloatingToolbarSurface } from './native-binding';
 
 let mainWindow: BrowserWindow | null = null;
 let toolbarWindow: BrowserWindow | null = null;
@@ -369,14 +370,8 @@ function registerMediaProtocol(): void {
   });
 }
 
-function applyToolbarShape(window: BrowserWindow): void {
-  try {
-    // The transparent BrowserWindow is exactly the CSS capsule bounds.
-    // CSS alpha supplies the antialiased rounded edge; pixel setShape is jagged.
-    window.setShape([]);
-  } catch (error: unknown) {
-    console.warn('[floating-toolbar] failed to apply shaped window region', error);
-  }
+function applyToolbarShape(_window: BrowserWindow): void {
+  // Intentionally no-op. Calling window.setShape([]) invokes Win32 SetWindowRgn which corrupts DWM per-pixel alpha composition on Windows.
 }
 
 function clampToolbarBounds(bounds: Rectangle): Rectangle {
@@ -1107,9 +1102,6 @@ function createToolbarWindow(): BrowserWindow {
     // Drag size is frozen separately to avoid DPI growth; white-flash mitigated by no opaque body fill.
     transparent: true,
     hasShadow: false,
-    thickFrame: false,
-    roundedCorners: false,
-    accentColor: false,
     backgroundColor: '#00000000',
     alwaysOnTop: true,
     webPreferences: {
@@ -1147,6 +1139,9 @@ function createToolbarWindow(): BrowserWindow {
   window.removeMenu();
   window.setMenuBarVisibility(false);
   window.setBackgroundColor('#00000000');
+  if (process.platform === 'win32') {
+    protectFloatingToolbarSurface(window.getNativeWindowHandle());
+  }
   applyToolbarShape(window);
   window.loadURL(
     `data:text/html;charset=utf-8,${encodeURIComponent(
@@ -1165,6 +1160,9 @@ function createToolbarWindow(): BrowserWindow {
 
   window.once('ready-to-show', () => {
     if (!appQuitting) {
+      if (process.platform === 'win32') {
+        protectFloatingToolbarSurface(window.getNativeWindowHandle());
+      }
       applyToolbarShape(window);
       reassertToolbarTransparentSurface(window);
       window.showInactive();
@@ -1177,12 +1175,6 @@ function createToolbarWindow(): BrowserWindow {
   });
   window.on('hide', () => {
     cancelFloatingToolbarInteraction();
-  });
-  window.on('blur', () => {
-    reassertToolbarTransparentSurface(window);
-  });
-  window.on('focus', () => {
-    reassertToolbarTransparentSurface(window);
   });
 
   window.on('resize', () => {

@@ -17,6 +17,7 @@ mod storage;
 mod telemetry;
 mod types;
 mod wgc;
+mod window_surface;
 
 #[cfg(all(test, windows))]
 mod live_semantic;
@@ -724,4 +725,9 @@ fn parse_js_timestamp(value: f64, field_name: &str) -> Result<u64> {
 
 fn map_session_error(err: SessionError) -> napi::Error {
     napi::Error::from_reason(err.to_string())
+}
+
+#[napi]
+pub fn protect_floating_toolbar_surface(hwnd: i64) -> bool {
+    window_surface::protect_floating_toolbar_hwnd(hwnd)
 }

@@ -500,6 +500,23 @@ export function stopRecording(): void {
   (getBinding() as any).stopRecording();
 }
 
+export function protectFloatingToolbarSurface(nativeWindowHandle: Buffer): boolean {
+  try {
+    const binding = getBinding() as any;
+    if (typeof binding.protectFloatingToolbarSurface !== 'function') {
+      return false;
+    }
+    if (!nativeWindowHandle || nativeWindowHandle.length < 8) {
+      return false;
+    }
+    const hwnd = Number(nativeWindowHandle.readBigInt64LE(0));
+    return Boolean(binding.protectFloatingToolbarSurface(hwnd));
+  } catch (error) {
+    console.warn('[floating-toolbar] failed to protect surface', error);
+    return false;
+  }
+}
+
 export function listAvailableDisplays(): ReqCaseShadowRecorderDisplayTarget[] {
   const binding = getBinding() as any;
   if (typeof binding.listTestSessionDisplayTargets !== 'function') {

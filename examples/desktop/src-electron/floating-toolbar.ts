@@ -499,6 +499,12 @@ export function createFloatingToolbarHtml(input: {
         opacity: 1;
         transform: translate(-50%, -50%);
       }
+      .island[data-collapsed="true"] .toast-status-banner {
+        display: none !important;
+        opacity: 0 !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+      }
       @keyframes toolbarSpin {
         0% { transform: rotate(0deg); }
         100% { transform: rotate(360deg); }
@@ -547,25 +553,25 @@ export function createFloatingToolbarHtml(input: {
         transition: opacity 0.25s ease;
         z-index: 6;
       }
+      .island[data-collapsed="true"] .island-progress-hairline {
+        left: 17px;
+        right: 17px;
+      }
       .island-progress-hairline span {
         display: block;
         height: 100%;
         width: 0;
         background: #38bdf8;
+        transition: width 0.2s ease;
       }
       .island.is-exporting .island-progress-hairline {
         opacity: 1;
-        animation: hairlineShimmer 1.2s linear infinite;
       }
       .island.is-exported .island-progress-hairline {
         opacity: 1;
         background: #22c55e;
         box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
         transition: opacity 0.5s ease;
-      }
-      @keyframes hairlineShimmer {
-        0% { background-position: 200% 0; }
-        100% { background-position: -200% 0; }
       }
       @media (prefers-reduced-motion: reduce) {
         .island, .island-inner, .slim-btn, .btn, .status-dot, .status-dot::after, .capsule-slim-deck, .actions, .collapsed-waveform, .waveform-bar, .toast-status-banner, .toolbar-icon-spin, .toolbar-icon-check, .btn-export.is-error, .island-progress-hairline {
@@ -727,14 +733,6 @@ export function createFloatingToolbarHtml(input: {
           document.body.style.background = 'transparent';
           document.body.style.backgroundColor = 'transparent';
         }
-        if (island) {
-          const previousFilter = island.style.webkitBackdropFilter || island.style.backdropFilter;
-          island.style.webkitBackdropFilter = 'none';
-          island.style.backdropFilter = 'none';
-          void island.offsetWidth;
-          island.style.webkitBackdropFilter = previousFilter || '';
-          island.style.backdropFilter = previousFilter || '';
-        }
       };
 
       const cancelScheduledCollapse = () => {
@@ -771,6 +769,9 @@ export function createFloatingToolbarHtml(input: {
         collapsed = !!nextCollapsed;
         island.setAttribute('data-state', visualState);
         island.setAttribute('data-collapsed', String(collapsed));
+        if (collapsed && statusToast) {
+          statusToast.classList.remove('is-visible');
+        }
       };
 
       const fitContentNow = async (force, coreWidth = canvasCoreWidth) => {
@@ -1473,6 +1474,8 @@ export function createFloatingToolbarHtml(input: {
         }
       }
 
+      let selfExporting = false;
+
       if (api && api.onExportProgress) {
         api.onExportProgress((progress) => {
           const label = progress.percent + '% ' + progress.message;
@@ -1480,14 +1483,16 @@ export function createFloatingToolbarHtml(input: {
             isExporting = true;
             if (buttons.export) buttons.export.disabled = true;
             setExportButtonState('exporting', label);
-            if (statusToast) {
+            if (!collapsed && selfExporting && statusToast) {
               statusToast.textContent = label;
               statusToast.classList.add('is-visible');
+            } else if (statusToast) {
+              statusToast.classList.remove('is-visible');
             }
           } else {
             isExporting = false;
             setExportButtonState('exported', '已完成导出 100%');
-            if (statusToast) {
+            if (!collapsed && selfExporting && statusToast) {
               statusToast.textContent = '已导出证据 ZIP';
               statusToast.classList.add('is-visible');
               if (toastTimer != null) {
@@ -1496,7 +1501,10 @@ export function createFloatingToolbarHtml(input: {
               toastTimer = window.setTimeout(() => {
                 statusToast.classList.remove('is-visible');
               }, 2200);
+            } else if (statusToast) {
+              statusToast.classList.remove('is-visible');
             }
+            selfExporting = false;
           }
           if (exportProgressFill) {
             exportProgressFill.style.width = Math.max(0, Math.min(100, progress.percent)) + '%';
@@ -1516,6 +1524,7 @@ export function createFloatingToolbarHtml(input: {
         }
         if (!api.exportTestSessionEvidence) throw new Error('No export API');
         isExporting = true;
+        selfExporting = true;
         buttons.export.disabled = true;
         setExportButtonState('exporting', '正在准备导出…');
         try {
@@ -1535,6 +1544,7 @@ export function createFloatingToolbarHtml(input: {
           }
         } finally {
           isExporting = false;
+          selfExporting = false;
           void refresh();
         }
       };

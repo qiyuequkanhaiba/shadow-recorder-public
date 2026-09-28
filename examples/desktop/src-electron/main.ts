@@ -1100,7 +1100,7 @@ function createToolbarWindow(): BrowserWindow {
     minimizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    focusable: true,
+    focusable: false,
     title: '',
     icon: iconPath,
     // Transparent window: only the island paints (single glass card, no nested outer frame).

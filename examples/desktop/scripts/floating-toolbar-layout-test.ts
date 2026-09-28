@@ -834,6 +834,10 @@ function testFloatingToolbarHasStatusAndExport(): void {
   assert.match(html, /beginDrag/);
   assert.match(html, /moveFloatingToolbar/);
   assert.match(html, /toast-status-banner/);
+  assert.match(html, /\.island\[data-collapsed="true"\] \.toast-status-banner \{[\s\S]*display:\s*none !important;/);
+  assert.match(html, /\.island\[data-collapsed="true"\] \.island-progress-hairline \{[\s\S]*left:\s*17px;\s*right:\s*17px;/);
+  assert.doesNotMatch(html, /hairlineShimmer/);
+  assert.match(html, /if \(!collapsed && selfExporting && statusToast\)/);
 }
 
 function testFloatingToolbarUsesZeroOverflowGlassCapsule(): void {

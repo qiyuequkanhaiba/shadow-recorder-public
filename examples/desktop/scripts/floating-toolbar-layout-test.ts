@@ -1070,6 +1070,9 @@ function testRecorderPlaybackStageUsesFluidTransportDock(): void {
   assert.match(source, /recorder-stage-transport-track/);
   assert.match(source, /aria-label="后退 5 秒"/);
   assert.match(source, /aria-label="前进 5 秒"/);
+  assert.match(source, /aria-label="上一帧"/);
+  assert.match(source, /aria-label="下一帧"/);
+  assert.match(source, /aria-label=\{`播放速度/);
   assert.match(source, /recorder-stage-quick-defect/);
   assert.match(source, /aria-label="标记当前回放位置为缺陷"/);
   assert.match(source, /标记瞬时/);

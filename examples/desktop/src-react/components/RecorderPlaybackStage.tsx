@@ -13,6 +13,7 @@ import type {
 } from '../../types/contracts';
 import type { TestSessionOperationRecord } from '../../types/operation-contracts';
 import { useDocumentVisibility } from '../hooks/useDocumentVisibility';
+import { frameStepMs, nextPlaybackRate, playbackFrameRate } from '../lib/playback-review';
 import { appendNoteForActiveQuickDefect } from '../lib/quick-defect-fallback';
 import { resolveVideoEncoderSummary } from '../lib/video-encoder-summary';
 import {
@@ -180,6 +181,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
 
   const [globalPlaybackMs, setGlobalPlaybackMs] = useState(0);
   const [isPlaybackRunning, setIsPlaybackRunning] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const hideControlsTimerRef = useRef<number | null>(null);
@@ -492,6 +494,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
       return;
     }
 
+    video.playbackRate = playbackRate;
     if (!isPlaybackRunning) {
       video.pause();
       return;
@@ -507,6 +510,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
     isPlaybackRunning,
     props.isRecording,
     props.isPaused,
+    playbackRate,
   ]);
 
   function seekToPlaybackTime(nextPlaybackMs: number): void {
@@ -610,6 +614,18 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
     }
     seekToPlaybackTime(globalPlaybackMsRef.current + deltaMs);
     revealControls();
+  }
+
+  function handleFrameStep(direction: -1 | 1): void {
+    if (props.isRecording && !props.isPaused) {
+      props.onNotice?.('暂停或停止后可回放');
+      return;
+    }
+    setIsPlaybackRunning(false);
+    const fps = playbackFrameRate(
+      props.playbackSession?.recordingProfile ?? props.activeSession?.recordingProfile,
+    );
+    handleSeekByDelta(frameStepMs(fps, direction));
   }
 
   // Pathway 3: Scrubber input (during active recording, notices and does NOT seek)
@@ -757,6 +773,19 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
         handleSeekByDelta(-5000);
         return;
       }
+      if (event.key === ',' || event.key === '.') {
+        event.preventDefault();
+        if (props.isRecording && !props.isPaused) {
+          props.onNotice?.('暂停或停止后可回放');
+          return;
+        }
+        setIsPlaybackRunning(false);
+        const fps = playbackFrameRate(
+          props.playbackSession?.recordingProfile ?? props.activeSession?.recordingProfile,
+        );
+        handleSeekByDelta(frameStepMs(fps, event.key === '.' ? 1 : -1));
+        return;
+      }
       if (event.key === 'f' || event.key === 'F') {
         event.preventDefault();
         void enterOrExitFullscreen();
@@ -771,7 +800,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [continuousSegments.length, isFullscreen, isPlaybackRunning, props.isPaused, props.isRecording, props.onNotice, totalDurationMs]);
+  }, [continuousSegments.length, isFullscreen, isPlaybackRunning, props.activeSession?.recordingProfile, props.isPaused, props.isRecording, props.onNotice, props.playbackSession?.recordingProfile, totalDurationMs]);
 
   // Encoder brand (only when encoder name actually contains nvenc/qsv/amf)
   const hardwareBrand = resolveHardwareEncoderBrand(activeContinuousSegment?.encoderName);
@@ -1371,6 +1400,41 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
               aria-label="前进 5 秒"
             >
               +5s
+            </button>
+
+            <button
+              type="button"
+              className="btn-dock-step"
+              onClick={() => handleFrameStep(-1)}
+              disabled={continuousSegments.length === 0}
+              title="上一帧 (,)"
+              aria-label="上一帧"
+            >
+              上一帧
+            </button>
+
+            <button
+              type="button"
+              className="btn-dock-step"
+              onClick={() => {
+                setPlaybackRate((current) => nextPlaybackRate(current));
+              }}
+              disabled={continuousSegments.length === 0}
+              title="切换 1、1.5、2 倍速"
+              aria-label={`播放速度 ${playbackRate === 1.5 ? '1.5×' : `${playbackRate}×`}`}
+            >
+              {playbackRate === 1.5 ? '1.5×' : `${playbackRate}×`}
+            </button>
+
+            <button
+              type="button"
+              className="btn-dock-step"
+              onClick={() => handleFrameStep(1)}
+              disabled={continuousSegments.length === 0}
+              title="下一帧 (.)"
+              aria-label="下一帧"
+            >
+              下一帧
             </button>
 
             {/* Timecode & Scrubber Track */}

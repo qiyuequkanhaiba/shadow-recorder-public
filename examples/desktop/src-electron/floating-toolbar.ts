@@ -40,6 +40,9 @@ const ICONS = {
   main: createIconSvg(
     '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line>',
   ),
+  screenshot: createIconSvg(
+    '<path d="M4 8V4h4"></path><path d="M16 4h4v4"></path><path d="M20 16v4h-4"></path><path d="M8 20H4v-4"></path>',
+  ),
 } as const;
 
 export function createFloatingToolbarHtml(input: {
@@ -316,7 +319,7 @@ export function createFloatingToolbarHtml(input: {
       }
       .island[data-collapsed="false"] .capsule-slim-deck,
       .island[data-collapsed="false"] .actions {
-        max-width: calc(140px * var(--ui-scale));
+        max-width: calc(169px * var(--ui-scale));
         margin-left: var(--inner-gap);
         opacity: 1;
         transform: scale(1) translateX(0);
@@ -607,6 +610,7 @@ export function createFloatingToolbarHtml(input: {
             <button type="button" class="slim-btn btn btn-flag show-on-live show-on-paused" id="flag-btn" title="瞬时打标" aria-label="瞬时打标">${ICONS.flag}</button>
             <button type="button" class="slim-btn btn btn-stop show-on-live show-on-paused" id="stop-btn" title="停止录制" aria-label="停止录制">${ICONS.stop}</button>
             <button type="button" class="slim-btn btn btn-export show-on-idle" id="export-btn" title="导出证据 ZIP" aria-label="导出证据 ZIP">${ICONS.export}</button>
+            <button type="button" class="slim-btn btn show-on-idle show-on-live show-on-paused" id="screenshot-btn" title="框选截图" aria-label="框选截图">${ICONS.screenshot}</button>
             <button type="button" class="slim-btn btn show-on-idle show-on-live show-on-paused" id="main-btn" title="打开主工作台" aria-label="打开主工作台">${ICONS.main}</button>
           </div>
         </div>
@@ -634,6 +638,7 @@ export function createFloatingToolbarHtml(input: {
         flag: document.getElementById('flag-btn'),
         stop: document.getElementById('stop-btn'),
         export: document.getElementById('export-btn'),
+        screenshot: document.getElementById('screenshot-btn'),
         main: document.getElementById('main-btn'),
       };
 
@@ -1398,6 +1403,14 @@ export function createFloatingToolbarHtml(input: {
         void runTask(async () => {
           if (!api.showWindow) throw new Error('No showWindow API');
           await api.showWindow();
+        });
+      });
+      buttons.screenshot.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void runTask(async () => {
+          if (!api.beginAreaScreenshot) throw new Error('No beginAreaScreenshot API');
+          await api.beginAreaScreenshot();
         });
       });
 

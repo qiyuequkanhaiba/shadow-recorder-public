@@ -137,7 +137,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   assert.deepEqual(first.trace, ['old-fit:128x34']);
 
   first.scheduler.flushAll();
-  assert.deepEqual(first.trace, ['old-fit:128x34', 'refresh:180x48']);
+  assert.deepEqual(first.trace, ['old-fit:128x34', 'refresh:220x48']);
   assert.equal(first.coordinator.isFitFrozen(), true);
   first.coordinator.completeRefresh();
   assert.equal(first.coordinator.isFitFrozen(), false);
@@ -151,7 +151,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
 
   assert.equal(coalesced.scheduler.size, 1);
   coalesced.scheduler.flushAll();
-  assert.deepEqual(coalesced.trace, ['refresh:180x48']);
+  assert.deepEqual(coalesced.trace, ['refresh:220x48']);
   coalesced.coordinator.completeRefresh();
 
   const nativePointer = createDisplayMetricsTrace();
@@ -172,7 +172,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   nativePointer.coordinator.releaseDragForRendererFit(1, 1);
   nativePointer.coordinator.completePostDragFit(1, 1);
   nativePointer.scheduler.flushAll();
-  assert.deepEqual(nativePointer.trace, ['refresh:128x34']);
+  assert.deepEqual(nativePointer.trace, ['refresh:157x34']);
   nativePointer.coordinator.completeRefresh();
 
   // `isFitFrozen()` is the main-process admission gate for an already queued
@@ -203,7 +203,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   postDragClick.coordinator.completePostDragFit(1, 1);
   assert.equal(postDragClick.scheduler.size, 1);
   postDragClick.scheduler.flushAll();
-  assert.deepEqual(postDragClick.trace, ['refresh:128x34']);
+  assert.deepEqual(postDragClick.trace, ['refresh:157x34']);
   postDragClick.coordinator.completeRefresh();
 
   const delayedOldAcknowledgement = createDisplayMetricsTrace();
@@ -235,7 +235,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   capturedPointerRelease.coordinator.releaseDragForRendererFit(1, 1);
   capturedPointerRelease.coordinator.completePostDragFit(1, 1);
   capturedPointerRelease.scheduler.flushAll();
-  assert.deepEqual(capturedPointerRelease.trace, ['refresh:128x34']);
+  assert.deepEqual(capturedPointerRelease.trace, ['refresh:157x34']);
   capturedPointerRelease.coordinator.completeRefresh();
 
   const capturedPointerWithNewPress = createDisplayMetricsTrace();
@@ -260,7 +260,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   staleFit.coordinator.releaseDragForRendererFit(1, 2);
   staleFit.coordinator.completePostDragFit(1, 2);
   staleFit.scheduler.flushAll();
-  assert.deepEqual(staleFit.trace, ['refresh:128x34']);
+  assert.deepEqual(staleFit.trace, ['refresh:157x34']);
   staleFit.coordinator.completeRefresh();
 
   const staleRelease = createDisplayMetricsTrace();
@@ -275,7 +275,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   staleRelease.coordinator.releaseDragForRendererFit(1, 2);
   staleRelease.coordinator.completePostDragFit(1, 2);
   staleRelease.scheduler.flushAll();
-  assert.deepEqual(staleRelease.trace, ['refresh:128x34']);
+  assert.deepEqual(staleRelease.trace, ['refresh:157x34']);
   staleRelease.coordinator.completeRefresh();
 
   const delayedCommit = createDisplayMetricsTrace();
@@ -293,7 +293,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   delayedCommit.coordinator.releaseDragForRendererFit(1, 2);
   delayedCommit.coordinator.completePostDragFit(1, 2);
   delayedCommit.scheduler.flushAll();
-  assert.deepEqual(delayedCommit.trace, ['refresh:128x34']);
+  assert.deepEqual(delayedCommit.trace, ['refresh:157x34']);
   delayedCommit.coordinator.completeRefresh();
 
   const inFlight = createDisplayMetricsTrace();
@@ -304,7 +304,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   inFlight.coordinator.completeRefresh();
   assert.equal(inFlight.scheduler.size, 1);
   inFlight.scheduler.flushAll();
-  assert.deepEqual(inFlight.trace, ['refresh:128x34', 'refresh:128x34']);
+  assert.deepEqual(inFlight.trace, ['refresh:157x34', 'refresh:157x34']);
   inFlight.coordinator.completeRefresh();
 
   const staleDocument = createDisplayMetricsTrace();
@@ -323,7 +323,7 @@ function testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput()
   abandonedPointer.coordinator.requestRefresh();
   abandonedPointer.coordinator.cancelInteraction(1);
   abandonedPointer.scheduler.flushAll();
-  assert.deepEqual(abandonedPointer.trace, ['refresh:128x34']);
+  assert.deepEqual(abandonedPointer.trace, ['refresh:157x34']);
   abandonedPointer.coordinator.completeRefresh();
 }
 
@@ -627,25 +627,25 @@ function testFloatingToolbarRoutesComposeWithRefreshCoordinator(): void {
   assert.deepEqual(trace.trace, []);
 
   trace.scheduler.flushAll();
-  assert.deepEqual(trace.trace, ['refresh:128x34']);
+  assert.deepEqual(trace.trace, ['refresh:157x34']);
   trace.coordinator.completeRefresh();
 }
 
 function testFloatingToolbarLayoutUsesExactStateSizes(): void {
   assert.deepEqual(FLOATING_TOOLBAR_LAYOUT, {
     collapsedWidth: 58,
-    idleExpandedWidth: 128,
-    activeExpandedWidth: 178,
+    idleExpandedWidth: 157,
+    activeExpandedWidth: 207,
     height: 34,
   });
   assert.deepEqual(getFloatingToolbarCoreSize(true, 'idle'), { width: 58, height: 34 });
   assert.deepEqual(getFloatingToolbarCoreSize(true, 'recording'), { width: 58, height: 34 });
-  assert.deepEqual(getFloatingToolbarCoreSize(false, 'idle'), { width: 128, height: 34 });
-  assert.deepEqual(getFloatingToolbarCoreSize(false, 'recording'), { width: 178, height: 34 });
-  assert.deepEqual(getFloatingToolbarCoreSize(false, 'paused'), { width: 178, height: 34 });
+  assert.deepEqual(getFloatingToolbarCoreSize(false, 'idle'), { width: 157, height: 34 });
+  assert.deepEqual(getFloatingToolbarCoreSize(false, 'recording'), { width: 207, height: 34 });
+  assert.deepEqual(getFloatingToolbarCoreSize(false, 'paused'), { width: 207, height: 34 });
   assert.deepEqual(scaleFloatingToolbarCoreSize(true, 'idle', 0.85), { width: 50, height: 29 });
-  assert.deepEqual(scaleFloatingToolbarCoreSize(false, 'idle', 1.4), { width: 180, height: 48 });
-  assert.deepEqual(scaleFloatingToolbarCoreSize(false, 'paused', 1), { width: 178, height: 34 });
+  assert.deepEqual(scaleFloatingToolbarCoreSize(false, 'idle', 1.4), { width: 220, height: 48 });
+  assert.deepEqual(scaleFloatingToolbarCoreSize(false, 'paused', 1), { width: 207, height: 34 });
 }
 
 function extractCssDeclaration(html: string, selector: string, property: string): string | null {
@@ -669,8 +669,10 @@ function testFloatingToolbarSurfaceIsTransparentSingleCard(): void {
   assert.equal(extractCssDeclaration(html, '.island', 'width'), 'var(--core-idle-expanded-width)');
   assert.equal(extractCssDeclaration(html, '.island', 'height'), 'var(--bar-h)');
   assert.match(html, /--core-collapsed-width:\s*58px/);
-  assert.match(html, /--core-idle-expanded-width:\s*128px/);
-  assert.match(html, /--core-active-expanded-width:\s*178px/);
+  assert.match(html, /--core-idle-expanded-width:\s*157px/);
+  assert.match(html, /--core-active-expanded-width:\s*207px/);
+  assert.match(html, /id="screenshot-btn"/);
+  assert.match(html, /beginAreaScreenshot/);
   assert.match(html, /width 0\.34s var\(--spring-morph\)/);
   assert.match(html, /backdrop-filter/);
   assert.equal(extractCssDeclaration(html, '.island', 'border-radius'), '999px');
@@ -796,8 +798,8 @@ function testFloatingToolbarButtonsHaveUniformSize(): void {
 function testFloatingToolbarFitDoesNotObserveWindowSizedIsland(): void {
   const html = createFloatingToolbarHtml({ initialCollapsed: false });
   assert.match(html, /const CORE_COLLAPSED_WIDTH = 58;/);
-  assert.match(html, /const CORE_IDLE_EXPANDED_WIDTH = 128;/);
-  assert.match(html, /const CORE_ACTIVE_EXPANDED_WIDTH = 178;/);
+  assert.match(html, /const CORE_IDLE_EXPANDED_WIDTH = 157;/);
+  assert.match(html, /const CORE_ACTIVE_EXPANDED_WIDTH = 207;/);
   assert.match(html, /Deterministic canvas size from UI state/);
   assert.match(html, /setFloatingToolbarDragging/);
   assert.doesNotMatch(html, /new ResizeObserver/);
@@ -905,8 +907,8 @@ function testFloatingToolbarContentBudgetsFitEverySupportedScale(): void {
   for (const scale of [0.85, 1, 1.4]) {
     const border = 2;
     const collapsedContent = (9 + 8 + (3 * 2.5 + 2 * 2.5) + 20) * scale + border;
-    const idleContent = (9 + 8 + 5 + 3 * 26 + 3 * 3 + 16) * scale + border;
-    const activeContent = (9 + 8 + 5 + 4 * 26 + 4 * 3 + 22) * scale + border;
+    const idleContent = (9 + 8 + 5 + 4 * 26 + 4 * 3 + 16) * scale + border;
+    const activeContent = (9 + 8 + 5 + 5 * 26 + 5 * 3 + 22) * scale + border;
 
     assert.ok(collapsedContent <= scaleFloatingToolbarCoreSize(true, 'recording', scale).width);
     assert.ok(idleContent <= scaleFloatingToolbarCoreSize(false, 'idle', scale).width);
@@ -922,8 +924,8 @@ function testFloatingToolbarUsesRevisionedStateSizing(): void {
   });
 
   assert.match(html, /const CORE_COLLAPSED_WIDTH = 58;/);
-  assert.match(html, /const CORE_IDLE_EXPANDED_WIDTH = 128;/);
-  assert.match(html, /const CORE_ACTIVE_EXPANDED_WIDTH = 178;/);
+  assert.match(html, /const CORE_IDLE_EXPANDED_WIDTH = 157;/);
+  assert.match(html, /const CORE_ACTIVE_EXPANDED_WIDTH = 207;/);
   assert.match(html, /let canvasCoreWidth = getCoreWidth\(collapsed, visualState\);/);
   assert.match(html, /let presentationRevision = 0;/);
   assert.match(html, /let pendingPresentation = null;/);

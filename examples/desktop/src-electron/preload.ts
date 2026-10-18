@@ -198,6 +198,8 @@ export type ReqCaseShadowRecorderRendererApi = {
   onMetrics: (handler: (metrics: ReqCaseShadowRecorderMetrics) => void) => () => void;
   setConfig: (config: ReqCaseShadowRecorderConfig) => Promise<void>;
   beginAreaScreenshot?: () => Promise<void>;
+  suspendScreenshotHotkeys?: () => Promise<void>;
+  resumeScreenshotHotkeys?: () => Promise<void>;
   listScreenshotHistory?: () => Promise<Array<{ id: string; createdAtMs: number; width: number; height: number; filePath: string }>>;
   pinScreenshotHistory?: (id: string) => Promise<{ ok: boolean; message: string }>;
   revealScreenshotHistory?: () => Promise<void>;
@@ -333,6 +335,8 @@ const api: ReqCaseShadowRecorderRendererApi = {
   },
   setConfig: (config) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.setConfig, config),
   beginAreaScreenshot: () => ipcRenderer.invoke('reqcase:screenshot:begin-area'),
+  suspendScreenshotHotkeys: () => ipcRenderer.invoke('reqcase:screenshot:suspend-hotkeys'),
+  resumeScreenshotHotkeys: () => ipcRenderer.invoke('reqcase:screenshot:resume-hotkeys'),
   listScreenshotHistory: () => ipcRenderer.invoke('reqcase:screenshot:list-history'),
   pinScreenshotHistory: (id: string) => ipcRenderer.invoke('reqcase:screenshot:pin-history', id),
   revealScreenshotHistory: () => ipcRenderer.invoke('reqcase:screenshot:reveal-history'),

@@ -1,5 +1,5 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Notification as ElectronNotification } from 'electron';
-import { syncScreenshotHotkeys } from '../../screenshot-hotkeys';
+import { syncScreenshotHotkeys, suspendScreenshotHotkeys } from '../../screenshot-hotkeys';
 import {
   beginAreaScreenshot,
   cancelAreaScreenshot,
@@ -639,6 +639,14 @@ export function registerReqCaseShadowRecorderIpc(
   });
   handleTrusted('reqcase:screenshot:reveal-history', async () => {
     revealScreenshotHistory();
+  });
+  handleTrusted('reqcase:screenshot:suspend-hotkeys', async () => {
+    suspendScreenshotHotkeys();
+  });
+  handleTrusted('reqcase:screenshot:resume-hotkeys', async () => {
+    if (runtimeSettings.config) {
+      updateShortcuts(runtimeSettings.config);
+    }
   });
   handleTrusted('reqcase:screenshot:begin-area', async () => {
     await beginAreaScreenshot(() => runtimeSettings.config);

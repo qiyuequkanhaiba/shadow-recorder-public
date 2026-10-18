@@ -4,6 +4,9 @@ import path from 'node:path';
 
 import { RecorderConfigSchema } from '../src-electron/modules/reqcase-shadow-recorder/ipc-validators';
 import {
+  acceleratorFromKeyboardEvent,
+  canAssignScreenshotShortcut,
+  formatScreenshotAccelerator,
   normalizeScreenshotDelaySeconds,
   parseSelectionRect,
   physicalRectFromDipCorners,
@@ -37,6 +40,44 @@ function run(): void {
   assert.equal(conflict.monitor, null);
   assert.equal(conflict.window, 'CommandOrControl+Shift+F');
   assert.deepEqual(conflict.rejected, ['CommandOrControl+Shift+A']);
+
+  assert.equal(acceleratorFromKeyboardEvent({
+    key: 'a',
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: true,
+  }), 'CommandOrControl+Shift+A');
+  assert.equal(acceleratorFromKeyboardEvent({
+    key: 'a',
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+  }), null);
+  assert.equal(acceleratorFromKeyboardEvent({
+    key: 'Backspace',
+    ctrlKey: false,
+    metaKey: false,
+    altKey: false,
+    shiftKey: false,
+  }), '');
+  assert.equal(acceleratorFromKeyboardEvent({
+    key: 'A',
+    ctrlKey: true,
+    metaKey: false,
+    altKey: false,
+    shiftKey: true,
+    repeat: true,
+  }), null);
+  assert.equal(formatScreenshotAccelerator('CommandOrControl+Shift+A'), 'Ctrl+Shift+A');
+  assert.equal(canAssignScreenshotShortcut('area', 'CommandOrControl+Shift+F', {
+    shortcutCaptureMonitor: 'CommandOrControl+Shift+F',
+  }), false);
+  assert.equal(canAssignScreenshotShortcut('area', 'CommandOrControl+Shift+A', {
+    shortcutStartRecording: 'CommandOrControl+Shift+A',
+  }), false);
+  assert.equal(canAssignScreenshotShortcut('monitor', 'CommandOrControl+Alt+F', {}), true);
 
   const duplicate = resolveScreenshotShortcuts({
     shortcutCaptureArea: 'CommandOrControl+Shift+1',

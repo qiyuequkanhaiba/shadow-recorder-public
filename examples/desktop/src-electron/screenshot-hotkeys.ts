@@ -48,3 +48,14 @@ export function syncScreenshotHotkeys(
 
   return resolved.rejected;
 }
+
+export function suspendScreenshotHotkeys(): void {
+  for (const accelerator of registered.values()) {
+    try {
+      globalShortcut.unregister(accelerator);
+    } catch (error: unknown) {
+      console.warn('Failed to suspend screenshot shortcut', accelerator, error);
+    }
+  }
+  registered.clear();
+}

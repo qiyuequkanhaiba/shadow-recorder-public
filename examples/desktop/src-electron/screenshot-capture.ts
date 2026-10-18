@@ -38,6 +38,80 @@ function normalizeAccelerator(value: string | undefined, fallback: string | null
   return trimmed.length > 0 ? trimmed : null;
 }
 
+export type ShortcutKeyEvent = {
+  key: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  altKey: boolean;
+  shiftKey: boolean;
+  repeat?: boolean;
+};
+
+const MODIFIER_KEYS = new Set(['Control', 'Shift', 'Alt', 'Meta', 'OS']);
+
+const KEY_NAMES: Record<string, string> = {
+  ' ': 'Space',
+  ArrowUp: 'Up',
+  ArrowDown: 'Down',
+  ArrowLeft: 'Left',
+  ArrowRight: 'Right',
+  '+': 'Plus',
+  '-': 'Minus',
+};
+
+export function acceleratorFromKeyboardEvent(event: ShortcutKeyEvent): string | null {
+  if (event.repeat) {
+    return null;
+  }
+  if (event.key === 'Backspace' || event.key === 'Escape') {
+    return '';
+  }
+  if (MODIFIER_KEYS.has(event.key)) {
+    return null;
+  }
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+    return null;
+  }
+  const token = KEY_NAMES[event.key]
+    ?? (/^[a-z]$/i.test(event.key) ? event.key.toUpperCase() : null)
+    ?? (/^F\d{1,2}$/.test(event.key) ? event.key : null);
+  if (!token) {
+    return null;
+  }
+  const parts: string[] = [];
+  if (event.ctrlKey || event.metaKey) {
+    parts.push('CommandOrControl');
+  }
+  if (event.altKey) {
+    parts.push('Alt');
+  }
+  if (event.shiftKey) {
+    parts.push('Shift');
+  }
+  parts.push(token);
+  return parts.join('+');
+}
+
+export function formatScreenshotAccelerator(accelerator: string): string {
+  return accelerator.replaceAll('CommandOrControl', 'Ctrl');
+}
+
+export function canAssignScreenshotShortcut(
+  kind: ScreenshotShortcutKind,
+  accelerator: string,
+  config: ScreenshotShortcutConfig,
+): boolean {
+  const resolved = resolveScreenshotShortcuts(config);
+  const taken = (['area', 'monitor', 'window'] as const)
+    .filter((item) => item !== kind)
+    .map((item) => resolved[item])
+    .filter((item): item is string => Boolean(item));
+  const reserved = [config.shortcutStartRecording, config.shortcutStopRecording]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value));
+  return ![...reserved, ...taken].includes(accelerator);
+}
+
 export function resolveScreenshotShortcuts(
   config: ScreenshotShortcutConfig,
 ): ResolvedScreenshotShortcuts {

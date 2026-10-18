@@ -1,6 +1,6 @@
 {
   "name": "shadow-recorder-desktop-example",
-  "version": "0.1.17",
+  "version": "0.1.18",
   "private": true,
   "author": "ReqCase",
   "description": "Electron + React demo for shadow_recorder napi plugin",
@@ -103,14 +103,14 @@
       "icon": "../../ico.ico"
     },
     "nsis": {
-      "artifactName": "${productName} 安装包 ${version}.${ext}",
+      "artifactName": "ShadowRecorder-Setup-${version}-x64.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
     "msi": {
-      "artifactName": "${productName} ${version}.${ext}"
+      "artifactName": "ShadowRecorder-${version}-x64.${ext}"
     }
   },
   "dependencies": {

@@ -395,6 +395,8 @@ const api: ReqCaseShadowRecorderRendererApi = {
 
 contextBridge.exposeInMainWorld('reqcaseShadowRecorder', api);
 
+const pinRequestHandlers = new Set<() => void>();
+
 contextBridge.exposeInMainWorld('screenshotOverlay', {
   confirmSelection: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke('reqcase:screenshot:confirm', rect),
@@ -404,4 +406,29 @@ contextBridge.exposeInMainWorld('screenshotOverlay', {
   saveFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:save', pngBase64),
   pinFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:pin', pngBase64),
   closePin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:close-pin', id),
+  copyPin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:copy-pin', id),
+  savePin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:save-pin', id),
+  onPinRequest: (handler: () => void) => {
+    pinRequestHandlers.add(handler);
+    return () => {
+      pinRequestHandlers.delete(handler);
+    };
+  },
+  beginPinDrag: (id: string, screenX: number, screenY: number) =>
+    ipcRenderer.send('reqcase:screenshot:pin-drag-start', id, screenX, screenY),
+  movePin: (id: string, screenX: number, screenY: number) =>
+    ipcRenderer.send('reqcase:screenshot:pin-drag', id, screenX, screenY),
+  endPinDrag: (id: string) => ipcRenderer.send('reqcase:screenshot:pin-drag-end', id),
+  scalePin: (id: string, deltaY: number, screenX: number, screenY: number) =>
+    ipcRenderer.send('reqcase:screenshot:pin-scale', id, deltaY, screenX, screenY),
+  resetPin: (id: string) => ipcRenderer.send('reqcase:screenshot:pin-reset', id),
+  setPinClickThrough: (id: string, enabled: boolean) =>
+    ipcRenderer.send('reqcase:screenshot:pin-click-through', id, enabled),
+  closeAllPins: () => ipcRenderer.send('reqcase:screenshot:pin-close-all'),
+});
+
+ipcRenderer.on('reqcase:screenshot:pin-request', () => {
+  for (const handler of pinRequestHandlers) {
+    handler();
+  }
 });

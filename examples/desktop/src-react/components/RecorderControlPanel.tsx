@@ -600,7 +600,17 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
               shortcutCaptureWindow: value,
             }))}
           />
-          <p className="settings-field-hint settings-field-span">点一下后按下组合键。退格或 Esc 关闭。不要和开始或停止录制用同一个组合键。</p>
+          <ScreenshotShortcutField
+            label={t('config.shortcutCapturePin')}
+            value={props.config.shortcutCapturePin}
+            fallback={DEFAULT_SCREENSHOT_SHORTCUTS.pin}
+            blocked={(accelerator) => !canAssignScreenshotShortcut('pin', accelerator, props.config)}
+            onChange={(value) => props.setConfig((current) => ({
+              ...current,
+              shortcutCapturePin: value,
+            }))}
+          />
+          <p className="settings-field-hint settings-field-span">点一下后按下组合键。F1 到 F24 可以单独使用，默认 F3 一键贴图。退格或 Esc 关闭。不要和开始或停止录制用同一个组合键。</p>
           <label className="settings-field">
             <span className="settings-field-label">{t('config.screenshotDelay')}</span>
             <select

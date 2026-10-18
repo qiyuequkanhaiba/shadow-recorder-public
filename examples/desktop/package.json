@@ -90,6 +90,10 @@
         "to": "ffmpeg"
       },
       {
+        "from": "../../ico.png",
+        "to": "ico.png"
+      },
+      {
         "from": "../../ico.ico",
         "to": "ico.ico"
       }

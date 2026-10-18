@@ -1,5 +1,7 @@
 #[cfg(windows)]
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::collections::HashMap;
+#[cfg(windows)]
+use std::sync::{LazyLock, Mutex};
 #[cfg(windows)]
 use windows::Win32::Foundation::{FreeLibrary, HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
@@ -13,12 +15,17 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows_core::HRESULT;
 
 #[cfg(windows)]
-static PREV_WNDPROC: AtomicIsize = AtomicIsize::new(0);
+static PREV_WNDPROCS: LazyLock<Mutex<HashMap<isize, isize>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(windows)]
 #[inline]
 unsafe fn call_prev(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    let prev = PREV_WNDPROC.load(Ordering::SeqCst);
+    let key = hwnd.0 as isize;
+    let prev = PREV_WNDPROCS
+        .lock()
+        .ok()
+        .and_then(|map| map.get(&key).copied())
+        .unwrap_or(0);
     if prev != 0 {
         let prev_fn: WNDPROC = unsafe { std::mem::transmute(prev) };
         unsafe { CallWindowProcW(prev_fn, hwnd, msg, wparam, lparam) }
@@ -182,12 +189,16 @@ pub fn protect_floating_toolbar_hwnd(hwnd_val: i64) -> bool {
             if prev == current {
                 return true;
             }
-            PREV_WNDPROC.store(prev, Ordering::SeqCst);
-            let res = SetWindowLongPtrW(
-                hwnd,
-                GWLP_WNDPROC,
-                current,
-            );
+            let key = hwnd.0 as isize;
+            if let Ok(mut map) = PREV_WNDPROCS.lock() {
+                map.insert(key, prev);
+            }
+            let res = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, current);
+            if res == 0 {
+                if let Ok(mut map) = PREV_WNDPROCS.lock() {
+                    map.remove(&key);
+                }
+            }
             res != 0
         }
     }

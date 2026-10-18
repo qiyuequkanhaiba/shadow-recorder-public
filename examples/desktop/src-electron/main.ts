@@ -133,16 +133,19 @@ function removeRendererTarget(target: WebContents): void {
 }
 
 function getIconPath(): string | undefined {
+  const names = process.platform === 'win32' ? ['ico.ico', 'ico.png'] : ['ico.png', 'ico.ico'];
+  const roots: string[] = [];
   if (app.isPackaged && (process as any).resourcesPath) {
-    const packagedIco = path.join((process as any).resourcesPath, 'ico.ico');
-    if (existsSync(packagedIco)) {
-      return packagedIco;
-    }
+    roots.push((process as any).resourcesPath);
   }
-  const repoRoot = path.resolve(__dirname, '../../../../');
-  const icoPath = path.join(repoRoot, 'ico.ico');
-  if (existsSync(icoPath)) {
-    return icoPath;
+  roots.push(path.resolve(__dirname, '../../../../'));
+  for (const root of roots) {
+    for (const name of names) {
+      const candidate = path.join(root, name);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
   }
   return undefined;
 }

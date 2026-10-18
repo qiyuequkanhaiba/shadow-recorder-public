@@ -17,6 +17,7 @@ export function syncScreenshotHotkeys(
     area: resolved.area,
     monitor: resolved.monitor,
     window: resolved.window,
+    pin: resolved.pin,
   };
 
   (Object.keys(next) as ScreenshotShortcutKind[]).forEach((kind) => {

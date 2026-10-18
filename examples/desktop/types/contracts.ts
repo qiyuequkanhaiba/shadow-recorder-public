@@ -220,6 +220,7 @@ export interface RecorderConfigPayload {
   shortcutCaptureArea?: string;
   shortcutCaptureMonitor?: string;
   shortcutCaptureWindow?: string;
+  shortcutCapturePin?: string;
   screenshotDelaySeconds?: number;
   [key: string]: unknown;
 }

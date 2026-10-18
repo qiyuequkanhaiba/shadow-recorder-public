@@ -39,53 +39,168 @@ pub struct ScreenshotCaptureOutput {
 pub fn capture_screenshot(
     request: ScreenshotCaptureRequest,
 ) -> Result<ScreenshotCaptureOutput, String> {
-    let (selection, monitor) = match request.mode.as_str() {
+    let selection = match request.mode.as_str() {
         "monitor" => {
-            let monitor = monitor_rect_at_point(request.x, request.y).map_err(|err| err.to_string())?;
-            (rect_from_bounds(monitor).ok_or("屏幕区域无效")?, monitor)
+            let monitor =
+                monitor_rect_at_point(request.x, request.y).map_err(|err| err.to_string())?;
+            rect_from_bounds(monitor).ok_or("屏幕区域无效")?
         }
         "window" => {
-            let (window, monitor) =
+            let (window, _) =
                 window_rect_at_point(request.x, request.y).map_err(|err| err.to_string())?;
-            (rect_from_bounds(window).ok_or("窗口区域无效")?, monitor)
+            rect_from_bounds(window).ok_or("窗口区域无效")?
         }
         "region" => {
             if request.width == 0 || request.height == 0 {
                 return Err("选区太小".to_string());
             }
-            let selection = ScreenshotRect {
+            ScreenshotRect {
                 x: request.x,
                 y: request.y,
                 width: request.width,
                 height: request.height,
-            };
-            return capture_region_across_monitors(
-                selection,
-                request.privacy_enabled,
-                &request.masks,
-            );
+            }
         }
         _ => return Err("未知截图模式".to_string()),
     };
+    let pixel_count = (selection.width as u64).saturating_mul(selection.height as u64);
+    if pixel_count == 0 {
+        return Err("选区太小".to_string());
+    }
+    if pixel_count > 32_000_000 {
+        return Err("选区太大".to_string());
+    }
+    if let Ok(pixels) = capture_rect_gdi(&selection) {
+        return finish_screenshot(
+            selection,
+            pixels,
+            request.privacy_enabled,
+            &request.masks,
+        );
+    }
+    capture_region_across_monitors(selection, request.privacy_enabled, &request.masks)
+}
 
-    let frame = capture_monitor_bgra_for_screenshot(monitor).map_err(|err| err.to_string())?;
-    let (png, width, height, origin_x, origin_y) = compose_screenshot_png(
-        &frame.bgra,
-        frame.width,
-        frame.height,
-        frame.origin_x,
-        frame.origin_y,
-        selection,
-        request.privacy_enabled,
-        &request.masks,
-    )?;
+fn finish_screenshot(
+    selection: ScreenshotRect,
+    mut pixels: Vec<u8>,
+    privacy_enabled: bool,
+    masks: &[MaskRegion],
+) -> Result<ScreenshotCaptureOutput, String> {
+    let expected = (selection.width as usize)
+        .checked_mul(selection.height as usize)
+        .and_then(|count| count.checked_mul(4))
+        .ok_or("选区太大")?;
+    if pixels.len() < expected {
+        return Err("截图数据不完整".to_string());
+    }
+    pixels.truncate(expected);
+    if privacy_enabled {
+        paint_solid_masks(
+            &mut pixels,
+            selection.width,
+            selection.height,
+            selection.x,
+            selection.y,
+            masks,
+        );
+    }
+    let png = encode_png_from_bgra(&pixels, selection.width, selection.height)?;
     Ok(ScreenshotCaptureOutput {
         png_base64: base64::engine::general_purpose::STANDARD.encode(png),
-        width,
-        height,
-        origin_x,
-        origin_y,
+        width: selection.width,
+        height: selection.height,
+        origin_x: selection.x,
+        origin_y: selection.y,
     })
+}
+
+fn capture_rect_gdi(selection: &ScreenshotRect) -> Result<Vec<u8>, String> {
+    use std::ffi::c_void;
+
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::Graphics::Gdi::{
+        BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, HGDIOBJ,
+        ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
+        SRCCOPY,
+    };
+
+    let width = i32::try_from(selection.width).map_err(|_| "选区太大")?;
+    let height = i32::try_from(selection.height).map_err(|_| "选区太大")?;
+    if width <= 0 || height <= 0 {
+        return Err("选区太小".to_string());
+    }
+
+    unsafe {
+        let desktop = HWND(std::ptr::null_mut());
+        let screen = GetDC(desktop);
+        if screen.is_invalid() {
+            return Err("无法读取屏幕".to_string());
+        }
+        let memory = CreateCompatibleDC(screen);
+        if memory.is_invalid() {
+            let _ = ReleaseDC(desktop, screen);
+            return Err("无法创建截图画布".to_string());
+        }
+        let info = BITMAPINFO {
+            bmiHeader: BITMAPINFOHEADER {
+                biSize: std::mem::size_of::<BITMAPINFOHEADER>() as u32,
+                biWidth: width,
+                biHeight: -height,
+                biPlanes: 1,
+                biBitCount: 32,
+                biCompression: BI_RGB.0,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let mut bits: *mut c_void = std::ptr::null_mut();
+        let bitmap = match CreateDIBSection(
+            memory,
+            &info,
+            DIB_RGB_COLORS,
+            &mut bits,
+            None,
+            0,
+        ) {
+            Ok(bitmap) if !bits.is_null() => bitmap,
+            _ => {
+                let _ = DeleteDC(memory);
+                let _ = ReleaseDC(desktop, screen);
+                return Err("无法创建截图位图".to_string());
+            }
+        };
+        let previous = SelectObject(memory, HGDIOBJ(bitmap.0));
+        let copied = BitBlt(
+            memory,
+            0,
+            0,
+            width,
+            height,
+            screen,
+            selection.x,
+            selection.y,
+            SRCCOPY | CAPTUREBLT,
+        );
+        let byte_len = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(4);
+        let mut pixels = vec![0u8; byte_len];
+        if copied.is_ok() && byte_len > 0 {
+            std::ptr::copy_nonoverlapping(bits as *const u8, pixels.as_mut_ptr(), byte_len);
+            for pixel in pixels.chunks_exact_mut(4) {
+                pixel[3] = 255;
+            }
+        }
+        if !previous.is_invalid() {
+            SelectObject(memory, previous);
+        }
+        let _ = DeleteObject(bitmap);
+        let _ = DeleteDC(memory);
+        let _ = ReleaseDC(desktop, screen);
+        copied.map_err(|err| err.to_string())?;
+        Ok(pixels)
+    }
 }
 
 pub fn clip_rect_to_frame(
@@ -376,7 +491,7 @@ fn rect_from_bounds(rect: crate::dxgi::Rect) -> Option<ScreenshotRect> {
 fn encode_png_from_bgra(bgra: &[u8], width: u32, height: u32) -> Result<Vec<u8>, String> {
     let mut rgba = Vec::with_capacity(bgra.len());
     for pixel in bgra.chunks_exact(4) {
-        rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], pixel[3]]);
+        rgba.extend_from_slice(&[pixel[2], pixel[1], pixel[0], 255]);
     }
     let mut png = Vec::new();
     PngEncoder::new(Cursor::new(&mut png))

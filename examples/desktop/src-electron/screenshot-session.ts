@@ -98,6 +98,14 @@ function virtualDesktopBounds(): ScreenshotRect {
   );
 }
 
+function showExcludedFromCapture(win: BrowserWindow): void {
+  if (win.isDestroyed()) {
+    return;
+  }
+  win.setContentProtection(true);
+  win.show();
+}
+
 function ensureOverlay(): BrowserWindow {
   if (overlay && !overlay.isDestroyed()) {
     return overlay;
@@ -177,7 +185,7 @@ async function runCountdown(seconds: 0 | 3 | 5): Promise<boolean> {
     await win.loadURL(
       `data:text/html;charset=utf-8,${encodeURIComponent(createCountdownHtml())}`,
     );
-    win.show();
+    showExcludedFromCapture(win);
     win.focus();
     for (let remaining = seconds; remaining > 0; remaining -= 1) {
       if (win.isDestroyed() || delayCancelled) {
@@ -265,21 +273,88 @@ function currentPng(override: unknown): Buffer | null {
   return pngFromOverride(override) ?? frozen?.png ?? null;
 }
 
+const pinDrags = new Map<string, { originX: number; originY: number; screenX: number; screenY: number }>();
+const pinHomes = new Map<string, { x: number; y: number; width: number; height: number }>();
+const pinPayloads = new Map<string, Buffer>();
+
+function pinAssetDirectory(): string {
+  const directory = path.join(app.getPath('userData'), 'screenshot-pins');
+  mkdirSync(directory, { recursive: true });
+  return directory;
+}
+
+function forgetPin(id: string): void {
+  pins.delete(id);
+  pinDrags.delete(id);
+  pinHomes.delete(id);
+  pinPayloads.delete(id);
+  const directory = path.join(app.getPath('userData'), 'screenshot-pins');
+  for (const name of [`${id}.png`, `${id}.html`]) {
+    try {
+      unlinkSync(path.join(directory, name));
+    } catch {
+      // The pin file is already gone.
+    }
+  }
+}
+
+function pinWindowSize(size: { width: number; height: number }, scaleFactor: number): { width: number; height: number } {
+  const cursor = screen.getCursorScreenPoint();
+  const area = screen.getDisplayNearestPoint(cursor).workAreaSize;
+  const factor = scaleFactor > 0 ? scaleFactor : 1;
+  const dipWidth = size.width / factor;
+  const dipHeight = size.height / factor;
+  const maxWidth = Math.max(80, area.width - 48);
+  const maxHeight = Math.max(60, area.height - 48);
+  const scale = Math.min(1, maxWidth / Math.max(dipWidth, 1), maxHeight / Math.max(dipHeight, 1));
+  return {
+    width: Math.max(80, Math.round(dipWidth * scale)),
+    height: Math.max(60, Math.round(dipHeight * scale)),
+  };
+}
+
 function openPin(png: Buffer): void {
   const size = nativeImage.createFromBuffer(png).getSize();
-  const scale = Math.min(1, 720 / Math.max(size.width, 1), 520 / Math.max(size.height, 1));
-  const width = Math.max(160, Math.round(size.width * scale));
-  const height = Math.max(120, Math.round(size.height * scale) + 28);
+  if (!size.width || !size.height) {
+    notify('没有可贴上的图片', '这张图片无法显示');
+    return;
+  }
+  const cursor = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(cursor);
+  const { width, height } = pinWindowSize(size, display.scaleFactor || 1);
   const id = `pin-${Date.now()}-${pins.size}`;
-  const win = new BrowserWindow({
+  const home = {
+    x: Math.round(cursor.x - width / 2),
+    y: Math.round(cursor.y - height / 2),
     width,
     height,
+  };
+  const directory = pinAssetDirectory();
+  const imageName = `${id}.png`;
+  writeFileSync(path.join(directory, imageName), png);
+  writeFileSync(path.join(directory, `${id}.html`), createPinHtml(id, imageName));
+  const win = new BrowserWindow({
+    x: home.x,
+    y: home.y,
+    width,
+    height,
+    show: false,
     frame: false,
+    transparent: false,
+    thickFrame: false,
+    roundedCorners: false,
     focusable: true,
     skipTaskbar: true,
     alwaysOnTop: true,
-    resizable: true,
+    resizable: false,
+    movable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    hasShadow: false,
+    autoHideMenuBar: true,
     backgroundColor: '#111111',
+    title: '',
     webPreferences: {
       preload: path.resolve(__dirname, './preload.js'),
       nodeIntegration: false,
@@ -287,14 +362,161 @@ function openPin(png: Buffer): void {
       sandbox: true,
     },
   });
+  win.setTitle('');
+  win.setMenuBarVisibility(false);
+  win.setBackgroundColor('#111111');
   win.setAlwaysOnTop(true, 'floating');
+  win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   pins.set(id, win);
+  pinHomes.set(id, home);
+  pinPayloads.set(id, png);
   win.on('closed', () => {
-    pins.delete(id);
+    forgetPin(id);
   });
-  void win.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(createPinHtml(id, png.toString('base64')))}`,
+  win.once('ready-to-show', () => {
+    if (win.isDestroyed()) {
+      return;
+    }
+    win.show();
+    win.focus();
+  });
+  void win.loadFile(path.join(directory, `${id}.html`));
+}
+
+export async function copyPinnedScreenshot(id: string): Promise<{ ok: boolean; message: string }> {
+  const png = pinPayloads.get(id);
+  if (!png) {
+    return { ok: false, message: '没有可复制的截图' };
+  }
+  copyPng(png);
+  notify('截图已复制', '图片在剪贴板里');
+  return { ok: true, message: '已复制' };
+}
+
+export async function savePinnedScreenshot(id: string): Promise<{ ok: boolean; message: string }> {
+  const png = pinPayloads.get(id);
+  const win = pins.get(id);
+  if (!png) {
+    return { ok: false, message: '没有可保存的截图' };
+  }
+  const stamp = new Date();
+  const pad = (value: number) => String(value).padStart(2, '0');
+  const fileName = `截图-${stamp.getFullYear()}${pad(stamp.getMonth() + 1)}${pad(stamp.getDate())}-${pad(stamp.getHours())}${pad(stamp.getMinutes())}${pad(stamp.getSeconds())}.png`;
+  const options = {
+    defaultPath: path.join(app.getPath('pictures'), fileName),
+    filters: [{ name: 'PNG', extensions: ['png'] }],
+  };
+  const result = win && !win.isDestroyed()
+    ? await dialog.showSaveDialog(win, options)
+    : await dialog.showSaveDialog(options);
+  if (result.canceled || !result.filePath) {
+    return { ok: false, message: '已取消保存' };
+  }
+  try {
+    mkdirSync(path.dirname(result.filePath), { recursive: true });
+    writeFileSync(result.filePath, png);
+  } catch (error: unknown) {
+    return { ok: false, message: error instanceof Error ? error.message : '保存失败' };
+  }
+  notify('截图已保存', result.filePath);
+  return { ok: true, message: '已保存' };
+}
+
+export function beginPinnedDrag(id: string, screenX: number, screenY: number): void {
+  const win = pins.get(id);
+  if (!win || win.isDestroyed() || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+    return;
+  }
+  const [originX, originY] = win.getPosition();
+  pinDrags.set(id, { originX, originY, screenX, screenY });
+}
+
+export function movePinnedScreenshot(id: string, screenX: number, screenY: number): void {
+  const win = pins.get(id);
+  const drag = pinDrags.get(id);
+  if (!win || win.isDestroyed() || !drag || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+    return;
+  }
+  win.setPosition(
+    Math.round(drag.originX + screenX - drag.screenX),
+    Math.round(drag.originY + screenY - drag.screenY),
   );
+}
+
+export function endPinnedDrag(id: string): void {
+  pinDrags.delete(id);
+}
+
+export function scalePinnedScreenshot(id: string, deltaY: number, screenX: number, screenY: number): void {
+  const win = pins.get(id);
+  const home = pinHomes.get(id);
+  if (!win || win.isDestroyed() || !home || !Number.isFinite(deltaY) || !Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+    return;
+  }
+  const bounds = win.getBounds();
+  const factor = deltaY > 0 ? 0.9 : 1.1;
+  const nextWidth = Math.max(80, Math.min(2400, Math.round(bounds.width * factor)));
+  const nextHeight = Math.max(48, Math.round(nextWidth * home.height / Math.max(1, home.width)));
+  const ratioX = bounds.width > 0 ? (screenX - bounds.x) / bounds.width : 0.5;
+  const ratioY = bounds.height > 0 ? (screenY - bounds.y) / bounds.height : 0.5;
+  win.setBounds({
+    x: Math.round(screenX - ratioX * nextWidth),
+    y: Math.round(screenY - ratioY * nextHeight),
+    width: nextWidth,
+    height: nextHeight,
+  });
+}
+
+export function resetPinnedScreenshot(id: string): void {
+  const win = pins.get(id);
+  const home = pinHomes.get(id);
+  if (!win || win.isDestroyed() || !home) {
+    return;
+  }
+  win.setIgnoreMouseEvents(false);
+  win.setBounds(home);
+}
+
+export function setPinnedClickThrough(id: string, enabled: boolean): void {
+  const win = pins.get(id);
+  if (!win || win.isDestroyed()) {
+    return;
+  }
+  win.setIgnoreMouseEvents(enabled, { forward: true });
+}
+
+export function closeAllPinnedScreenshots(): void {
+  for (const win of [...pins.values()]) {
+    if (!win.isDestroyed()) {
+      win.close();
+    }
+  }
+}
+
+export function pinQuickScreenshot(): void {
+  if (overlay && !overlay.isDestroyed() && overlay.isVisible() && frozen) {
+    overlay.webContents.send('reqcase:screenshot:pin-request');
+    return;
+  }
+  const image = clipboard.readImage();
+  if (!image.isEmpty()) {
+    const png = image.toPNG();
+    if (png.length > 32) {
+      rememberScreenshot(png);
+      openPin(png);
+      return;
+    }
+  }
+  const latest = listScreenshotHistory()[0];
+  if (latest) {
+    try {
+      openPin(readFileSync(latest.filePath));
+      return;
+    } catch (error: unknown) {
+      console.warn('Failed to pin latest screenshot', error);
+    }
+  }
+  notify('没有可贴上的图片', '先截一张图，或复制一张图片后再按贴图快捷键');
 }
 
 async function grab(request: {
@@ -341,7 +563,7 @@ export async function beginAreaScreenshot(
   readPrivacy = readConfig;
   closeOverlay();
   const window = ensureOverlay();
-  window.show();
+  showExcludedFromCapture(window);
   window.focus();
 }
 
@@ -397,7 +619,7 @@ export async function confirmAreaSelection(value: unknown): Promise<{
     const captured = await grab({ mode: 'region', ...physical });
     frozen = { png: captured.png, dip: local };
     if (!window.isDestroyed()) {
-      window.show();
+      showExcludedFromCapture(window);
       window.focus();
     }
     return {
@@ -410,7 +632,7 @@ export async function confirmAreaSelection(value: unknown): Promise<{
     };
   } catch (error: unknown) {
     if (!window.isDestroyed()) {
-      window.show();
+      showExcludedFromCapture(window);
       window.focus();
     }
     return { ok: false, message: error instanceof Error ? error.message : '截图失败' };
@@ -497,7 +719,7 @@ export async function saveFrozenScreenshot(override?: unknown): Promise<{ ok: bo
   });
   if (result.canceled || !result.filePath) {
     if (overlay && !overlay.isDestroyed()) {
-      overlay.show();
+      showExcludedFromCapture(overlay);
       overlay.focus();
     }
     return { ok: false, message: '已取消保存' };
@@ -507,7 +729,7 @@ export async function saveFrozenScreenshot(override?: unknown): Promise<{ ok: bo
     writeFileSync(result.filePath, png);
   } catch (error: unknown) {
     if (overlay && !overlay.isDestroyed()) {
-      overlay.show();
+      showExcludedFromCapture(overlay);
       overlay.focus();
     }
     return { ok: false, message: error instanceof Error ? error.message : '保存失败' };

@@ -2,6 +2,7 @@ export const DEFAULT_SCREENSHOT_SHORTCUTS = {
   area: 'CommandOrControl+Shift+A',
   monitor: 'CommandOrControl+Shift+F',
   window: 'CommandOrControl+Shift+W',
+  pin: 'F3',
 } as const;
 
 export type ScreenshotShortcutKind = keyof typeof DEFAULT_SCREENSHOT_SHORTCUTS;
@@ -12,12 +13,14 @@ export type ScreenshotShortcutConfig = {
   shortcutCaptureArea?: string;
   shortcutCaptureMonitor?: string;
   shortcutCaptureWindow?: string;
+  shortcutCapturePin?: string;
 };
 
 export type ResolvedScreenshotShortcuts = {
   area: string | null;
   monitor: string | null;
   window: string | null;
+  pin: string | null;
   rejected: string[];
 };
 
@@ -69,7 +72,8 @@ export function acceleratorFromKeyboardEvent(event: ShortcutKeyEvent): string | 
   if (MODIFIER_KEYS.has(event.key)) {
     return null;
   }
-  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
+  const bareFunctionKey = /^F(?:[1-9]|1\d|2[0-4])$/.test(event.key);
+  if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && !bareFunctionKey) {
     return null;
   }
   const token = KEY_NAMES[event.key]
@@ -102,7 +106,7 @@ export function canAssignScreenshotShortcut(
   config: ScreenshotShortcutConfig,
 ): boolean {
   const resolved = resolveScreenshotShortcuts(config);
-  const taken = (['area', 'monitor', 'window'] as const)
+  const taken = (['area', 'monitor', 'window', 'pin'] as const)
     .filter((item) => item !== kind)
     .map((item) => resolved[item])
     .filter((item): item is string => Boolean(item));
@@ -139,6 +143,7 @@ export function resolveScreenshotShortcuts(
     area: take(config.shortcutCaptureArea, DEFAULT_SCREENSHOT_SHORTCUTS.area),
     monitor: take(config.shortcutCaptureMonitor, DEFAULT_SCREENSHOT_SHORTCUTS.monitor),
     window: take(config.shortcutCaptureWindow, DEFAULT_SCREENSHOT_SHORTCUTS.window),
+    pin: take(config.shortcutCapturePin, DEFAULT_SCREENSHOT_SHORTCUTS.pin),
     rejected,
   };
 }

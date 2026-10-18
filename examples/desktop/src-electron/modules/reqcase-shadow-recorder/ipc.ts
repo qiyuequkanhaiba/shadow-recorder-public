@@ -5,16 +5,26 @@ import {
   cancelAreaScreenshot,
   cancelScreenshotDelay,
   captureInstantScreenshot,
+  beginPinnedDrag,
+  closeAllPinnedScreenshots,
   closePinnedScreenshot,
+  endPinnedDrag,
+  movePinnedScreenshot,
   confirmAreaSelection,
   copyFrozenScreenshot,
+  copyPinnedScreenshot,
   listScreenshotHistory,
   pinFrozenScreenshot,
+  pinQuickScreenshot,
+  resetPinnedScreenshot,
+  scalePinnedScreenshot,
+  setPinnedClickThrough,
   pinScreenshotHistory,
   revealScreenshotHistory,
   saveFrozenScreenshot,
+  savePinnedScreenshot,
 } from '../../screenshot-session';
-import type { IpcMainInvokeEvent, WebContents } from 'electron';
+import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron';
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 
@@ -605,6 +615,9 @@ export function registerReqCaseShadowRecorderIpc(
       window: () => {
         void captureInstantScreenshot('window', () => runtimeSettings.config);
       },
+      pin: () => {
+        pinQuickScreenshot();
+      },
     });
     if (rejected.length > 0) {
       console.warn('Skipped conflicting screenshot shortcuts', rejected);
@@ -625,10 +638,62 @@ export function registerReqCaseShadowRecorderIpc(
   handleTrusted('reqcase:screenshot:copy', async (_event, pngBase64: unknown) => copyFrozenScreenshot(pngBase64));
   handleTrusted('reqcase:screenshot:save', async (_event, pngBase64: unknown) => saveFrozenScreenshot(pngBase64));
   handleTrusted('reqcase:screenshot:pin', async (_event, pngBase64: unknown) => pinFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:copy-pin', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '没有可复制的截图' };
+    }
+    return copyPinnedScreenshot(id);
+  });
+  handleTrusted('reqcase:screenshot:save-pin', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '没有可保存的截图' };
+    }
+    return savePinnedScreenshot(id);
+  });
   handleTrusted('reqcase:screenshot:close-pin', async (_event, id: unknown) => {
     if (typeof id === 'string') {
       closePinnedScreenshot(id);
     }
+  });
+  const onTrusted = (channel: string, handler: (event: IpcMainEvent, ...args: unknown[]) => void): void => {
+    ipcMain.on(channel, (event, ...args) => {
+      try {
+        assertTrustedSender(event.sender);
+      } catch {
+        return;
+      }
+      handler(event, ...args);
+    });
+  };
+  const pinPoint = (screenX: unknown, screenY: unknown): [number, number] | null => {
+    if (typeof screenX !== 'number' || typeof screenY !== 'number') {
+      return null;
+    }
+    return [screenX, screenY];
+  };
+  onTrusted('reqcase:screenshot:pin-drag-start', (_event, id, screenX, screenY) => {
+    const point = typeof id === 'string' ? pinPoint(screenX, screenY) : null;
+    if (point) beginPinnedDrag(id as string, point[0], point[1]);
+  });
+  onTrusted('reqcase:screenshot:pin-drag', (_event, id, screenX, screenY) => {
+    const point = typeof id === 'string' ? pinPoint(screenX, screenY) : null;
+    if (point) movePinnedScreenshot(id as string, point[0], point[1]);
+  });
+  onTrusted('reqcase:screenshot:pin-drag-end', (_event, id) => {
+    if (typeof id === 'string') endPinnedDrag(id);
+  });
+  onTrusted('reqcase:screenshot:pin-scale', (_event, id, deltaY, screenX, screenY) => {
+    const point = typeof id === 'string' ? pinPoint(screenX, screenY) : null;
+    if (point && typeof deltaY === 'number') scalePinnedScreenshot(id as string, deltaY, point[0], point[1]);
+  });
+  onTrusted('reqcase:screenshot:pin-reset', (_event, id) => {
+    if (typeof id === 'string') resetPinnedScreenshot(id);
+  });
+  onTrusted('reqcase:screenshot:pin-click-through', (_event, id, enabled) => {
+    if (typeof id === 'string') setPinnedClickThrough(id, enabled === true);
+  });
+  onTrusted('reqcase:screenshot:pin-close-all', () => {
+    closeAllPinnedScreenshots();
   });
   handleTrusted('reqcase:screenshot:list-history', async () => listScreenshotHistory());
   handleTrusted('reqcase:screenshot:pin-history', async (_event, id: unknown) => {

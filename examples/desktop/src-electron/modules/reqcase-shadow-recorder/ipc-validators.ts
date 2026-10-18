@@ -58,6 +58,9 @@ export const RecorderConfigSchema = z.object({
   defectPostWindowSeconds: optionalFiniteNumber,
   shortcutStartRecording: z.string().optional(),
   shortcutStopRecording: z.string().optional(),
+  shortcutCaptureArea: z.string().optional(),
+  shortcutCaptureMonitor: z.string().optional(),
+  shortcutCaptureWindow: z.string().optional(),
 }).passthrough() satisfies z.ZodType<ReqCaseShadowRecorderConfig>;
 
 export const RecorderSettingsSchema = z.object({

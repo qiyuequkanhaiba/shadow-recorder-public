@@ -197,6 +197,7 @@ export type ReqCaseShadowRecorderRendererApi = {
   unsubscribeMetrics: () => Promise<void>;
   onMetrics: (handler: (metrics: ReqCaseShadowRecorderMetrics) => void) => () => void;
   setConfig: (config: ReqCaseShadowRecorderConfig) => Promise<void>;
+  beginAreaScreenshot?: () => Promise<void>;
   clearBuffer: () => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
@@ -328,6 +329,7 @@ const api: ReqCaseShadowRecorderRendererApi = {
     };
   },
   setConfig: (config) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.setConfig, config),
+  beginAreaScreenshot: () => ipcRenderer.invoke('reqcase:screenshot:begin-area'),
   getBuffer: () => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getBuffer),
   getBufferPage: (cursor, limit, includeImage) =>
     ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getBufferPage, {
@@ -382,3 +384,11 @@ const api: ReqCaseShadowRecorderRendererApi = {
 };
 
 contextBridge.exposeInMainWorld('reqcaseShadowRecorder', api);
+
+contextBridge.exposeInMainWorld('screenshotOverlay', {
+  confirmSelection: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke('reqcase:screenshot:confirm', rect),
+  cancel: () => ipcRenderer.invoke('reqcase:screenshot:cancel'),
+  copyFrozen: () => ipcRenderer.invoke('reqcase:screenshot:copy'),
+  saveFrozen: () => ipcRenderer.invoke('reqcase:screenshot:save'),
+});

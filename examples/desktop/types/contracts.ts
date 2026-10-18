@@ -217,6 +217,9 @@ export interface RecorderConfigPayload {
   maskRegions?: RecorderMaskRegionPayload[];
   shortcutStartRecording?: string;
   shortcutStopRecording?: string;
+  shortcutCaptureArea?: string;
+  shortcutCaptureMonitor?: string;
+  shortcutCaptureWindow?: string;
   [key: string]: unknown;
 }
 

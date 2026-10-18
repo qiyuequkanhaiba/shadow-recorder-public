@@ -28,6 +28,7 @@
     "test:export-progress": "tsx scripts/export-progress-test.ts",
     "test:studio-segment-window": "tsx scripts/studio-segment-window-test.ts",
     "test:playback-review": "tsx scripts/playback-review-test.ts",
+    "test:screenshot-capture": "tsx scripts/screenshot-capture-test.ts",
     "test:evidence-manifest-v2": "tsx scripts/evidence-manifest-v2-test.ts && tsx scripts/evidence-export-manifest-v2-test.ts",
     "test:recording-smoke": "tsx scripts/recording-smoke-metadata-test.ts && tsx scripts/recording-smoke-test.ts",
     "test:encoding-benchmark": "tsx scripts/encoding-benchmark-test.ts",

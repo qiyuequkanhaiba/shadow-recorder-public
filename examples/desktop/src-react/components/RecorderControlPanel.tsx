@@ -11,6 +11,7 @@ import {
   resolveSegmentDurationSeconds,
 } from '../../types/recording-defaults';
 import { DEFAULT_BUFFER_BYTES } from '../lib/tuning-advisor';
+import { DEFAULT_SCREENSHOT_SHORTCUTS } from '../../src-electron/screenshot-capture';
 import { t } from '../lib/i18n';
 import type { VideoEncoderSummary } from '../lib/video-encoder-summary';
 
@@ -503,6 +504,58 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
               }
             />
           </label>
+          <label className="settings-field settings-field-grow">
+            <span className="settings-field-label">{t('config.shortcutCaptureArea')}</span>
+            <input
+              type="text"
+              placeholder={DEFAULT_SCREENSHOT_SHORTCUTS.area}
+              value={props.config.shortcutCaptureArea ?? DEFAULT_SCREENSHOT_SHORTCUTS.area}
+              onChange={(event) =>
+                props.setConfig((current) => ({
+                  ...current,
+                  shortcutCaptureArea: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="settings-field settings-field-grow">
+            <span className="settings-field-label">{t('config.shortcutCaptureMonitor')}</span>
+            <input
+              type="text"
+              placeholder={DEFAULT_SCREENSHOT_SHORTCUTS.monitor}
+              value={props.config.shortcutCaptureMonitor ?? DEFAULT_SCREENSHOT_SHORTCUTS.monitor}
+              onChange={(event) =>
+                props.setConfig((current) => ({
+                  ...current,
+                  shortcutCaptureMonitor: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className="settings-field settings-field-grow">
+            <span className="settings-field-label">{t('config.shortcutCaptureWindow')}</span>
+            <input
+              type="text"
+              placeholder={DEFAULT_SCREENSHOT_SHORTCUTS.window}
+              value={props.config.shortcutCaptureWindow ?? DEFAULT_SCREENSHOT_SHORTCUTS.window}
+              onChange={(event) =>
+                props.setConfig((current) => ({
+                  ...current,
+                  shortcutCaptureWindow: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <p className="settings-field-hint">留空表示关闭。不要和开始或停止录制用同一个组合键。</p>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              void window.reqcaseShadowRecorder.beginAreaScreenshot?.();
+            }}
+          >
+            框选截图
+          </button>
         </div>
       </section>
       ) : null}

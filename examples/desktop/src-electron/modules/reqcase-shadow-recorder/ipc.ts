@@ -1,4 +1,13 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Notification as ElectronNotification } from 'electron';
+import { syncScreenshotHotkeys } from '../../screenshot-hotkeys';
+import {
+  beginAreaScreenshot,
+  cancelAreaScreenshot,
+  captureInstantScreenshot,
+  confirmAreaSelection,
+  copyFrozenScreenshot,
+  saveFrozenScreenshot,
+} from '../../screenshot-session';
 import type { IpcMainInvokeEvent, WebContents } from 'electron';
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
@@ -529,6 +538,14 @@ export function registerReqCaseShadowRecorderIpc(
     }
   };
 
+  let runtimeSettings = sanitizeRecorderSettings(loadRecorderSettings());
+  runtimeSettings = {
+    ...runtimeSettings,
+    config: {
+      ...DEFAULT_BASELINE_CONFIG,
+      ...(runtimeSettings.config ?? {}),
+    },
+  };
   const updateShortcuts = (config: ReqCaseShadowRecorderConfig): void => {
     const nextStartShortcut = config.shortcutStartRecording?.trim() || null;
     const nextStopShortcut = config.shortcutStopRecording?.trim() || null;
@@ -569,19 +586,38 @@ export function registerReqCaseShadowRecorderIpc(
         console.error('Failed to register stop shortcut', error);
       }
     }
+
+    const rejected = syncScreenshotHotkeys(config, {
+      area: () => {
+        void beginAreaScreenshot(() => runtimeSettings.config).catch((error: unknown) => {
+          console.error('area screenshot failed', error);
+        });
+      },
+      monitor: () => {
+        void captureInstantScreenshot('monitor', () => runtimeSettings.config);
+      },
+      window: () => {
+        void captureInstantScreenshot('window', () => runtimeSettings.config);
+      },
+    });
+    if (rejected.length > 0) {
+      console.warn('Skipped conflicting screenshot shortcuts', rejected);
+    }
   };
 
-  let runtimeSettings = sanitizeRecorderSettings(loadRecorderSettings());
-  runtimeSettings = {
-    ...runtimeSettings,
-    config: {
-      ...DEFAULT_BASELINE_CONFIG,
-      ...(runtimeSettings.config ?? {}),
-    },
-  };
   if (runtimeSettings.config) {
     updateShortcuts(runtimeSettings.config);
   }
+
+  handleTrusted('reqcase:screenshot:confirm', async (_event, rect: unknown) => confirmAreaSelection(rect));
+  handleTrusted('reqcase:screenshot:cancel', async () => {
+    cancelAreaScreenshot();
+  });
+  handleTrusted('reqcase:screenshot:copy', async () => copyFrozenScreenshot());
+  handleTrusted('reqcase:screenshot:save', async () => saveFrozenScreenshot());
+  handleTrusted('reqcase:screenshot:begin-area', async () => {
+    await beginAreaScreenshot(() => runtimeSettings.config);
+  });
 
   const metricsSubscribers = new Set<WebContents>();
   let metricsTimer: NodeJS.Timeout | null = null;

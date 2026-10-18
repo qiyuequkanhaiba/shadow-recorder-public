@@ -1067,7 +1067,7 @@ export function registerReqCaseShadowRecorderIpc(
       const canceled = /cancel/i.test(message);
       emitProgress({
         percent: 0,
-        message: canceled ? '已取消导出' : '导出失败',
+        message: canceled ? '已取消导出' : (message || '导出失败'),
         status: canceled ? 'canceled' : 'failed',
       });
       throw error;

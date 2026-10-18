@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { resolveStudioSegmentLimit, STUDIO_SEGMENT_LIMIT } from '../src-react/lib/studio-segment-window.ts';
+import { resolveStudioSegmentLimit, STUDIO_SEGMENT_LIMIT } from '../src-react/lib/studio-segment-window';
 
 assert.equal(STUDIO_SEGMENT_LIMIT, 2000);
 
@@ -21,7 +21,6 @@ assert.equal(resolveStudioSegmentLimit({
   bufferWindowSeconds: 30,
   segmentDurationSeconds: 5,
   historyRetentionMode: 'age',
-  historyRetentionHours: 24,
 }), 2000);
 
 assert.ok(resolveStudioSegmentLimit(null) > 72);

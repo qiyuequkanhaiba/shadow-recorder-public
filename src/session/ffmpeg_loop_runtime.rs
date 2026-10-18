@@ -451,7 +451,9 @@ fn run_ffmpeg_loop(
                 continue;
             }
 
-            let capture_target = match resolve_capture_target(state) {
+            let pin_window_origin = active_session.video_privacy_enabled
+                && !active_session.video_privacy_masks.is_empty();
+            let capture_target = match resolve_capture_target(state, pin_window_origin) {
                 Ok(target) => target,
                 Err(err) => {
                     if let Some(mut run) = active_runs[index].take() {
@@ -620,11 +622,99 @@ fn apply_recording_profile_to_stream(
     changed
 }
 
+fn window_capture_identity(
+    hwnd: &str,
+    width: u32,
+    height: u32,
+    origin: Option<(i32, i32)>,
+) -> String {
+    match origin {
+        Some((x, y)) => format!("window:{hwnd}:{width}:{height}:{x}:{y}"),
+        None => format!("window:{hwnd}:{width}:{height}"),
+    }
+}
+
+fn gdigrab_title_input(title: Option<&str>) -> Option<String> {
+    let title = title?.trim();
+    if title.is_empty() || title.chars().any(|ch| ch.is_control()) {
+        return None;
+    }
+    Some(format!("title={title}"))
+}
+
+fn gdigrab_hwnd_input(hwnd: Option<&str>) -> Option<String> {
+    let hwnd = hwnd?.trim();
+    let digits = hwnd
+        .strip_prefix("0x")
+        .or_else(|| hwnd.strip_prefix("0X"))
+        .unwrap_or(hwnd);
+    let nonzero = !digits.is_empty()
+        && digits.chars().all(|ch| ch.is_ascii_hexdigit())
+        && digits.chars().any(|ch| ch != '0');
+    if nonzero {
+        Some(format!("hwnd={hwnd}"))
+    } else {
+        None
+    }
+}
+
+fn gdigrab_window_input(hwnd: Option<&str>, title: Option<&str>) -> Option<String> {
+    gdigrab_hwnd_input(hwnd).or_else(|| gdigrab_title_input(title))
+}
+
+fn resolve_window_capture_input(
+    follow_window: bool,
+    hwnd: Option<&str>,
+    title: Option<&str>,
+) -> String {
+    if follow_window {
+        gdigrab_window_input(hwnd, title).unwrap_or_else(|| "desktop".to_string())
+    } else {
+        "desktop".to_string()
+    }
+}
+
+fn capture_input_follows_window(capture_input: &str) -> bool {
+    capture_input.starts_with("hwnd=") || capture_input.starts_with("title=")
+}
+
+fn capture_output_filters(capture_input: &str, privacy_filter: Option<String>) -> Option<String> {
+    let mut filters = Vec::new();
+    if capture_input_follows_window(capture_input) {
+        filters.push("crop=trunc(iw/2)*2:trunc(ih/2)*2".to_string());
+    }
+    if let Some(filter) = privacy_filter.filter(|value| !value.is_empty()) {
+        filters.push(filter);
+    }
+    if filters.is_empty() {
+        None
+    } else {
+        Some(filters.join(","))
+    }
+}
+
+fn window_capture_origin(
+    pin_window_origin: bool,
+    hwnd: Option<&str>,
+    title: Option<&str>,
+    x: i32,
+    y: i32,
+) -> Option<(i32, i32)> {
+    if pin_window_origin || gdigrab_window_input(hwnd, title).is_none() {
+        Some((x, y))
+    } else {
+        None
+    }
+}
+
 fn resolve_capture_target(
     state: &mut StreamRuntimeState,
+    pin_window_origin: bool,
 ) -> Result<CaptureTarget, FfmpegLoopRuntimeError> {
     match state.stream.target_capture_mode.as_str() {
-        "foreground_window" | "target_window" => resolve_foreground_window_target(state),
+        "foreground_window" | "target_window" => {
+            resolve_foreground_window_target(state, pin_window_origin)
+        }
         _ => resolve_display_capture_target(&state.stream),
     }
 }
@@ -662,10 +752,11 @@ fn resolve_display_capture_target(
 
 fn resolve_foreground_window_target(
     state: &mut StreamRuntimeState,
+    pin_window_origin: bool,
 ) -> Result<CaptureTarget, FfmpegLoopRuntimeError> {
     let context = get_active_window_context().map_err(|err| io::Error::other(err.to_string()))?;
     if is_ignored_foreground_process(&context.process_name) {
-        return build_last_known_window_target(state).ok_or_else(|| {
+        return build_last_known_window_target(state, pin_window_origin).ok_or_else(|| {
             FfmpegLoopRuntimeError::Io(io::Error::other(format!(
                 "foreground window '{}' is ignored for capture",
                 context.process_name
@@ -711,14 +802,17 @@ fn resolve_foreground_window_target(
     state.last_process_name = process_name.clone();
 
     Ok(CaptureTarget::Window {
-        identity: format!(
-            "foreground:{}:{}:{}:{}:{}:{}",
-            context.hwnd as usize,
-            context.display_id,
-            capture_rect.0,
-            capture_rect.1,
+        identity: window_capture_identity(
+            state.last_window_hwnd.as_deref().unwrap_or_default(),
             width,
-            height
+            height,
+            window_capture_origin(
+                pin_window_origin,
+                state.last_window_hwnd.as_deref(),
+                window_title.as_deref(),
+                capture_rect.0,
+                capture_rect.1,
+            ),
         ),
         display_id,
         window_hwnd: state.last_window_hwnd.clone().unwrap_or_default(),
@@ -797,28 +891,36 @@ fn is_ignored_foreground_process(process_name: &str) -> bool {
     matches!(normalized.as_str(), "ffmpeg.exe" | "ffmpeg")
 }
 
-fn build_last_known_window_target(state: &StreamRuntimeState) -> Option<CaptureTarget> {
+fn build_last_known_window_target(
+    state: &StreamRuntimeState,
+    pin_window_origin: bool,
+) -> Option<CaptureTarget> {
     let window_hwnd = state.last_window_hwnd.clone()?;
     let width = state.stream.width?;
     let height = state.stream.height?;
     let display_id = state.stream.display_id.clone();
+    let offset_x = state.stream.monitor_left.unwrap_or(0);
+    let offset_y = state.stream.monitor_top.unwrap_or(0);
 
     Some(CaptureTarget::Window {
-        identity: format!(
-            "foreground:{}:{}:{}:{}:{}:{}",
-            window_hwnd,
-            display_id.as_deref().unwrap_or("unknown"),
-            state.stream.monitor_left.unwrap_or(0),
-            state.stream.monitor_top.unwrap_or(0),
+        identity: window_capture_identity(
+            &window_hwnd,
             width,
-            height
+            height,
+            window_capture_origin(
+                pin_window_origin,
+                Some(window_hwnd.as_str()),
+                state.last_window_title.as_deref(),
+                offset_x,
+                offset_y,
+            ),
         ),
         display_id,
         window_hwnd,
         window_title: state.last_window_title.clone(),
         process_name: state.last_process_name.clone(),
-        offset_x: state.stream.monitor_left.unwrap_or(0),
-        offset_y: state.stream.monitor_top.unwrap_or(0),
+        offset_x,
+        offset_y,
         width,
         height,
     })
@@ -910,7 +1012,11 @@ fn spawn_capture_run(
             offset_y,
             ..
         } => (
-            "desktop".to_string(),
+            resolve_window_capture_input(
+                !(session.video_privacy_enabled && !session.video_privacy_masks.is_empty()),
+                Some(window_hwnd.as_str()),
+                window_title.as_deref(),
+            ),
             Some(window_hwnd.clone()),
             window_title.clone(),
             process_name.clone(),
@@ -972,13 +1078,16 @@ fn spawn_capture_run(
         &offset_y,
         &video_size,
     );
-    if let Some(filter) = crate::privacy::build_video_privacy_drawbox_filter(
-        session.video_privacy_enabled,
-        &session.video_privacy_masks,
-        manifest.offset_x,
-        manifest.offset_y,
-        target.width(),
-        target.height(),
+    if let Some(filter) = capture_output_filters(
+        &manifest.capture_input,
+        crate::privacy::build_video_privacy_drawbox_filter(
+            session.video_privacy_enabled,
+            &session.video_privacy_masks,
+            manifest.offset_x,
+            manifest.offset_y,
+            target.width(),
+            target.height(),
+        ),
     ) {
         input_args.push("-vf".to_string());
         input_args.push(filter);
@@ -1039,10 +1148,13 @@ fn build_gdigrab_input_args(
         gdigrab_draw_mouse_value(manifest.show_mouse_in_video).to_string(),
     ];
 
-    if matches!(
-        target,
-        CaptureTarget::DesktopRegion { .. } | CaptureTarget::Window { .. }
-    ) {
+    let capture_follows_window = capture_input_follows_window(&manifest.capture_input);
+    if !capture_follows_window
+        && matches!(
+            target,
+            CaptureTarget::DesktopRegion { .. } | CaptureTarget::Window { .. }
+        )
+    {
         args.extend([
             "-offset_x".to_string(),
             offset_x.to_string(),
@@ -1654,7 +1766,9 @@ mod tests {
     use super::{
         CaptureTarget, FfmpegCaptureRunManifest, StreamRuntimeState,
         apply_recording_profile_to_stream, build_gdigrab_input_args,
-        build_last_known_window_target, compute_max_segments, is_ignored_foreground_process,
+        build_last_known_window_target, capture_output_filters, compute_max_segments,
+        gdigrab_title_input, gdigrab_window_input, resolve_window_capture_input,
+        is_ignored_foreground_process,
         normalize_even_capture_size, normalize_foreground_capture_rect,
         recover_ffmpeg_loop_segments, should_use_ffmpeg_loop,
         age_segment_file_for_retention_test,
@@ -1747,9 +1861,10 @@ mod tests {
         };
 
         assert!(is_ignored_foreground_process("ffmpeg.exe"));
-        let target = build_last_known_window_target(&state).expect("fallback target");
+        let target = build_last_known_window_target(&state, false).expect("fallback target");
         match target {
             super::CaptureTarget::Window {
+                identity,
                 window_hwnd,
                 window_title,
                 process_name,
@@ -1757,6 +1872,7 @@ mod tests {
                 offset_y,
                 ..
             } => {
+                assert_eq!(identity, "window:0x100:1920:1080");
                 assert_eq!(window_hwnd, "0x100");
                 assert_eq!(window_title.as_deref(), Some("Codex"));
                 assert_eq!(process_name.as_deref(), Some("Codex.exe"));
@@ -1765,6 +1881,14 @@ mod tests {
             }
             _ => panic!("expected window target"),
         }
+
+        let mut moved = state;
+        moved.stream.monitor_left = Some(640);
+        moved.stream.monitor_top = Some(120);
+        let moved_target = build_last_known_window_target(&moved, false).expect("moved target");
+        assert_eq!(moved_target.identity(), "window:0x100:1920:1080");
+        let pinned = build_last_known_window_target(&moved, true).expect("pinned target");
+        assert_eq!(pinned.identity(), "window:0x100:1920:1080:640:120");
     }
 
     #[test]
@@ -1969,6 +2093,92 @@ mod tests {
             Some("0")
         );
         assert!(args.windows(2).any(|window| window == ["-i", "desktop"]));
+    }
+
+    #[test]
+    fn gdigrab_title_input_rejects_blank_and_control_characters() {
+        assert_eq!(gdigrab_title_input(None), None);
+        assert_eq!(gdigrab_title_input(Some("  ")), None);
+        assert_eq!(gdigrab_title_input(Some("a\nb")), None);
+        assert_eq!(
+            gdigrab_title_input(Some(" Codex ")).as_deref(),
+            Some("title=Codex")
+        );
+    }
+
+    #[test]
+    fn gdigrab_window_input_prefers_hwnd() {
+        assert_eq!(
+            gdigrab_window_input(Some("0x100"), Some("Codex")).as_deref(),
+            Some("hwnd=0x100")
+        );
+        assert_eq!(
+            gdigrab_window_input(Some("0x0"), Some(" Codex ")).as_deref(),
+            Some("title=Codex")
+        );
+        assert_eq!(gdigrab_window_input(Some("0x100"), Some("a\nb")).as_deref(), Some("hwnd=0x100"));
+        assert_eq!(gdigrab_window_input(None, Some("  ")), None);
+        assert_eq!(
+            resolve_window_capture_input(true, Some("0x100"), None),
+            "hwnd=0x100"
+        );
+        assert_eq!(
+            resolve_window_capture_input(false, Some("0x100"), Some("Codex")),
+            "desktop"
+        );
+        assert_eq!(
+            capture_output_filters("hwnd=0x100", None).as_deref(),
+            Some("crop=trunc(iw/2)*2:trunc(ih/2)*2")
+        );
+        assert_eq!(
+            capture_output_filters("desktop", Some("drawbox=x=1:y=2:w=3:h=4:color=black:t=fill".to_string()))
+                .as_deref(),
+            Some("drawbox=x=1:y=2:w=3:h=4:color=black:t=fill")
+        );
+    }
+
+    #[test]
+    fn gdigrab_window_follow_omits_fixed_desktop_crop() {
+        let manifest = FfmpegCaptureRunManifest {
+            schema_version: 1,
+            kind: "reqcase.ffmpeg-loop-run".to_string(),
+            run_id: "run-0001".to_string(),
+            session_id: "ts-1".to_string(),
+            stream_id: "vs-window".to_string(),
+            target_capture_mode: "foreground_window".to_string(),
+            display_id: Some("display-1".to_string()),
+            capture_input: "hwnd=0x100".to_string(),
+            show_mouse_in_video: false,
+            window_hwnd: Some("0x100".to_string()),
+            window_title: Some("Codex".to_string()),
+            process_name: Some("Codex.exe".to_string()),
+            started_at_ms: 1_000,
+            segment_duration_seconds: 5,
+            target_fps: 12,
+            encoder_name: Some("ffmpeg:libx264".to_string()),
+            offset_x: 40,
+            offset_y: 24,
+            width: 1280,
+            height: 720,
+            segment_list_relative_path: "runs\\run-0001.csv".to_string(),
+            output_pattern_relative_path: "segments\\run-0001-%05d.mp4".to_string(),
+        };
+        let target = CaptureTarget::Window {
+            identity: "window:0x100:1280:720".to_string(),
+            display_id: Some("display-1".to_string()),
+            window_hwnd: "0x100".to_string(),
+            window_title: Some("Codex".to_string()),
+            process_name: Some("Codex.exe".to_string()),
+            offset_x: 40,
+            offset_y: 24,
+            width: 1280,
+            height: 720,
+        };
+
+        let args = build_gdigrab_input_args(&manifest, &target, "12", "40", "24", "1280x720");
+
+        assert!(args.windows(2).any(|window| window == ["-i", "hwnd=0x100"]));
+        assert!(!args.iter().any(|value| value == "-offset_x" || value == "-video_size"));
     }
 
     #[test]

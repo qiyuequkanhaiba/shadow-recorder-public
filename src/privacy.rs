@@ -1,4 +1,7 @@
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct MaskRegion {
     pub x: u32,
     pub y: u32,
@@ -114,6 +117,68 @@ fn apply_mask_region(rgba: &mut [u8], width: u32, height: u32, region: &MaskRegi
     true
 }
 
+pub fn build_video_privacy_drawbox_filter(
+    enabled: bool,
+    masks: &[MaskRegion],
+    offset_x: i32,
+    offset_y: i32,
+    capture_width: u32,
+    capture_height: u32,
+) -> Option<String> {
+    if !enabled || capture_width == 0 || capture_height == 0 {
+        return None;
+    }
+
+    let mut filters = Vec::new();
+    for mask in masks {
+        let Some((x, y, width, height)) =
+            clip_mask_to_capture(mask, offset_x, offset_y, capture_width, capture_height)
+        else {
+            continue;
+        };
+        filters.push(format!(
+            "drawbox=x={x}:y={y}:w={width}:h={height}:color=black:t=fill"
+        ));
+    }
+
+    if filters.is_empty() {
+        None
+    } else {
+        Some(filters.join(","))
+    }
+}
+
+fn clip_mask_to_capture(
+    mask: &MaskRegion,
+    offset_x: i32,
+    offset_y: i32,
+    capture_width: u32,
+    capture_height: u32,
+) -> Option<(u32, u32, u32, u32)> {
+    if mask.width == 0 || mask.height == 0 {
+        return None;
+    }
+
+    let x0 = i64::from(mask.x) - i64::from(offset_x);
+    let y0 = i64::from(mask.y) - i64::from(offset_y);
+    let x1 = x0 + i64::from(mask.width);
+    let y1 = y0 + i64::from(mask.height);
+    let clip_x0 = x0.max(0);
+    let clip_y0 = y0.max(0);
+    let clip_x1 = x1.min(i64::from(capture_width));
+    let clip_y1 = y1.min(i64::from(capture_height));
+    if clip_x1 <= clip_x0 || clip_y1 <= clip_y0 {
+        return None;
+    }
+
+    Some((
+        u32::try_from(clip_x0).unwrap_or(0),
+        u32::try_from(clip_y0).unwrap_or(0),
+        u32::try_from(clip_x1 - clip_x0).unwrap_or(0),
+        u32::try_from(clip_y1 - clip_y0).unwrap_or(0),
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -178,5 +243,64 @@ mod tests {
         assert_eq!(&rgba[12..16], &[255, 255, 255, 255]);
         assert_eq!(&rgba[16..20], &[0, 0, 0, 255]);
         assert_eq!(&rgba[20..24], &[0, 0, 0, 255]);
+    }
+
+    fn mask(x: u32, y: u32, width: u32, height: u32) -> MaskRegion {
+        MaskRegion {
+            x,
+            y,
+            width,
+            height,
+            label: String::new(),
+        }
+    }
+
+    #[test]
+    fn video_privacy_filter_is_absent_until_privacy_is_enabled() {
+        let filter = build_video_privacy_drawbox_filter(false, &[mask(10, 20, 30, 40)], 0, 0, 100, 100);
+        assert_eq!(filter, None);
+    }
+
+    #[test]
+    fn video_privacy_filter_draws_boxes_inside_the_capture() {
+        let filter = build_video_privacy_drawbox_filter(true, &[mask(10, 20, 30, 40)], 0, 0, 200, 200);
+        assert_eq!(
+            filter.as_deref(),
+            Some("drawbox=x=10:y=20:w=30:h=40:color=black:t=fill")
+        );
+    }
+
+    #[test]
+    fn video_privacy_filter_subtracts_capture_origin_and_clips() {
+        let filter = build_video_privacy_drawbox_filter(
+            true,
+            &[mask(80, 40, 50, 30), mask(0, 0, 10, 10), mask(0, 0, 0, 20)],
+            100,
+            50,
+            200,
+            100,
+        );
+        assert_eq!(
+            filter.as_deref(),
+            Some("drawbox=x=0:y=0:w=30:h=20:color=black:t=fill")
+        );
+    }
+
+    #[test]
+    fn video_privacy_filter_joins_multiple_boxes() {
+        let filter = build_video_privacy_drawbox_filter(
+            true,
+            &[mask(1, 2, 3, 4), mask(5, 6, 7, 8)],
+            0,
+            0,
+            100,
+            100,
+        );
+        assert_eq!(
+            filter.as_deref(),
+            Some(
+                "drawbox=x=1:y=2:w=3:h=4:color=black:t=fill,drawbox=x=5:y=6:w=7:h=8:color=black:t=fill"
+            )
+        );
     }
 }

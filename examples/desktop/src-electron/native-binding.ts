@@ -1124,6 +1124,13 @@ export function setRecorderConfig(config: ReqCaseShadowRecorderConfig): void {
     streamPayload: config.streamPayload,
     captureReuseEnabled: config.captureReuseEnabled,
     privacyEnabled: config.privacyEnabled,
+    maskRegions: (config.maskRegions ?? []).map((region) => ({
+      x: region.x,
+      y: region.y,
+      width: region.width,
+      height: region.height,
+      label: region.label ?? '',
+    })),
     defectEvidenceEnabled: config.defectEvidenceEnabled ?? semanticRecordingEnabled,
     semanticRecordingEnabled,
     uiaObserverEnabled,

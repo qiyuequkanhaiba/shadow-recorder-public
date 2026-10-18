@@ -1863,6 +1863,8 @@ mod tests {
             recording_profile: "smooth".to_string(),
             encoder_preference: "hardware".to_string(),
             show_mouse_in_video: true,
+            video_privacy_enabled: false,
+            video_privacy_masks: Vec::new(),
             notes: Some("notes".to_string()),
             target_process_name: Some("demo.exe".to_string()),
             target_pid: Some(42),

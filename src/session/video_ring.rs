@@ -365,6 +365,8 @@ mod tests {
             recording_profile: "balanced".to_string(),
             encoder_preference: "auto".to_string(),
             show_mouse_in_video: false,
+            video_privacy_enabled: false,
+            video_privacy_masks: Vec::new(),
             history_retention_mode: None,
             history_retention_hours: None,
             history_retention_max_segments: None,

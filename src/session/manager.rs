@@ -9,6 +9,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use once_cell::sync::Lazy;
 
+use crate::privacy::MaskRegion;
 use crate::session::defect_pack::{
     DefectPackError, DefectPackRequest, DefectPackResult, clamp_defect_time_window,
     export_defect_pack_with_operations,
@@ -176,6 +177,7 @@ pub struct SessionManager {
     ffmpeg_loop_runtime: Mutex<FfmpegLoopRuntime>,
     #[cfg_attr(test, allow(dead_code))]
     uia_observer_runtime: Mutex<UiaObserverRuntime>,
+    staged_video_privacy: Mutex<(bool, Vec<MaskRegion>)>,
 }
 
 #[derive(Default)]
@@ -224,6 +226,12 @@ struct ResolvedOperations {
 impl SessionManager {
     pub fn list_display_targets(&self) -> Vec<crate::session::TestSessionDisplayTarget> {
         enumerate_display_targets()
+    }
+
+    pub fn stage_video_privacy(&self, enabled: bool, masks: Vec<MaskRegion>) {
+        if let Ok(mut staged) = self.staged_video_privacy.lock() {
+            *staged = (enabled, masks);
+        }
     }
 
     pub fn start(
@@ -285,13 +293,17 @@ impl SessionManager {
             }
         }
 
-        let record = TestSessionRecord::from_start_options(
+        let mut record = TestSessionRecord::from_start_options(
             session_id,
             now_ms,
             options,
             session_dir,
             manifest_path,
         );
+        if let Ok(staged) = self.staged_video_privacy.lock() {
+            record.video_privacy_enabled = staged.0;
+            record.video_privacy_masks = staged.1.clone();
+        }
         let video_streams = bootstrap_video_streams(&record);
         persist_manifest(&record)?;
         persist_video_streams(&record, &video_streams)?;
@@ -428,6 +440,7 @@ impl SessionManager {
         recording_profile: Option<String>,
         encoder_preference: Option<String>,
         show_mouse_in_video: Option<bool>,
+        video_privacy: Option<(bool, Vec<MaskRegion>)>,
     ) -> Result<Option<TestSessionRecord>, SessionError> {
         let mut state = self.state.lock().map_err(|_| SessionError::LockPoisoned)?;
         let Some(active) = state.active.as_mut() else {
@@ -453,6 +466,13 @@ impl SessionManager {
             && active.show_mouse_in_video != show_mouse_in_video
         {
             active.show_mouse_in_video = show_mouse_in_video;
+            changed = true;
+        }
+        if let Some((enabled, masks)) = video_privacy
+            && (active.video_privacy_enabled != enabled || active.video_privacy_masks != masks)
+        {
+            active.video_privacy_enabled = enabled;
+            active.video_privacy_masks = masks;
             changed = true;
         }
 
@@ -2203,6 +2223,7 @@ impl Default for SessionManager {
             keyboard_runtime: Mutex::new(KeyboardSummaryRuntime::default()),
             ffmpeg_loop_runtime: Mutex::new(FfmpegLoopRuntime::default()),
             uia_observer_runtime: Mutex::new(UiaObserverRuntime::default()),
+            staged_video_privacy: Mutex::new((false, Vec::new())),
         }
     }
 }
@@ -4633,6 +4654,7 @@ mod tests {
                 Some("smooth".to_string()),
                 Some("hardware".to_string()),
                 Some(true),
+                None,
             )
             .expect("update active video config")
             .expect("active session should exist");
@@ -4659,6 +4681,39 @@ mod tests {
     }
 
     #[test]
+    fn start_copies_staged_video_privacy_onto_the_session() {
+        let manager = SessionManager::default();
+        let temp_root = unique_temp_dir("shadowrecord-session-video-privacy");
+        manager.stage_video_privacy(
+            true,
+            vec![crate::privacy::MaskRegion {
+                x: 8,
+                y: 12,
+                width: 40,
+                height: 24,
+                label: "token".to_string(),
+            }],
+        );
+
+        let started = manager
+            .start(TestSessionStartOptions {
+                storage_dir: Some(temp_root.to_string_lossy().into_owned()),
+                ..TestSessionStartOptions::default()
+            })
+            .expect("start session");
+
+        assert!(started.video_privacy_enabled);
+        assert_eq!(started.video_privacy_masks.len(), 1);
+        assert_eq!(started.video_privacy_masks[0].width, 40);
+        let events = manager
+            .get_events(Some(&started.session_id), None)
+            .expect("events");
+        assert_eq!(events.len(), 1);
+
+        fs::remove_dir_all(temp_root).expect("cleanup temp dir");
+    }
+
+    #[test]
     fn update_active_video_config_returns_none_without_active_session() {
         let manager = SessionManager::default();
 
@@ -4667,6 +4722,7 @@ mod tests {
                 Some("smooth".to_string()),
                 Some("hardware".to_string()),
                 Some(true),
+                None,
             )
             .expect("update should succeed without active session");
 

@@ -257,6 +257,16 @@ impl Recorder {
         }
     }
 
+    pub fn video_privacy_masks(&self) -> (bool, Vec<crate::privacy::MaskRegion>) {
+        let Ok(state) = self.state.lock() else {
+            return (false, Vec::new());
+        };
+        (
+            state.config.privacy_enabled,
+            state.config.mask_regions.clone(),
+        )
+    }
+
     pub fn start(&self) -> Result<(), RecorderError> {
         {
             let mut state = self.state.lock().map_err(|_| RecorderError::LockPoisoned)?;

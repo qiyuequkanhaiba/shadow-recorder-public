@@ -76,7 +76,7 @@ export function PrivacySettingsPanel(props: PrivacySettingsPanelProps) {
       <header className="settings-form-header">
         <div className="settings-form-header-copy">
           <h2>隐私规则</h2>
-          <p>启用后对新采集帧应用遮罩；命中排除规则时仅保留步骤元数据。</p>
+          <p>启用后，新的录像片段会把遮罩画进视频。已经写好的片段不会改。命中排除规则时仅保留步骤元数据。</p>
         </div>
       </header>
 

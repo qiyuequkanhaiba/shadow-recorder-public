@@ -202,6 +202,22 @@ function sessionNotesError(value: unknown): string | null {
   return null;
 }
 
+function privacyVideoSignature(config: {
+  privacyEnabled?: boolean;
+  maskRegions?: Array<{ x?: number; y?: number; width?: number; height?: number }>;
+}): string {
+  const regions = Array.isArray(config.maskRegions) ? config.maskRegions : [];
+  return JSON.stringify({
+    enabled: config.privacyEnabled === true,
+    regions: regions.map((region) => [
+      region.x ?? 0,
+      region.y ?? 0,
+      region.width ?? 0,
+      region.height ?? 0,
+    ]),
+  });
+}
+
 export class ReqCaseShadowRecorderService {
   private recording = false;
   private currentConfig: ReqCaseShadowRecorderConfig = {
@@ -1267,6 +1283,8 @@ export class ReqCaseShadowRecorderService {
       encoderPreference: config.encoderPreference ?? 'auto',
       showMouseInVideo: config.showMouseInVideo ?? false,
     };
+    const previousPrivacy = privacyVideoSignature(this.currentConfig);
+    const nextPrivacy = privacyVideoSignature(config);
 
     this.currentConfig = config;
     setRecorderConfig(config);
@@ -1274,7 +1292,8 @@ export class ReqCaseShadowRecorderService {
     if (
       previousVideoConfig.recordingProfile !== nextVideoConfig.recordingProfile ||
       previousVideoConfig.encoderPreference !== nextVideoConfig.encoderPreference ||
-      previousVideoConfig.showMouseInVideo !== nextVideoConfig.showMouseInVideo
+      previousVideoConfig.showMouseInVideo !== nextVideoConfig.showMouseInVideo ||
+      previousPrivacy !== nextPrivacy
     ) {
       updateActiveTestSessionVideoConfig(nextVideoConfig);
     }

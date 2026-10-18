@@ -120,6 +120,8 @@ struct SessionVideoConfigState {
     recording_profile: String,
     encoder_preference: String,
     show_mouse_in_video: bool,
+    video_privacy_enabled: bool,
+    video_privacy_masks: Vec<crate::privacy::MaskRegion>,
 }
 
 impl From<&TestSessionRecord> for SessionVideoConfigState {
@@ -128,6 +130,8 @@ impl From<&TestSessionRecord> for SessionVideoConfigState {
             recording_profile: value.recording_profile.clone(),
             encoder_preference: value.encoder_preference.clone(),
             show_mouse_in_video: value.show_mouse_in_video,
+            video_privacy_enabled: value.video_privacy_enabled,
+            video_privacy_masks: value.video_privacy_masks.clone(),
         }
     }
 }
@@ -960,14 +964,26 @@ fn spawn_capture_run(
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    command.args(build_gdigrab_input_args(
+    let mut input_args = build_gdigrab_input_args(
         &manifest,
         target,
         &target_fps,
         &offset_x,
         &offset_y,
         &video_size,
-    ));
+    );
+    if let Some(filter) = crate::privacy::build_video_privacy_drawbox_filter(
+        session.video_privacy_enabled,
+        &session.video_privacy_masks,
+        manifest.offset_x,
+        manifest.offset_y,
+        target.width(),
+        target.height(),
+    ) {
+        input_args.push("-vf".to_string());
+        input_args.push(filter);
+    }
+    command.args(input_args);
 
     let mut encoder_args = Vec::new();
     append_segmented_encoder_args(
@@ -2064,6 +2080,8 @@ mod tests {
             recording_profile: "balanced".to_string(),
             encoder_preference: "auto".to_string(),
             show_mouse_in_video: false,
+            video_privacy_enabled: false,
+            video_privacy_masks: Vec::new(),
             notes: None,
             target_process_name: None,
             target_pid: None,
@@ -2175,6 +2193,8 @@ mod history_retention_tests {
             recording_profile: DEFAULT_RECORDING_PROFILE.to_string(),
             encoder_preference: DEFAULT_ENCODER_PREFERENCE.to_string(),
             show_mouse_in_video: false,
+            video_privacy_enabled: false,
+            video_privacy_masks: Vec::new(),
             notes: None,
             history_retention_mode: None,
             history_retention_hours: None,

@@ -12,6 +12,7 @@ mod quality_policy;
 mod raw_input;
 mod recorder;
 mod retry;
+mod screenshot;
 mod session;
 mod storage;
 mod telemetry;
@@ -734,4 +735,65 @@ fn map_session_error(err: SessionError) -> napi::Error {
 #[napi]
 pub fn protect_floating_toolbar_surface(hwnd: i64) -> bool {
     window_surface::protect_floating_toolbar_hwnd(hwnd)
+}
+
+#[napi(object)]
+pub struct JsScreenshotMask {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[napi(object)]
+pub struct JsScreenshotCaptureRequest {
+    pub mode: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub privacy_enabled: bool,
+    pub masks: Vec<JsScreenshotMask>,
+}
+
+#[napi(object)]
+pub struct JsScreenshotCaptureResult {
+    pub png_base64: String,
+    pub width: u32,
+    pub height: u32,
+    pub origin_x: i32,
+    pub origin_y: i32,
+}
+
+#[napi]
+pub fn capture_screenshot(
+    request: JsScreenshotCaptureRequest,
+) -> Result<JsScreenshotCaptureResult> {
+    let output = crate::screenshot::capture_screenshot(crate::screenshot::ScreenshotCaptureRequest {
+        mode: request.mode,
+        x: request.x,
+        y: request.y,
+        width: request.width,
+        height: request.height,
+        privacy_enabled: request.privacy_enabled,
+        masks: request
+            .masks
+            .into_iter()
+            .map(|mask| crate::privacy::MaskRegion {
+                x: mask.x,
+                y: mask.y,
+                width: mask.width,
+                height: mask.height,
+                label: String::new(),
+            })
+            .collect(),
+    })
+    .map_err(napi::Error::from_reason)?;
+    Ok(JsScreenshotCaptureResult {
+        png_base64: output.png_base64,
+        width: output.width,
+        height: output.height,
+        origin_x: output.origin_x,
+        origin_y: output.origin_y,
+    })
 }

@@ -285,6 +285,9 @@ export interface TestSessionState {
   recordingProfile: 'efficiency' | 'balanced' | 'smooth';
   encoderPreference: 'auto' | 'hardware' | 'software';
   showMouseInVideo?: boolean;
+  historyRetentionMode?: 'age' | 'count';
+  historyRetentionHours?: number;
+  historyRetentionMaxSegments?: number;
   notes?: string;
   targetProcessName?: string;
   targetPid?: number;

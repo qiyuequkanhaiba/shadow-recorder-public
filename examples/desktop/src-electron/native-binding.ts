@@ -202,6 +202,9 @@ type NativeTestSessionRow = {
   recordingProfile: 'efficiency' | 'balanced' | 'smooth';
   encoderPreference: 'auto' | 'hardware' | 'software';
   showMouseInVideo?: boolean;
+  historyRetentionMode?: 'age' | 'count';
+  historyRetentionHours?: number;
+  historyRetentionMaxSegments?: number;
   notes?: string;
   targetProcessName?: string;
   targetPid?: number;
@@ -544,6 +547,9 @@ function mapNativeTestSession(row: NativeTestSessionRow): ReqCaseShadowRecorderT
     recordingProfile: row.recordingProfile,
     encoderPreference: row.encoderPreference,
     showMouseInVideo: row.showMouseInVideo ?? false,
+    historyRetentionMode: row.historyRetentionMode,
+    historyRetentionHours: row.historyRetentionHours,
+    historyRetentionMaxSegments: row.historyRetentionMaxSegments,
     notes: row.notes,
     targetProcessName: row.targetProcessName,
     targetPid: row.targetPid,

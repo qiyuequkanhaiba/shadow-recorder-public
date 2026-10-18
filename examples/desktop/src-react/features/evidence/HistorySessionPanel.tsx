@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { TestSessionState, TestSessionVideoSegment } from '../../../types/contracts';
+import { STUDIO_SEGMENT_LIMIT } from '../../lib/studio-segment-window';
 
 type HistorySessionPanelProps = {
   session: TestSessionState | null;
@@ -66,7 +67,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
     setLoading(true);
     void window.reqcaseShadowRecorder.getTestSessionVideoSegments({
       sessionId,
-      limit: 2000,
+      limit: STUDIO_SEGMENT_LIMIT,
     }).then((items) => {
       if (cancelled) {
         return;

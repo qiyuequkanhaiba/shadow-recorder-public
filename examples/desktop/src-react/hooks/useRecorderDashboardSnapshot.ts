@@ -8,9 +8,9 @@ import type {
   TestSessionVideoStream,
 } from '../../types/contracts';
 import { useDocumentVisibility } from './useDocumentVisibility';
+import { resolveStudioSegmentLimit } from '../lib/studio-segment-window';
 
 const SESSION_EVENT_LIMIT = 80;
-const SESSION_SEGMENT_LIMIT = 72;
 
 type UseRecorderDashboardSnapshotInput = {
   enabled?: boolean;
@@ -259,11 +259,12 @@ export function useRecorderDashboardSnapshot(
       }
 
       const shouldReset = segmentsSessionIdRef.current !== sessionId;
+      const segmentLimit = resolveStudioSegmentLimit(nextPlaybackSession);
       if (window.reqcaseShadowRecorder.getTestSessionVideoSegmentsTail) {
         const tail = await window.reqcaseShadowRecorder.getTestSessionVideoSegmentsTail({
           sessionId,
           afterSegmentId: shouldReset ? undefined : segmentsCursorRef.current ?? undefined,
-          limit: SESSION_SEGMENT_LIMIT,
+          limit: segmentLimit,
         });
         const nextSegments =
           shouldReset || tail.reset
@@ -271,7 +272,7 @@ export function useRecorderDashboardSnapshot(
             : mergeTailItems(
               recentSegmentsRef.current,
               tail.items,
-              SESSION_SEGMENT_LIMIT,
+              segmentLimit,
               (segment) => segment.segmentId,
             );
         recentSegmentsRef.current = nextSegments;
@@ -283,7 +284,7 @@ export function useRecorderDashboardSnapshot(
       const snapshot =
         (await window.reqcaseShadowRecorder.getTestSessionVideoSegments?.({
           sessionId,
-          limit: SESSION_SEGMENT_LIMIT,
+          limit: segmentLimit,
         })) ?? [];
       recentSegmentsRef.current = snapshot;
       segmentsCursorRef.current = snapshot.at(-1)?.segmentId ?? null;

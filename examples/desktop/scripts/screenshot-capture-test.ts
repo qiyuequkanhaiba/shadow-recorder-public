@@ -4,9 +4,11 @@ import path from 'node:path';
 
 import { RecorderConfigSchema } from '../src-electron/modules/reqcase-shadow-recorder/ipc-validators';
 import {
+  normalizeScreenshotDelaySeconds,
   parseSelectionRect,
   physicalRectFromDipCorners,
   resolveScreenshotShortcuts,
+  trimScreenshotHistory,
   unionDisplayBounds,
 } from '../src-electron/screenshot-capture';
 import { createScreenshotOverlayHtml } from '../src-electron/screenshot-overlay-html';
@@ -66,11 +68,33 @@ function run(): void {
     width: 3,
     height: 4,
   });
+  assert.equal(normalizeScreenshotDelaySeconds(3), 3);
+  assert.equal(normalizeScreenshotDelaySeconds('5'), 5);
+  assert.equal(normalizeScreenshotDelaySeconds(4), 0);
+  assert.deepEqual(
+    trimScreenshotHistory([
+      { id: 'a', createdAtMs: 1 },
+      { id: 'b', createdAtMs: 3 },
+      { id: 'c', createdAtMs: 2 },
+    ], 2),
+    {
+      kept: [
+        { id: 'b', createdAtMs: 3 },
+        { id: 'c', createdAtMs: 2 },
+      ],
+      removed: [{ id: 'a', createdAtMs: 1 }],
+    },
+  );
 
   const html = createScreenshotOverlayHtml();
   assert.match(html, /aria-label="截图选区"/);
   assert.match(html, /Enter 复制/);
   assert.match(html, /Esc 取消/);
+  assert.match(html, /矩形/);
+  assert.match(html, /箭头/);
+  assert.match(html, /文字/);
+  assert.match(html, /打码/);
+  assert.match(html, /贴在屏幕上/);
 
   const session = read('src-electron/screenshot-session.ts');
   assert.match(session, /focusable:\s*true/);
@@ -86,6 +110,7 @@ function run(): void {
   });
   assert.equal(parsed.shortcutCaptureArea, 'CommandOrControl+Shift+A');
   assert.ok(RecorderConfigSchema.shape.shortcutCaptureWindow);
+  assert.ok(RecorderConfigSchema.shape.screenshotDelaySeconds);
 
   console.log('[screenshot-capture-test] PASS');
 }

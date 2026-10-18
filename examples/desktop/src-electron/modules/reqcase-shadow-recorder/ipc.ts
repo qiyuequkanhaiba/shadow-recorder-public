@@ -3,9 +3,15 @@ import { syncScreenshotHotkeys } from '../../screenshot-hotkeys';
 import {
   beginAreaScreenshot,
   cancelAreaScreenshot,
+  cancelScreenshotDelay,
   captureInstantScreenshot,
+  closePinnedScreenshot,
   confirmAreaSelection,
   copyFrozenScreenshot,
+  listScreenshotHistory,
+  pinFrozenScreenshot,
+  pinScreenshotHistory,
+  revealScreenshotHistory,
   saveFrozenScreenshot,
 } from '../../screenshot-session';
 import type { IpcMainInvokeEvent, WebContents } from 'electron';
@@ -613,8 +619,27 @@ export function registerReqCaseShadowRecorderIpc(
   handleTrusted('reqcase:screenshot:cancel', async () => {
     cancelAreaScreenshot();
   });
-  handleTrusted('reqcase:screenshot:copy', async () => copyFrozenScreenshot());
-  handleTrusted('reqcase:screenshot:save', async () => saveFrozenScreenshot());
+  handleTrusted('reqcase:screenshot:cancel-delay', async () => {
+    cancelScreenshotDelay();
+  });
+  handleTrusted('reqcase:screenshot:copy', async (_event, pngBase64: unknown) => copyFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:save', async (_event, pngBase64: unknown) => saveFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:pin', async (_event, pngBase64: unknown) => pinFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:close-pin', async (_event, id: unknown) => {
+    if (typeof id === 'string') {
+      closePinnedScreenshot(id);
+    }
+  });
+  handleTrusted('reqcase:screenshot:list-history', async () => listScreenshotHistory());
+  handleTrusted('reqcase:screenshot:pin-history', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '找不到这张截图' };
+    }
+    return pinScreenshotHistory(id);
+  });
+  handleTrusted('reqcase:screenshot:reveal-history', async () => {
+    revealScreenshotHistory();
+  });
   handleTrusted('reqcase:screenshot:begin-area', async () => {
     await beginAreaScreenshot(() => runtimeSettings.config);
   });

@@ -198,6 +198,9 @@ export type ReqCaseShadowRecorderRendererApi = {
   onMetrics: (handler: (metrics: ReqCaseShadowRecorderMetrics) => void) => () => void;
   setConfig: (config: ReqCaseShadowRecorderConfig) => Promise<void>;
   beginAreaScreenshot?: () => Promise<void>;
+  listScreenshotHistory?: () => Promise<Array<{ id: string; createdAtMs: number; width: number; height: number; filePath: string }>>;
+  pinScreenshotHistory?: (id: string) => Promise<{ ok: boolean; message: string }>;
+  revealScreenshotHistory?: () => Promise<void>;
   clearBuffer: () => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
@@ -330,6 +333,9 @@ const api: ReqCaseShadowRecorderRendererApi = {
   },
   setConfig: (config) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.setConfig, config),
   beginAreaScreenshot: () => ipcRenderer.invoke('reqcase:screenshot:begin-area'),
+  listScreenshotHistory: () => ipcRenderer.invoke('reqcase:screenshot:list-history'),
+  pinScreenshotHistory: (id: string) => ipcRenderer.invoke('reqcase:screenshot:pin-history', id),
+  revealScreenshotHistory: () => ipcRenderer.invoke('reqcase:screenshot:reveal-history'),
   getBuffer: () => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getBuffer),
   getBufferPage: (cursor, limit, includeImage) =>
     ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getBufferPage, {
@@ -389,6 +395,9 @@ contextBridge.exposeInMainWorld('screenshotOverlay', {
   confirmSelection: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke('reqcase:screenshot:confirm', rect),
   cancel: () => ipcRenderer.invoke('reqcase:screenshot:cancel'),
-  copyFrozen: () => ipcRenderer.invoke('reqcase:screenshot:copy'),
-  saveFrozen: () => ipcRenderer.invoke('reqcase:screenshot:save'),
+  cancelDelay: () => ipcRenderer.invoke('reqcase:screenshot:cancel-delay'),
+  copyFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:copy', pngBase64),
+  saveFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:save', pngBase64),
+  pinFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:pin', pngBase64),
+  closePin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:close-pin', id),
 });

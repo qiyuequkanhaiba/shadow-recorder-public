@@ -61,6 +61,7 @@ export const RecorderConfigSchema = z.object({
   shortcutCaptureArea: z.string().optional(),
   shortcutCaptureMonitor: z.string().optional(),
   shortcutCaptureWindow: z.string().optional(),
+  screenshotDelaySeconds: z.number().finite().optional(),
 }).passthrough() satisfies z.ZodType<ReqCaseShadowRecorderConfig>;
 
 export const RecorderSettingsSchema = z.object({

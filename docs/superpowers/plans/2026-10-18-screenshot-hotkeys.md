@@ -18,7 +18,7 @@
 - 隐私未启用时，即使填了矩形，也不往截图里涂黑。
 - 证据包里的步骤缩略图不是这次的用户截图，不改那条链路。
 - 默认快捷键是 `CommandOrControl+Shift+A`、`CommandOrControl+Shift+F`、`CommandOrControl+Shift+W`。不得占用已经使用的开始键和停止键。
-- 这一轮不做滚动长图、OCR、标注编辑器、贴屏、历史列表、美化或上传。
+- 滚动长图、OCR、美化、去背景、上传和 GIF 仍不做。跨屏拼接、3/5 秒倒计时、矩形/箭头/文字/实心打码、贴屏和本地历史见 Task 3。
 
 ## File structure
 
@@ -116,4 +116,51 @@ Expected: PASS。
 ```bash
 git add examples/desktop/src-electron/screenshot-capture.ts examples/desktop/src-electron/screenshot-hotkeys.ts examples/desktop/src-electron/screenshot-overlay-html.ts examples/desktop/src-electron/screenshot-session.ts examples/desktop/scripts/screenshot-capture-test.ts examples/desktop/package.json examples/desktop/src-electron/native-binding.ts examples/desktop/src-electron/preload.ts examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc.ts examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc-validators.ts examples/desktop/types/contracts.ts examples/desktop/src-react/lib/i18n.ts examples/desktop/src-react/components/RecorderControlPanel.tsx docs/superpowers/plans/2026-10-18-screenshot-hotkeys.md
 git commit -m "feat: capture a region, screen, or window from a hotkey"
+```
+
+### Task 3: 跨屏拼接、倒计时、标注、贴屏和本地历史
+
+**Files:**
+- Modify: `src/dxgi.rs`
+- Modify: `src/screenshot.rs`
+- Modify: `examples/desktop/src-electron/screenshot-capture.ts`
+- Modify: `examples/desktop/src-electron/screenshot-overlay-html.ts`
+- Modify: `examples/desktop/src-electron/screenshot-session.ts`
+- Modify: `examples/desktop/src-electron/preload.ts`
+- Modify: `examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc.ts`
+- Modify: `examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc-validators.ts`
+- Modify: `examples/desktop/types/contracts.ts`
+- Modify: `examples/desktop/src-react/lib/i18n.ts`
+- Modify: `examples/desktop/src-react/components/RecorderControlPanel.tsx`
+- Modify: `examples/desktop/scripts/screenshot-capture-test.ts`
+
+**Interfaces:**
+- 框选模式把所有相交显示器拼进同一张 PNG。缝隙保持黑色。隐私开启时，遮罩按选区原点涂黑。
+- `screenshotDelaySeconds` 只接受 3 或 5，其余值当作关闭。倒计时期间按 Esc 取消。
+- 复制、保存和贴屏使用画布上的标注结果。历史最多保留 30 张，写在 `userData/screenshot-history`。
+
+- [x] **Step 1: 写拼接、倒计时和历史上限测试**
+
+`composite_screenshot_png_stitches_adjacent_monitors` 断言相邻两帧拼成一张，并且落在右帧上的遮罩被涂黑。脚本断言倒计时只认 3 和 5，历史上限按时间丢掉最旧的一张，选区页包含矩形、箭头、文字、打码和贴在屏幕上。
+
+- [x] **Step 2: 接上抓图、预加载和设置页**
+
+抓图前先倒计时，倒计时窗口关掉后再等 80 毫秒。复制和保存接受画布 PNG。贴屏是独立的置顶窗口。设置页可以选择倒计时、打开截图目录，并把最近的图贴回屏幕。
+
+- [x] **Step 3: 跑测试**
+
+Run: `examples/desktop/node_modules/.bin/tsx examples/desktop/scripts/screenshot-capture-test.ts`
+Expected: PASS。
+
+Run: `examples/desktop/node_modules/.bin/tsc -p examples/desktop/tsconfig.electron.json --noEmit`
+Expected: 通过。
+
+Run: Windows 虚拟机 `cargo test --lib screenshot::`
+Expected: 5 passed。
+
+- [x] **Step 4: Commit**
+
+```bash
+git add src/dxgi.rs src/screenshot.rs examples/desktop/src-electron/screenshot-capture.ts examples/desktop/src-electron/screenshot-overlay-html.ts examples/desktop/src-electron/screenshot-session.ts examples/desktop/src-electron/preload.ts examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc.ts examples/desktop/src-electron/modules/reqcase-shadow-recorder/ipc-validators.ts examples/desktop/types/contracts.ts examples/desktop/src-react/lib/i18n.ts examples/desktop/src-react/components/RecorderControlPanel.tsx examples/desktop/scripts/screenshot-capture-test.ts docs/superpowers/plans/2026-10-18-screenshot-hotkeys.md
+git commit -m "feat: stitch screenshots across monitors and keep a local history"
 ```

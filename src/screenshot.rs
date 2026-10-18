@@ -5,7 +5,8 @@ use image::ImageEncoder;
 use image::codecs::png::PngEncoder;
 
 use crate::dxgi::{
-    capture_monitor_bgra_for_screenshot, monitor_rect_at_point, window_rect_at_point,
+    capture_monitor_bgra_for_screenshot, list_monitor_rects, monitor_rect_at_point,
+    window_rect_at_point, ScreenshotMonitorFrame,
 };
 use crate::privacy::MaskRegion;
 
@@ -52,19 +53,17 @@ pub fn capture_screenshot(
             if request.width == 0 || request.height == 0 {
                 return Err("选区太小".to_string());
             }
-            let center_x = request.x.saturating_add((request.width / 2) as i32);
-            let center_y = request.y.saturating_add((request.height / 2) as i32);
-            let monitor =
-                monitor_rect_at_point(center_x, center_y).map_err(|err| err.to_string())?;
-            (
-                ScreenshotRect {
-                    x: request.x,
-                    y: request.y,
-                    width: request.width,
-                    height: request.height,
-                },
-                monitor,
-            )
+            let selection = ScreenshotRect {
+                x: request.x,
+                y: request.y,
+                width: request.width,
+                height: request.height,
+            };
+            return capture_region_across_monitors(
+                selection,
+                request.privacy_enabled,
+                &request.masks,
+            );
         }
         _ => return Err("未知截图模式".to_string()),
     };
@@ -216,6 +215,150 @@ pub fn compose_screenshot_png(
     Ok((png, local.width, local.height, screen_x, screen_y))
 }
 
+fn capture_region_across_monitors(
+    selection: ScreenshotRect,
+    privacy_enabled: bool,
+    masks: &[MaskRegion],
+) -> Result<ScreenshotCaptureOutput, String> {
+    let pixel_count = (selection.width as u64).saturating_mul(selection.height as u64);
+    if pixel_count == 0 {
+        return Err("选区太小".to_string());
+    }
+    if pixel_count > 32_000_000 {
+        return Err("选区太大".to_string());
+    }
+    let mut monitors = list_monitor_rects();
+    if monitors.is_empty() {
+        let center_x = selection.x.saturating_add((selection.width / 2) as i32);
+        let center_y = selection.y.saturating_add((selection.height / 2) as i32);
+        monitors.push(monitor_rect_at_point(center_x, center_y).map_err(|err| err.to_string())?);
+    }
+    let mut frames = Vec::new();
+    for monitor in monitors {
+        if !selection_intersects_bounds(
+            selection,
+            monitor.left,
+            monitor.top,
+            monitor.right,
+            monitor.bottom,
+        ) {
+            continue;
+        }
+        frames.push(capture_monitor_bgra_for_screenshot(monitor).map_err(|err| err.to_string())?);
+    }
+    if frames.is_empty() {
+        return Err("选区超出屏幕".to_string());
+    }
+    let (png, width, height, origin_x, origin_y) =
+        composite_screenshot_png(&frames, selection, privacy_enabled, masks)?;
+    Ok(ScreenshotCaptureOutput {
+        png_base64: base64::engine::general_purpose::STANDARD.encode(png),
+        width,
+        height,
+        origin_x,
+        origin_y,
+    })
+}
+
+pub fn composite_screenshot_png(
+    frames: &[ScreenshotMonitorFrame],
+    selection: ScreenshotRect,
+    privacy_enabled: bool,
+    masks: &[MaskRegion],
+) -> Result<(Vec<u8>, u32, u32, i32, i32), String> {
+    let mut pixels = composite_bgra_region(selection, frames).ok_or("选区超出屏幕")?;
+    if privacy_enabled {
+        paint_solid_masks(
+            &mut pixels,
+            selection.width,
+            selection.height,
+            selection.x,
+            selection.y,
+            masks,
+        );
+    }
+    let png = encode_png_from_bgra(&pixels, selection.width, selection.height)?;
+    Ok((png, selection.width, selection.height, selection.x, selection.y))
+}
+
+fn selection_intersects_bounds(
+    selection: ScreenshotRect,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+) -> bool {
+    let selection_right = selection.x.saturating_add(selection.width as i32);
+    let selection_bottom = selection.y.saturating_add(selection.height as i32);
+    selection.x < right && selection_right > left && selection.y < bottom && selection_bottom > top
+}
+
+fn composite_bgra_region(
+    selection: ScreenshotRect,
+    frames: &[ScreenshotMonitorFrame],
+) -> Option<Vec<u8>> {
+    let width = selection.width as usize;
+    let height = selection.height as usize;
+    let mut output = vec![0u8; width.checked_mul(height)?.checked_mul(4)?];
+    for pixel in output.chunks_exact_mut(4) {
+        pixel[3] = 255;
+    }
+    let mut copied = false;
+    for frame in frames {
+        if blit_frame_into_selection(&mut output, selection, frame) {
+            copied = true;
+        }
+    }
+    if copied { Some(output) } else { None }
+}
+
+fn blit_frame_into_selection(
+    output: &mut [u8],
+    selection: ScreenshotRect,
+    frame: &ScreenshotMonitorFrame,
+) -> bool {
+    let frame_right = frame.origin_x.saturating_add(frame.width as i32);
+    let frame_bottom = frame.origin_y.saturating_add(frame.height as i32);
+    let selection_right = selection.x.saturating_add(selection.width as i32);
+    let selection_bottom = selection.y.saturating_add(selection.height as i32);
+    let left = selection.x.max(frame.origin_x);
+    let top = selection.y.max(frame.origin_y);
+    let right = selection_right.min(frame_right);
+    let bottom = selection_bottom.min(frame_bottom);
+    if right <= left || bottom <= top {
+        return false;
+    }
+    let Some(expected) = (frame.width as usize)
+        .checked_mul(frame.height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+    else {
+        return false;
+    };
+    if frame.bgra.len() < expected {
+        return false;
+    }
+    for y in top..bottom {
+        let src_x = (left - frame.origin_x) as usize;
+        let src_y = (y - frame.origin_y) as usize;
+        let dst_x = (left - selection.x) as usize;
+        let dst_y = (y - selection.y) as usize;
+        let row_bytes = (right - left) as usize * 4;
+        let src_start = (src_y * frame.width as usize + src_x) * 4;
+        let dst_start = (dst_y * selection.width as usize + dst_x) * 4;
+        let Some(src_end) = src_start.checked_add(row_bytes) else {
+            return false;
+        };
+        let Some(dst_end) = dst_start.checked_add(row_bytes) else {
+            return false;
+        };
+        if src_end > frame.bgra.len() || dst_end > output.len() {
+            return false;
+        }
+        output[dst_start..dst_end].copy_from_slice(&frame.bgra[src_start..src_end]);
+    }
+    true
+}
+
 fn rect_from_bounds(rect: crate::dxgi::Rect) -> Option<ScreenshotRect> {
     let width = rect.right.checked_sub(rect.left)?;
     let height = rect.bottom.checked_sub(rect.top)?;
@@ -250,7 +393,8 @@ fn encode_png_from_bgra(bgra: &[u8], width: u32, height: u32) -> Result<Vec<u8>,
 #[cfg(test)]
 mod tests {
     use super::{
-        ScreenshotRect, clip_rect_to_frame, compose_screenshot_png, crop_bgra, paint_solid_masks,
+        ScreenshotRect, clip_rect_to_frame, compose_screenshot_png, composite_screenshot_png,
+        crop_bgra, paint_solid_masks,
     };
     use crate::privacy::MaskRegion;
 
@@ -394,5 +538,49 @@ mod tests {
             .expect("decode plain png")
             .to_rgba8();
         assert_eq!(decoded.get_pixel(1, 0).0, [6, 5, 4, 255]);
+    }
+
+    #[test]
+    fn composite_screenshot_png_stitches_adjacent_monitors() {
+        use crate::dxgi::ScreenshotMonitorFrame;
+
+        let left = ScreenshotMonitorFrame {
+            origin_x: 0,
+            origin_y: 0,
+            width: 2,
+            height: 1,
+            bgra: vec![1, 2, 3, 255, 4, 5, 6, 255],
+        };
+        let right = ScreenshotMonitorFrame {
+            origin_x: 2,
+            origin_y: 0,
+            width: 2,
+            height: 1,
+            bgra: vec![7, 8, 9, 255, 10, 11, 12, 255],
+        };
+        let (png, width, height, origin_x, origin_y) = composite_screenshot_png(
+            &[left, right],
+            ScreenshotRect {
+                x: 1,
+                y: 0,
+                width: 2,
+                height: 1,
+            },
+            true,
+            &[MaskRegion {
+                x: 2,
+                y: 0,
+                width: 1,
+                height: 1,
+                label: String::new(),
+            }],
+        )
+        .expect("stitched png");
+        assert_eq!((width, height, origin_x, origin_y), (2, 1, 1, 0));
+        let image = image::load_from_memory(&png)
+            .expect("decode stitched png")
+            .to_rgba8();
+        assert_eq!(image.get_pixel(0, 0).0, [6, 5, 4, 255]);
+        assert_eq!(image.get_pixel(1, 0).0, [0, 0, 0, 255]);
     }
 }

@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use once_cell::sync::Lazy;
-use windows::Win32::Foundation::{CloseHandle, HWND, POINT, RECT};
+use windows::Win32::Foundation::{BOOL, CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
@@ -16,8 +16,8 @@ use windows::Win32::Graphics::Dxgi::{
     IDXGIDevice, IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication,
 };
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromPoint,
-    MonitorFromWindow,
+    EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    MonitorFromPoint, MonitorFromWindow,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
@@ -947,6 +947,32 @@ pub struct ScreenshotMonitorFrame {
     pub width: u32,
     pub height: u32,
     pub bgra: Vec<u8>,
+}
+
+pub fn list_monitor_rects() -> Vec<Rect> {
+    let mut monitors = Vec::new();
+    let monitors_ptr: *mut Vec<Rect> = &mut monitors;
+    unsafe extern "system" fn enum_monitor(
+        monitor: HMONITOR,
+        _: HDC,
+        _: *mut RECT,
+        data: LPARAM,
+    ) -> BOOL {
+        let monitors = unsafe { &mut *(data.0 as *mut Vec<Rect>) };
+        if let Ok(rect) = monitor_rect_from_handle(monitor) {
+            monitors.push(rect);
+        }
+        true.into()
+    }
+    let _ = unsafe {
+        EnumDisplayMonitors(
+            HDC(std::ptr::null_mut()),
+            None,
+            Some(enum_monitor),
+            LPARAM(monitors_ptr as isize),
+        )
+    };
+    monitors
 }
 
 pub fn capture_monitor_bgra_for_screenshot(

@@ -1,4 +1,5 @@
 import type { ChangeEvent, Dispatch, SetStateAction } from 'react';
+import { useEffect, useState } from 'react';
 
 import type {
   RecorderConfigPayload,
@@ -11,7 +12,7 @@ import {
   resolveSegmentDurationSeconds,
 } from '../../types/recording-defaults';
 import { DEFAULT_BUFFER_BYTES } from '../lib/tuning-advisor';
-import { DEFAULT_SCREENSHOT_SHORTCUTS } from '../../src-electron/screenshot-capture';
+import { DEFAULT_SCREENSHOT_SHORTCUTS, normalizeScreenshotDelaySeconds } from '../../src-electron/screenshot-capture';
 import { t } from '../lib/i18n';
 import type { VideoEncoderSummary } from '../lib/video-encoder-summary';
 
@@ -44,6 +45,22 @@ type RecorderControlPanelProps = {
 };
 
 export function RecorderControlPanel(props: RecorderControlPanelProps) {
+  const [screenshotHistory, setScreenshotHistory] = useState<Array<{
+    id: string;
+    createdAtMs: number;
+    width: number;
+    height: number;
+  }>>([]);
+  useEffect(() => {
+    if (props.section !== 'shortcuts') {
+      return;
+    }
+    void window.reqcaseShadowRecorder.listScreenshotHistory?.().then((items) => {
+      if (Array.isArray(items)) {
+        setScreenshotHistory(items);
+      }
+    });
+  }, [props.section]);
   const availableDisplays = props.availableDisplays;
   const singleTargetDisplayId = (
     props.config.targetDisplayId
@@ -547,6 +564,22 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
             />
           </label>
           <p className="settings-field-hint">留空表示关闭。不要和开始或停止录制用同一个组合键。</p>
+          <label className="settings-field">
+            <span className="settings-field-label">{t('config.screenshotDelay')}</span>
+            <select
+              value={normalizeScreenshotDelaySeconds(props.config.screenshotDelaySeconds)}
+              onChange={(event) => {
+                props.setConfig((current) => ({
+                  ...current,
+                  screenshotDelaySeconds: normalizeScreenshotDelaySeconds(Number(event.target.value)),
+                }));
+              }}
+            >
+              <option value={0}>关闭</option>
+              <option value={3}>3 秒</option>
+              <option value={5}>5 秒</option>
+            </select>
+          </label>
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -556,6 +589,32 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
           >
             框选截图
           </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              void window.reqcaseShadowRecorder.revealScreenshotHistory?.();
+            }}
+          >
+            打开截图目录
+          </button>
+          {screenshotHistory.length > 0 ? (
+            <ul className="settings-field-hint">
+              {screenshotHistory.slice(0, 8).map((item) => (
+                <li key={item.id}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      void window.reqcaseShadowRecorder.pinScreenshotHistory?.(item.id);
+                    }}
+                  >
+                    贴上 {item.width}×{item.height}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </div>
       </section>
       ) : null}

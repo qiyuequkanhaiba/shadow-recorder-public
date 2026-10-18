@@ -114,6 +114,28 @@ export function unionDisplayBounds(
   };
 }
 
+export function normalizeScreenshotDelaySeconds(value: unknown): 0 | 3 | 5 {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (parsed === 3 || parsed === 5) {
+    return parsed;
+  }
+  return 0;
+}
+
+export const SCREENSHOT_HISTORY_LIMIT = 30;
+
+export function trimScreenshotHistory<T extends { createdAtMs: number }>(
+  items: T[],
+  limit = SCREENSHOT_HISTORY_LIMIT,
+): { kept: T[]; removed: T[] } {
+  const sorted = [...items].sort((left, right) => right.createdAtMs - left.createdAtMs);
+  const cap = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : SCREENSHOT_HISTORY_LIMIT;
+  return {
+    kept: sorted.slice(0, cap),
+    removed: sorted.slice(cap),
+  };
+}
+
 export function parseSelectionRect(value: unknown): ScreenshotRect | null {
   if (!value || typeof value !== 'object') {
     return null;

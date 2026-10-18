@@ -176,6 +176,7 @@ async function run(): Promise<void> {
     );
 
     const privacyAcknowledgedAt = '2026-05-17T12:00:00.000Z';
+    const progressEvents: Array<{ percent: number; message: string }> = [];
     const result = await exportTestSessionEvidence(
       {
         sessionId: session.sessionId,
@@ -189,6 +190,7 @@ async function run(): Promise<void> {
         videoStreams: streams,
         videoSegments: segments,
       },
+      (progress) => progressEvents.push(progress),
     );
 
     assert.equal(result.privacyAcknowledgedAt, privacyAcknowledgedAt);
@@ -210,6 +212,8 @@ async function run(): Promise<void> {
     assert.equal(existsSync(path.join(result.exportDir!, 'manifest.json')), false);
     assert.equal(existsSync(path.join(result.exportDir!, 'manifest.v2.json')), false);
     assert.equal(existsSync(path.join(result.exportDir!, 'sha256-manifest.json')), false);
+    assert.equal(progressEvents.at(-1)?.percent, 100);
+    assert.equal(progressEvents.at(-1)?.message, '已完成导出');
 
     const exportedEvents = JSON.parse(readFileSync(result.eventsLogPath!, 'utf-8')) as {
       records: Array<{ eventType: string; videoFile: string }>;

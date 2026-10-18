@@ -168,6 +168,7 @@ export async function exportTestSessionEvidence(
     const zipPath = path.resolve(targetDir, resolveZipFileName(input.zipFileName, bundleName));
     await createArchiveZip(exportDir, zipPath);
     await rm(workingRoot, { recursive: true, force: true });
+    onProgress?.({ percent: 100, message: '已完成导出' });
 
     return {
       sessionId: context.session.sessionId,
@@ -190,6 +191,7 @@ export async function exportTestSessionEvidence(
     };
   }
 
+  onProgress?.({ percent: 100, message: '已完成导出' });
   return {
     sessionId: context.session.sessionId,
     outputMode,

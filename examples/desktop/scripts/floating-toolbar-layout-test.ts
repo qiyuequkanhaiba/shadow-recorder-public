@@ -837,7 +837,9 @@ function testFloatingToolbarHasStatusAndExport(): void {
   assert.match(html, /\.island\[data-collapsed="true"\] \.toast-status-banner \{[\s\S]*display:\s*none !important;/);
   assert.match(html, /\.island\[data-collapsed="true"\] \.island-progress-hairline \{[\s\S]*left:\s*17px;\s*right:\s*17px;/);
   assert.doesNotMatch(html, /hairlineShimmer/);
-  assert.match(html, /if \(!collapsed && selfExporting && statusToast\)/);
+  assert.match(html, /phase === 'complete'/);
+  assert.match(html, /statusToast\.classList\.remove\('is-visible'\)/);
+  assert.doesNotMatch(html, /if \(!collapsed && selfExporting && statusToast\)/);
 }
 
 function testFloatingToolbarUsesZeroOverflowGlassCapsule(): void {

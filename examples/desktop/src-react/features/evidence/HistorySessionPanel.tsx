@@ -22,11 +22,6 @@ function formatWhen(startedAtMs: number): string {
   return new Date(startedAtMs).toLocaleString('zh-CN', { hour12: false });
 }
 
-function isExportCanceled(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
-  return /cancel/i.test(message);
-}
-
 export function HistorySessionPanel(props: HistorySessionPanelProps) {
   const sessionId = props.session?.sessionId ?? null;
   const isLive = props.session?.status === 'active' || props.session?.status === 'paused';
@@ -257,7 +252,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
     setBusy(true);
     setIsExporting(true);
     try {
-      const result = await api.exportTestSessionEvidence({
+      await api.exportTestSessionEvidence({
         sessionId: props.session.sessionId,
         outputMode: 'zip',
         bundleName,
@@ -265,13 +260,8 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
         zipFileName: `${bundleName}.zip`,
         privacyAcknowledgedAt: new Date().toISOString(),
       });
-      props.onNotice(`已导出：${result.zipPath || result.artifactPath || bundleName}`, 'success');
-    } catch (error) {
-      if (isExportCanceled(error)) {
-        props.onNotice('已取消导出', 'info');
-        return;
-      }
-      props.onNotice(error instanceof Error ? error.message : String(error), 'error');
+    } catch {
+      // 完成、取消和失败只由主窗口的导出进度通知显示一次。
     } finally {
       setBusy(false);
       setIsExporting(false);

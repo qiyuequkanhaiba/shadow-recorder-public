@@ -144,6 +144,18 @@ export function RecorderPage() {
 
   useEffect(() => {
     const unsubscribe = window.reqcaseShadowRecorder.onExportProgress?.((progress) => {
+      if (progress.phase === 'complete') {
+        showToast(progress.message || '已完成导出', 'success');
+        return;
+      }
+      if (progress.phase === 'canceled') {
+        showToast(progress.message || '已取消导出', 'info');
+        return;
+      }
+      if (progress.phase === 'failed') {
+        showToast(progress.message || '导出失败', 'error');
+        return;
+      }
       showToast(progress.message, 'progress', progress.percent);
     });
     return () => {
@@ -401,7 +413,7 @@ export function RecorderPage() {
     setBusy(true);
     try {
       const bundleName = session.name?.trim() || session.sessionId;
-      const result = await window.reqcaseShadowRecorder.exportTestSessionEvidence({
+      await window.reqcaseShadowRecorder.exportTestSessionEvidence({
         sessionId: session.sessionId,
         outputMode: 'zip',
         bundleName,
@@ -409,14 +421,8 @@ export function RecorderPage() {
         zipFileName: `${bundleName}.zip`,
         privacyAcknowledgedAt: new Date().toISOString(),
       });
-      showToast(`已导出：${result.zipPath || result.artifactPath || '完成'}`, 'success');
-    } catch (exportErr) {
-      const message = toUiErrorMessage(exportErr);
-      if (/cancel/i.test(message)) {
-        showToast('已取消导出', 'info');
-      } else {
-        showToast(message, 'error');
-      }
+    } catch {
+      // 完成、取消和失败只由导出进度通知显示一次。
     } finally {
       setBusy(false);
     }

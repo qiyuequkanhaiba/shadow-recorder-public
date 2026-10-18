@@ -1474,40 +1474,33 @@ export function createFloatingToolbarHtml(input: {
         }
       }
 
-      let selfExporting = false;
-
       if (api && api.onExportProgress) {
         api.onExportProgress((progress) => {
-          const label = progress.percent + '% ' + progress.message;
-          if (progress.percent < 100) {
+          const phase = progress.phase || (progress.percent >= 100 ? 'complete' : 'running');
+          if (phase === 'running') {
             isExporting = true;
             if (buttons.export) buttons.export.disabled = true;
-            setExportButtonState('exporting', label);
-            if (!collapsed && selfExporting && statusToast) {
-              statusToast.textContent = label;
-              statusToast.classList.add('is-visible');
-            } else if (statusToast) {
-              statusToast.classList.remove('is-visible');
-            }
+            setExportButtonState('exporting', progress.percent + '% ' + progress.message);
+          } else if (phase === 'complete') {
+            isExporting = false;
+            setExportButtonState('exported', '已完成导出');
+            if (buttons.export) buttons.export.disabled = busy || lastRecording || !canExport;
+          } else if (phase === 'canceled') {
+            isExporting = false;
+            setExportButtonState('idle');
+            if (buttons.export) buttons.export.disabled = busy || lastRecording || !canExport;
           } else {
             isExporting = false;
-            setExportButtonState('exported', '已完成导出 100%');
-            if (!collapsed && selfExporting && statusToast) {
-              statusToast.textContent = '已导出证据 ZIP';
-              statusToast.classList.add('is-visible');
-              if (toastTimer != null) {
-                window.clearTimeout(toastTimer);
-              }
-              toastTimer = window.setTimeout(() => {
-                statusToast.classList.remove('is-visible');
-              }, 2200);
-            } else if (statusToast) {
-              statusToast.classList.remove('is-visible');
-            }
-            selfExporting = false;
+            setExportButtonState('error', progress.message || '导出失败');
+            if (buttons.export) buttons.export.disabled = busy || lastRecording || !canExport;
           }
           if (exportProgressFill) {
-            exportProgressFill.style.width = Math.max(0, Math.min(100, progress.percent)) + '%';
+            exportProgressFill.style.width = (phase === 'canceled' || phase === 'failed')
+              ? '0%'
+              : Math.max(0, Math.min(100, progress.percent)) + '%';
+          }
+          if (statusToast) {
+            statusToast.classList.remove('is-visible');
           }
         });
       }
@@ -1524,7 +1517,6 @@ export function createFloatingToolbarHtml(input: {
         }
         if (!api.exportTestSessionEvidence) throw new Error('No export API');
         isExporting = true;
-        selfExporting = true;
         buttons.export.disabled = true;
         setExportButtonState('exporting', '正在准备导出…');
         try {
@@ -1533,18 +1525,12 @@ export function createFloatingToolbarHtml(input: {
             outputMode: 'zip',
             privacyAcknowledgedAt: new Date().toISOString(),
           });
-          setExportButtonState('exported', '已导出证据 ZIP');
         } catch (err) {
-          const isCancel = err && /cancel/i.test(String(err?.message || err));
-          if (isCancel) {
-            setExportButtonState('idle');
-          } else {
-            setExportButtonState('error', '导出失败');
+          const isCancel = err && /cancel/i.test(String(err && err.message || err));
+          if (!isCancel) {
             console.error('[island] export failed:', err);
           }
         } finally {
-          isExporting = false;
-          selfExporting = false;
           void refresh();
         }
       };

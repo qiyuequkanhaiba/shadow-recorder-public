@@ -37,6 +37,12 @@ import {
 } from './settings-store';
 import { ReqCaseShadowRecorderService } from './service';
 import {
+  IDLE_EXPORT_PROGRESS,
+  reduceExportProgress,
+  type ExportProgressEvent,
+  type ExportProgressState,
+} from '../../export-progress';
+import {
   isFloatingToolbarDragCommand,
   isFloatingToolbarFitRequest,
   isFloatingToolbarMoveRequest,
@@ -474,6 +480,9 @@ type RegisterReqCaseIpcOptions = {
   removeRendererTarget: (target: WebContents) => void;
   getRendererTargets: () => WebContents[];
 };
+
+let exportProgressState: ExportProgressState = IDLE_EXPORT_PROGRESS;
+let nextExportAttemptId = 0;
 
 export function registerReqCaseShadowRecorderIpc(
   options: RegisterReqCaseIpcOptions,
@@ -962,7 +971,11 @@ export function registerReqCaseShadowRecorderIpc(
 
   handleTrusted(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidence, async (event, rawInput: unknown) => {
     const input = parseTestSessionEvidenceExportInput(rawInput);
-    const reportProgress = (progress: { percent: number; message: string }) => {
+    const reportProgress = (progress: {
+      percent: number;
+      message: string;
+      phase: 'idle' | 'running' | 'complete' | 'canceled' | 'failed';
+    }) => {
       const targets = new Set<WebContents>();
       if (!event.sender.isDestroyed()) {
         targets.add(event.sender);
@@ -985,48 +998,80 @@ export function registerReqCaseShadowRecorderIpc(
         }
       }
     };
-    let targetDir = input.targetDir;
-    if (!targetDir) {
-      const senderWindow = BrowserWindow.fromWebContents(event.sender);
-      const isSenderFloating = senderWindow && !senderWindow.isResizable();
-      const dialogParent = senderWindow && !senderWindow.isDestroyed() && !isSenderFloating
-        ? senderWindow
-        : undefined;
+    const attemptId = ++nextExportAttemptId;
+    const emitProgress = (event: Omit<ExportProgressEvent, 'attemptId'>) => {
+      const reduced = reduceExportProgress(exportProgressState, { ...event, attemptId });
+      exportProgressState = reduced.state;
+      if (!reduced.emit) {
+        return;
+      }
+      reportProgress({
+        percent: reduced.state.percent,
+        message: reduced.state.message,
+        phase: reduced.state.phase,
+      });
+    };
+    const forwardProgress = (progress: { percent: number; message: string }) => {
+      emitProgress({
+        percent: progress.percent,
+        message: progress.message,
+        status: progress.percent >= 100 ? 'complete' : 'running',
+      });
+    };
 
-      if (input.outputMode === 'zip') {
+    try {
+      let targetDir = input.targetDir;
+      if (!targetDir) {
+        const senderWindow = BrowserWindow.fromWebContents(event.sender);
+        const isSenderFloating = senderWindow && !senderWindow.isResizable();
+        const dialogParent = senderWindow && !senderWindow.isDestroyed() && !isSenderFloating
+          ? senderWindow
+          : undefined;
+
+        if (input.outputMode === 'zip') {
+          const dialogOptions = {
+            title: '保存证据 ZIP',
+            defaultPath: resolveEvidenceZipSaveDialogDefaultPath(input),
+            filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+          };
+          const result = dialogParent
+            ? await dialog.showSaveDialog(dialogParent, dialogOptions)
+            : await dialog.showSaveDialog(dialogOptions);
+          if (result.canceled || !result.filePath) {
+            throw new Error('Export canceled by user');
+          }
+          emitProgress({ percent: 8, message: '正在准备导出', status: 'running' });
+          return await service.exportSessionEvidence({
+            ...input,
+            targetDir: path.dirname(result.filePath),
+            zipFileName: path.basename(result.filePath),
+          }, forwardProgress);
+        }
+
         const dialogOptions = {
-          title: '保存证据 ZIP',
-          defaultPath: resolveEvidenceZipSaveDialogDefaultPath(input),
-          filters: [{ name: 'ZIP Archive', extensions: ['zip'] }],
+          title: '选择证据包导出目录',
+          properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
         };
         const result = dialogParent
-          ? await dialog.showSaveDialog(dialogParent, dialogOptions)
-          : await dialog.showSaveDialog(dialogOptions);
-        if (result.canceled || !result.filePath) {
+          ? await dialog.showOpenDialog(dialogParent, dialogOptions)
+          : await dialog.showOpenDialog(dialogOptions);
+        if (result.canceled || result.filePaths.length === 0) {
           throw new Error('Export canceled by user');
         }
-        reportProgress({ percent: 8, message: '正在准备导出' });
-        return service.exportSessionEvidence({
-          ...input,
-          targetDir: path.dirname(result.filePath),
-          zipFileName: path.basename(result.filePath),
-        }, reportProgress);
+        targetDir = result.filePaths[0];
       }
-
-      const dialogOptions = {
-        title: '选择证据包导出目录',
-        properties: ['openDirectory', 'createDirectory'] as ('openDirectory' | 'createDirectory')[],
-      };
-      const result = dialogParent
-        ? await dialog.showOpenDialog(dialogParent, dialogOptions)
-        : await dialog.showOpenDialog(dialogOptions);
-      if (result.canceled || result.filePaths.length === 0) {
-        throw new Error('Export canceled by user');
-      }
-      targetDir = result.filePaths[0];
+      emitProgress({ percent: 8, message: '正在准备导出', status: 'running' });
+      return await service.exportSessionEvidence({ ...input, targetDir }, forwardProgress);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const canceled = /cancel/i.test(message);
+      emitProgress({
+        percent: 0,
+        message: canceled ? '已取消导出' : (message || '导出失败'),
+        status: canceled ? 'canceled' : 'failed',
+      });
+      throw error;
     }
-    reportProgress({ percent: 8, message: '正在准备导出' });
-    return service.exportSessionEvidence({ ...input, targetDir }, reportProgress);
   });
 
   handleTrusted(REQCASE_SHADOW_RECORDER_CHANNELS.appendTestSessionNote, async (_event, rawInput: unknown) => {

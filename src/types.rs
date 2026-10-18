@@ -1762,6 +1762,23 @@ mod tests {
     }
 
     #[test]
+    fn config_mapping_defaults_semantic_plaintext_capture_to_opt_in() {
+        let default_config: crate::config::RecorderConfig = JsRecorderConfig {
+            semantic_plaintext_input_enabled: None,
+            ..JsRecorderConfig::default()
+        }
+        .into();
+        assert!(!default_config.semantic_plaintext_input_enabled);
+
+        let opt_in_config: crate::config::RecorderConfig = JsRecorderConfig {
+            semantic_plaintext_input_enabled: Some(true),
+            ..JsRecorderConfig::default()
+        }
+        .into();
+        assert!(opt_in_config.semantic_plaintext_input_enabled);
+    }
+
+    #[test]
     fn config_mapping_respects_capture_reuse_override() {
         let config: crate::config::RecorderConfig = JsRecorderConfig {
             capture_reuse_enabled: Some(false),
@@ -1846,6 +1863,8 @@ mod tests {
             recording_profile: "smooth".to_string(),
             encoder_preference: "hardware".to_string(),
             show_mouse_in_video: true,
+            video_privacy_enabled: false,
+            video_privacy_masks: Vec::new(),
             notes: Some("notes".to_string()),
             target_process_name: Some("demo.exe".to_string()),
             target_pid: Some(42),

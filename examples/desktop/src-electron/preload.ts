@@ -166,7 +166,11 @@ export type ReqCaseShadowRecorderRendererApi = {
     input?: ReqCaseShadowRecorderEvidenceExportRequest,
   ) => Promise<ReqCaseShadowRecorderTestSessionEvidenceExportResult>;
   onExportProgress?: (
-    handler: (progress: { percent: number; message: string }) => void,
+    handler: (progress: {
+      percent: number;
+      message: string;
+      phase: 'idle' | 'running' | 'complete' | 'canceled' | 'failed';
+    }) => void,
   ) => () => void;
   getTestSessionEvents: (input?: {
     sessionId?: string;
@@ -259,7 +263,11 @@ const api: ReqCaseShadowRecorderRendererApi = {
   exportTestSessionEvidence: (input) =>
     ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidence, input),
   onExportProgress: (handler) => {
-    const listener = (_event: unknown, progress: { percent: number; message: string }) => {
+    const listener = (_event: unknown, progress: {
+      percent: number;
+      message: string;
+      phase: 'idle' | 'running' | 'complete' | 'canceled' | 'failed';
+    }) => {
       handler(progress);
     };
     ipcRenderer.on(REQCASE_SHADOW_RECORDER_CHANNELS.exportTestSessionEvidenceProgress, listener);

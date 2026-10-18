@@ -216,6 +216,8 @@ pub fn subscribe_steps_for_host(callback: napi::JsFunction) -> Result<()> {
 pub fn start_test_session(
     options: Option<JsTestSessionStartOptions>,
 ) -> Result<JsTestSessionRecord> {
+    let (privacy_enabled, privacy_masks) = RECORDER.video_privacy_masks();
+    TEST_SESSION_MANAGER.stage_video_privacy(privacy_enabled, privacy_masks);
     let session = TEST_SESSION_MANAGER
         .start(options.unwrap_or_default().into())
         .map_err(map_session_error)?;
@@ -299,11 +301,13 @@ pub fn update_active_test_session_video_config(
     config: Option<JsActiveTestSessionVideoConfig>,
 ) -> Result<Option<JsTestSessionRecord>> {
     let config = config.unwrap_or_default();
+    let video_privacy = RECORDER.video_privacy_masks();
     TEST_SESSION_MANAGER
         .update_active_video_config(
             config.recording_profile,
             config.encoder_preference,
             config.show_mouse_in_video,
+            Some(video_privacy),
         )
         .map(|session| session.map(Into::into))
         .map_err(map_session_error)

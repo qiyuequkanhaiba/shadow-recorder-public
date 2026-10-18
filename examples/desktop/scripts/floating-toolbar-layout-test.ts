@@ -837,7 +837,9 @@ function testFloatingToolbarHasStatusAndExport(): void {
   assert.match(html, /\.island\[data-collapsed="true"\] \.toast-status-banner \{[\s\S]*display:\s*none !important;/);
   assert.match(html, /\.island\[data-collapsed="true"\] \.island-progress-hairline \{[\s\S]*left:\s*17px;\s*right:\s*17px;/);
   assert.doesNotMatch(html, /hairlineShimmer/);
-  assert.match(html, /if \(!collapsed && selfExporting && statusToast\)/);
+  assert.match(html, /phase === 'complete'/);
+  assert.match(html, /statusToast\.classList\.remove\('is-visible'\)/);
+  assert.doesNotMatch(html, /if \(!collapsed && selfExporting && statusToast\)/);
 }
 
 function testFloatingToolbarUsesZeroOverflowGlassCapsule(): void {
@@ -1068,6 +1070,9 @@ function testRecorderPlaybackStageUsesFluidTransportDock(): void {
   assert.match(source, /recorder-stage-transport-track/);
   assert.match(source, /aria-label="后退 5 秒"/);
   assert.match(source, /aria-label="前进 5 秒"/);
+  assert.match(source, /aria-label="上一帧"/);
+  assert.match(source, /aria-label="下一帧"/);
+  assert.match(source, /aria-label=\{`播放速度/);
   assert.match(source, /recorder-stage-quick-defect/);
   assert.match(source, /aria-label="标记当前回放位置为缺陷"/);
   assert.match(source, /标记瞬时/);

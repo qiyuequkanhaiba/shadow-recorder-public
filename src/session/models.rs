@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::privacy::MaskRegion;
 use crate::types::StepData;
 
 pub const TEST_SESSION_SCHEMA_VERSION: u32 = 1;
@@ -82,6 +83,10 @@ pub struct TestSessionRecord {
     pub encoder_preference: String,
     #[serde(default = "default_show_mouse_in_video")]
     pub show_mouse_in_video: bool,
+    #[serde(default)]
+    pub video_privacy_enabled: bool,
+    #[serde(default)]
+    pub video_privacy_masks: Vec<MaskRegion>,
     pub notes: Option<String>,
     pub history_retention_mode: Option<String>,
     pub history_retention_hours: Option<u32>,
@@ -146,6 +151,8 @@ impl TestSessionRecord {
             recording_profile: normalized_recording_profile,
             encoder_preference: normalized_encoder_preference,
             show_mouse_in_video,
+            video_privacy_enabled: false,
+            video_privacy_masks: Vec::new(),
             notes: normalized_notes,
             history_retention_mode: Some(normalize_history_retention_mode(options.history_retention_mode)),
             history_retention_hours: Some(options.history_retention_hours.unwrap_or(24).clamp(1, 168)),

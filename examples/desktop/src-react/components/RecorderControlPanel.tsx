@@ -61,6 +61,7 @@ function ScreenshotShortcutField(props: {
       <span className="settings-field-label">{props.label}</span>
       <input
         readOnly
+        className={`shortcut-capture${listening ? ' is-listening' : ''}${rejected ? ' is-rejected' : ''}`}
         value={listening ? '请按下组合键' : shown}
         onFocus={() => {
           setListening(true);
@@ -599,7 +600,7 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
               shortcutCaptureWindow: value,
             }))}
           />
-          <p className="settings-field-hint">点一下后按下组合键。退格或 Esc 关闭。不要和开始或停止录制用同一个组合键。</p>
+          <p className="settings-field-hint settings-field-span">点一下后按下组合键。退格或 Esc 关闭。不要和开始或停止录制用同一个组合键。</p>
           <label className="settings-field">
             <span className="settings-field-label">{t('config.screenshotDelay')}</span>
             <select
@@ -616,6 +617,7 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
               <option value={5}>5 秒</option>
             </select>
           </label>
+          <div className="screenshot-actions">
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -634,8 +636,9 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
           >
             打开截图目录
           </button>
+          </div>
           {screenshotHistory.length > 0 ? (
-            <ul className="settings-field-hint">
+            <ul className="screenshot-history">
               {screenshotHistory.slice(0, 8).map((item) => (
                 <li key={item.id}>
                   <button

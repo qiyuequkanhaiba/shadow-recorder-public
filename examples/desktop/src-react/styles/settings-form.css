@@ -877,6 +877,35 @@ label.settings-toggle,
   text-align: left;
 }
 
+.shortcut-capture {
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.shortcut-capture.is-listening {
+  border-color: var(--accent-primary);
+  box-shadow: var(--focus-ring);
+}
+
+.shortcut-capture.is-rejected {
+  border-color: var(--accent-danger);
+}
+
+.screenshot-actions,
+.screenshot-history {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.screenshot-history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
 @media (max-width: 900px) {
   button.settings-nav-item,
   .settings-nav-item {

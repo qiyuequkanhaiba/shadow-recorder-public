@@ -4,34 +4,43 @@ export function createScreenshotOverlayHtml(): string {
 <head>
   <meta charset="utf-8" />
   <style>
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; cursor: crosshair; }
-    #dim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); }
-    #box { position: fixed; display: none; border: 2px solid #ffffff; box-sizing: border-box; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; cursor: crosshair; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+    #dim { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.38); }
+    #box { position: fixed; display: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.85), 0 12px 40px rgba(0, 0, 0, 0.18); box-sizing: border-box; }
     #draw { display: none; width: 100%; height: 100%; }
-    #tools { position: absolute; left: 0; top: calc(100% + 8px); display: flex; gap: 6px; }
-    #tools button, #hint { color: #fff; background: rgba(0, 0, 0, 0.72); border: 0; border-radius: 6px; padding: 4px 8px; font: 12px/1.4 sans-serif; }
-    #hint { position: absolute; left: 0; top: calc(100% + 40px); white-space: nowrap; }
-    #tools button[data-active="true"] { outline: 1px solid #fff; }
+    #size { position: absolute; right: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; color: #fff; background: rgba(15, 23, 42, 0.82); font: 12px/1.4 sans-serif; letter-spacing: 0.02em; }
+    #chrome { position: absolute; left: 0; top: calc(100% + 10px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+    #tools { display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(15, 23, 42, 0.88); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); }
+    #tools button, #hint { color: #e2e8f0; background: transparent; border: 0; border-radius: 8px; padding: 6px 10px; font: 12px/1.4 sans-serif; cursor: pointer; }
+    #tools button:hover { background: rgba(255, 255, 255, 0.08); }
+    #tools button[data-active="true"] { color: #fff; background: #0284c7; }
+    #pin { margin-left: 4px; background: rgba(255, 255, 255, 0.08); }
+    #hint { padding: 4px 8px; border-radius: 999px; color: #cbd5e1; background: rgba(15, 23, 42, 0.82); white-space: nowrap; }
   </style>
 </head>
 <body>
   <div id="dim"></div>
   <div id="box" role="img" aria-label="截图选区">
     <canvas id="draw"></canvas>
-    <div id="tools" hidden>
-      <button type="button" data-tool="rect" data-active="true">矩形</button>
-      <button type="button" data-tool="arrow">箭头</button>
-      <button type="button" data-tool="text">文字</button>
-      <button type="button" data-tool="censor">打码</button>
-      <button type="button" id="pin">贴在屏幕上</button>
+    <div id="size" hidden></div>
+    <div id="chrome" hidden>
+      <div id="tools">
+        <button type="button" data-tool="rect" data-active="true">矩形</button>
+        <button type="button" data-tool="arrow">箭头</button>
+        <button type="button" data-tool="text">文字</button>
+        <button type="button" data-tool="censor">打码</button>
+        <button type="button" id="pin">贴在屏幕上</button>
+      </div>
+      <div id="hint">Enter 复制 · Ctrl+S 保存 · Esc 取消</div>
     </div>
-    <div id="hint" hidden>Enter 复制 · Ctrl+S 保存 · Esc 取消</div>
   </div>
   <script>
     const api = window.screenshotOverlay;
     const box = document.getElementById('box');
     const hint = document.getElementById('hint');
+    const chrome = document.getElementById('chrome');
     const tools = document.getElementById('tools');
+    const size = document.getElementById('size');
     const canvas = document.getElementById('draw');
     const ctx = canvas.getContext('2d');
     let drag = null;
@@ -41,9 +50,33 @@ export function createScreenshotOverlayHtml(): string {
     let tool = 'rect';
     let snapshot = null;
 
+    function placeChrome() {
+      const rect = box.getBoundingClientRect();
+      const chromeHeight = 78;
+      const chromeWidth = 360;
+      const below = window.innerHeight - rect.bottom;
+      if (below < chromeHeight && rect.top > chromeHeight) {
+        chrome.style.top = 'auto';
+        chrome.style.bottom = 'calc(100% + 10px)';
+      } else {
+        chrome.style.top = 'calc(100% + 10px)';
+        chrome.style.bottom = 'auto';
+      }
+      if (rect.left + chromeWidth > window.innerWidth) {
+        chrome.style.left = 'auto';
+        chrome.style.right = '0';
+        chrome.style.alignItems = 'flex-end';
+      } else {
+        chrome.style.left = '0';
+        chrome.style.right = 'auto';
+        chrome.style.alignItems = 'flex-start';
+      }
+    }
+
     function paint(rect) {
       if (!rect) {
         box.style.display = 'none';
+        size.hidden = true;
         return;
       }
       box.style.display = 'block';
@@ -51,6 +84,9 @@ export function createScreenshotOverlayHtml(): string {
       box.style.top = rect.y + 'px';
       box.style.width = rect.width + 'px';
       box.style.height = rect.height + 'px';
+      size.hidden = false;
+      size.textContent = Math.round(rect.width) + ' × ' + Math.round(rect.height);
+      placeChrome();
     }
 
     function normalize(x1, y1, x2, y2) {
@@ -119,8 +155,7 @@ export function createScreenshotOverlayHtml(): string {
         remember();
       };
       image.src = 'data:image/png;base64,' + result.pngBase64;
-      tools.hidden = false;
-      hint.hidden = false;
+      chrome.hidden = false;
       hint.textContent = 'Enter 复制 · Ctrl+S 保存 · Esc 取消';
     }
 
@@ -145,13 +180,14 @@ export function createScreenshotOverlayHtml(): string {
     });
 
     window.addEventListener('mousedown', (event) => {
-      if (pending || event.button !== 0 || event.target.closest('#tools')) return;
+      if (pending || event.button !== 0 || event.target.closest('#chrome')) return;
       if (frozen) {
         drawStart = bitmapPoint(event);
         if (tool !== 'text') remember();
         return;
       }
       drag = { x: event.clientX, y: event.clientY, cx: event.clientX, cy: event.clientY };
+      chrome.hidden = true;
       paint(normalize(drag.x, drag.y, drag.cx, drag.cy));
     });
     window.addEventListener('mousemove', (event) => {
@@ -193,7 +229,7 @@ export function createScreenshotOverlayHtml(): string {
       pending = false;
       if (!result || !result.ok) {
         paint(rect);
-        hint.hidden = false;
+        chrome.hidden = false;
         hint.textContent = (result && result.message) || '截图失败';
         return;
       }
@@ -226,7 +262,7 @@ export function createCountdownHtml(): string {
   <meta charset="utf-8" />
   <style>
     html, body { margin: 0; width: 100%; height: 100%; background: transparent; }
-    #n { width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(0, 0, 0, 0.72); border-radius: 16px; font: 64px/1 sans-serif; }
+    #n { width: 140px; height: 140px; display: flex; align-items: center; justify-content: center; color: #fff; background: rgba(15, 23, 42, 0.88); border-radius: 28px; box-shadow: 0 0 0 8px rgba(2, 132, 199, 0.28), 0 16px 40px rgba(0, 0, 0, 0.28); font: 64px/1 sans-serif; }
   </style>
 </head>
 <body>
@@ -249,10 +285,11 @@ export function createPinHtml(id: string, pngBase64: string): string {
 <head>
   <meta charset="utf-8" />
   <style>
-    html, body { margin: 0; background: #111; color: #fff; }
-    header { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 12px/1 sans-serif; }
-    button { color: #fff; background: transparent; border: 0; }
-    img { display: block; width: 100%; height: calc(100vh - 28px); object-fit: contain; }
+    html, body { margin: 0; background: #0f172a; color: #e2e8f0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+    header { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; font: 12px/1 sans-serif; background: #111827; -webkit-app-region: drag; }
+    button { color: #e2e8f0; background: transparent; border: 0; border-radius: 6px; padding: 2px 8px; -webkit-app-region: no-drag; cursor: pointer; }
+    button:hover { background: rgba(255, 255, 255, 0.08); }
+    img { display: block; width: 100%; height: calc(100vh - 28px); object-fit: contain; background: #020617; }
   </style>
 </head>
 <body>

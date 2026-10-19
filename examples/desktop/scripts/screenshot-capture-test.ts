@@ -8,6 +8,7 @@ import {
   canAssignScreenshotShortcut,
   formatScreenshotAccelerator,
   normalizeScreenshotDelaySeconds,
+  chooseAreaSelection,
   parseSelectionRect,
   physicalRectFromDipCorners,
   resolveScreenshotShortcuts,
@@ -141,6 +142,29 @@ function run(): void {
     },
   );
 
+  const hover = { x: 10, y: 20, width: 300, height: 200 };
+  assert.deepEqual(chooseAreaSelection({
+    startX: 4,
+    startY: 5,
+    endX: 6,
+    endY: 7,
+    hover,
+  }), hover);
+  assert.deepEqual(chooseAreaSelection({
+    startX: 0,
+    startY: 0,
+    endX: 40,
+    endY: 18,
+    hover,
+  }), { x: 0, y: 0, width: 40, height: 18 });
+  assert.equal(chooseAreaSelection({
+    startX: 1,
+    startY: 1,
+    endX: 2,
+    endY: 2,
+    hover: null,
+  }), null);
+
   const html = createScreenshotOverlayHtml();
   assert.match(html, /aria-label="截图选区"/);
   assert.match(html, /Enter 复制/);
@@ -153,6 +177,14 @@ function run(): void {
   assert.match(html, /画笔/);
   assert.match(html, /马赛克/);
   assert.match(html, /撤销/);
+  assert.match(html, /id="accept"[^>]*>✓/);
+  assert.match(html, /id="dismiss"[^>]*>✕/);
+  assert.match(html, /button\.id === 'accept'/);
+  assert.match(html, /button\.id === 'dismiss'/);
+  assert.match(html, /api\.windowAtPoint/);
+  assert.match(html, /const DRAG_THRESHOLD = 6/);
+  const toolsBlock = html.slice(html.indexOf('<div id="tools">'), html.indexOf('<div id="hint">'));
+  assert.ok(toolsBlock.indexOf('id="accept"') > toolsBlock.indexOf('id="pin"'));
   assert.match(html, /#tools \{[^}]*flex-wrap:\s*wrap/);
   assert.ok(html.indexOf('<div id="hint">') > html.indexOf('<div id="tools">'));
   assert.equal(html.slice(html.indexOf('<div id="tools">'), html.indexOf('<div id="hint">')).includes('id="hint"'), false);
@@ -185,6 +217,8 @@ function run(): void {
   assert.match(session, /scalePinnedScreenshot/);
   assert.match(session, /focusable:\s*true/);
   assert.doesNotMatch(session, /setShape|SetWindowRgn/);
+  assert.match(session, /windowSelectionAtClientPoint/);
+  assert.match(session, /windowBoundsAtPoint/);
   assert.match(session, /function showExcludedFromCapture/);
   assert.match(session, /setContentProtection\(true\)/);
   const pinStart = session.indexOf('function openPin');

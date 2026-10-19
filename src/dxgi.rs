@@ -23,9 +23,11 @@ use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GA_ROOT, GetAncestor, GetForegroundWindow, GetWindowRect, GetWindowTextLengthW,
-    GetWindowTextW, GetWindowThreadProcessId, WindowFromPoint,
+    GA_ROOT, GW_HWNDNEXT, GetAncestor, GetClassNameW, GetForegroundWindow, GetTopWindow, GetWindow,
+    GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
+    IsWindowVisible, WindowFromPoint,
 };
 use windows::core::{Interface, PWSTR};
 
@@ -389,6 +391,68 @@ pub fn window_rect_at_point(x: i32, y: i32) -> Result<(Rect, Rect), RecorderErro
         },
         monitor_rect_from_handle(monitor)?,
     ))
+}
+
+pub fn top_level_window_rect_at_point(x: i32, y: i32, ignore_hwnd: isize) -> Option<Rect> {
+    let mut hwnd = unsafe { GetTopWindow(HWND(std::ptr::null_mut())) }.ok()?;
+    let mut seen = 0u32;
+    while !hwnd.0.is_null() && seen < 512 {
+        seen += 1;
+        let current = hwnd.0 as isize;
+        let next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) }.unwrap_or(HWND(std::ptr::null_mut()));
+        if current != ignore_hwnd && window_frame_contains_point(hwnd, x, y) {
+            let mut rect = RECT::default();
+            if unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
+                return Some(Rect {
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                });
+            }
+        }
+        hwnd = next;
+    }
+    None
+}
+
+fn window_frame_contains_point(hwnd: HWND, x: i32, y: i32) -> bool {
+    if hwnd.0.is_null() || unsafe { !IsWindowVisible(hwnd).as_bool() } || unsafe { IsIconic(hwnd).as_bool() } {
+        return false;
+    }
+    if window_is_cloaked(hwnd) || is_desktop_window(hwnd) {
+        return false;
+    }
+    let mut rect = RECT::default();
+    if unsafe { GetWindowRect(hwnd, &mut rect) }.is_err() {
+        return false;
+    }
+    x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom
+        && rect.right - rect.left > 1
+        && rect.bottom - rect.top > 1
+}
+
+fn window_is_cloaked(hwnd: HWND) -> bool {
+    let mut cloaked = 0u32;
+    let ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED,
+            &mut cloaked as *mut u32 as *mut _,
+            std::mem::size_of::<u32>() as u32,
+        )
+    };
+    ok.is_ok() && cloaked != 0
+}
+
+fn is_desktop_window(hwnd: HWND) -> bool {
+    let mut buffer = [0u16; 64];
+    let len = unsafe { GetClassNameW(hwnd, &mut buffer) };
+    if len <= 0 {
+        return false;
+    }
+    let class = String::from_utf16_lossy(&buffer[..len as usize]);
+    class == "Progman" || class == "WorkerW"
 }
 
 fn query_process_name(pid: u32) -> Result<String, RecorderError> {

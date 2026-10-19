@@ -1126,6 +1126,28 @@ export function captureScreenshot(request: ScreenshotCaptureRequest): {
   return binding.captureScreenshot(request);
 }
 
+export function windowBoundsAtPoint(
+  x: number,
+  y: number,
+  ignoreHwnd: number,
+): { x: number; y: number; width: number; height: number } | null {
+  const binding = getBinding() as {
+    windowBoundsAtPoint?: (
+      x: number,
+      y: number,
+      ignoreHwnd: number,
+    ) => { x: number; y: number; width: number; height: number } | null | undefined;
+  };
+  if (typeof binding.windowBoundsAtPoint !== 'function') {
+    return null;
+  }
+  const found = binding.windowBoundsAtPoint(Math.round(x), Math.round(y), ignoreHwnd);
+  if (!found || found.width < 2 || found.height < 2) {
+    return null;
+  }
+  return found;
+}
+
 export function setRecorderConfig(config: ReqCaseShadowRecorderConfig): void {
   const semanticRecordingEnabled =
     !!(config.semanticRecordingEnabled ?? config.defectEvidenceEnabled);

@@ -400,6 +400,7 @@ const pinRequestHandlers = new Set<() => void>();
 contextBridge.exposeInMainWorld('screenshotOverlay', {
   confirmSelection: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke('reqcase:screenshot:confirm', rect),
+  windowAtPoint: (x: number, y: number) => ipcRenderer.invoke('reqcase:screenshot:window-at', x, y),
   cancel: () => ipcRenderer.invoke('reqcase:screenshot:cancel'),
   cancelDelay: () => ipcRenderer.invoke('reqcase:screenshot:cancel-delay'),
   copyFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:copy', pngBase64),

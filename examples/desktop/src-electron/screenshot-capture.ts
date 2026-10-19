@@ -215,6 +215,32 @@ export function trimScreenshotHistory<T extends { createdAtMs: number }>(
   };
 }
 
+export const AREA_DRAG_THRESHOLD_PX = 6;
+
+export function chooseAreaSelection(input: {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+  hover: ScreenshotRect | null;
+}): ScreenshotRect | null {
+  const dragged = Math.hypot(input.endX - input.startX, input.endY - input.startY);
+  if (dragged >= AREA_DRAG_THRESHOLD_PX) {
+    const x = Math.min(input.startX, input.endX);
+    const y = Math.min(input.startY, input.endY);
+    const width = Math.abs(input.endX - input.startX);
+    const height = Math.abs(input.endY - input.startY);
+    if (width < 2 || height < 2) {
+      return null;
+    }
+    return { x, y, width, height };
+  }
+  if (!input.hover || input.hover.width < 2 || input.hover.height < 2) {
+    return null;
+  }
+  return input.hover;
+}
+
 export function parseSelectionRect(value: unknown): ScreenshotRect | null {
   if (!value || typeof value !== 'object') {
     return null;

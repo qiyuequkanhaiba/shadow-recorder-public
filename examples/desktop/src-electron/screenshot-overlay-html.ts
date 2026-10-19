@@ -19,6 +19,9 @@ export function createScreenshotOverlayHtml(): string {
     #tools button[data-active="true"] { color: #fff; background: #0284c7; }
     #colors button[data-active="true"] { border-color: #fff; }
     #pin { margin-left: 4px; background: rgba(255, 255, 255, 0.08); }
+    #accept, #dismiss { font: 16px/1 sans-serif; min-width: 28px; }
+    #accept { color: #4ade80; }
+    #dismiss { color: #f87171; }
     #hint { padding: 4px 8px; border-radius: 999px; color: #cbd5e1; background: rgba(15, 23, 42, 0.82); font: 12px/1.4 sans-serif; white-space: nowrap; }
   </style>
 </head>
@@ -47,6 +50,8 @@ export function createScreenshotOverlayHtml(): string {
           <button type="button" data-color="#0a84ff" style="background:#0a84ff" aria-label="蓝色"></button>
           <button type="button" data-color="#ffffff" style="background:#ffffff" aria-label="白色"></button>
         </div>
+        <button type="button" id="accept" title="复制" aria-label="复制">✓</button>
+        <button type="button" id="dismiss" title="取消" aria-label="取消">✕</button>
       </div>
       <div id="hint">Enter 复制 · Ctrl+S 保存 · Ctrl+Z 撤销 · Esc 取消</div>
     </div>
@@ -62,6 +67,12 @@ export function createScreenshotOverlayHtml(): string {
     const canvas = document.getElementById('draw');
     const ctx = canvas.getContext('2d');
     let drag = null;
+    let freeDrag = false;
+    let hoverRect = null;
+    let hoverToken = 0;
+    let hoverPending = false;
+    let hoverQueued = null;
+    const DRAG_THRESHOLD = 6;
     let drawStart = null;
     let frozen = false;
     let pending = false;
@@ -102,6 +113,28 @@ export function createScreenshotOverlayHtml(): string {
         chrome.style.right = 'auto';
         chrome.style.alignItems = 'flex-start';
       }
+    }
+
+    async function refreshHover(x, y) {
+      if (!api.windowAtPoint || frozen || drag) return;
+      hoverQueued = { x, y };
+      if (hoverPending) return;
+      hoverPending = true;
+      while (hoverQueued && !frozen && !drag) {
+        const point = hoverQueued;
+        hoverQueued = null;
+        const token = ++hoverToken;
+        let rect = null;
+        try {
+          rect = await api.windowAtPoint(point.x, point.y);
+        } catch (error) {
+          rect = null;
+        }
+        if (token !== hoverToken || frozen || drag) break;
+        hoverRect = rect && rect.width >= 2 && rect.height >= 2 ? rect : null;
+        if (!drag) paint(hoverRect);
+      }
+      hoverPending = false;
     }
 
     function paint(rect) {
@@ -298,6 +331,15 @@ export function createScreenshotOverlayHtml(): string {
       if (!button) return;
       event.stopPropagation();
       if (editing) commitText();
+      if (button.id === 'accept') {
+        if (editing) commitText();
+        await api.copyFrozen(await pngBase64());
+        return;
+      }
+      if (button.id === 'dismiss') {
+        await api.cancel();
+        return;
+      }
       if (button.id === 'pin') {
         await api.pinFrozen(await pngBase64());
         return;
@@ -331,8 +373,8 @@ export function createScreenshotOverlayHtml(): string {
         return;
       }
       drag = { x: event.clientX, y: event.clientY, cx: event.clientX, cy: event.clientY };
+      freeDrag = false;
       chrome.hidden = true;
-      paint(normalize(drag.x, drag.y, drag.cx, drag.cy));
     });
     window.addEventListener('mousemove', (event) => {
       if (frozen && drawStart && tool === 'pen' && penLast) {
@@ -351,10 +393,16 @@ export function createScreenshotOverlayHtml(): string {
         strokeShape(drawStart, bitmapPoint(event), false);
         return;
       }
-      if (!drag || frozen) return;
+      if (!drag || frozen) {
+        if (!frozen && !drag) void refreshHover(event.clientX, event.clientY);
+        return;
+      }
       drag.cx = event.clientX;
       drag.cy = event.clientY;
-      paint(normalize(drag.x, drag.y, drag.cx, drag.cy));
+      if (!freeDrag && Math.hypot(drag.cx - drag.x, drag.cy - drag.y) >= DRAG_THRESHOLD) {
+        freeDrag = true;
+      }
+      if (freeDrag) paint(normalize(drag.x, drag.y, drag.cx, drag.cy));
     });
     window.addEventListener('mouseup', async (event) => {
       if (frozen && drawStart && event.button === 0) {
@@ -371,10 +419,13 @@ export function createScreenshotOverlayHtml(): string {
         return;
       }
       if (!drag || frozen || pending || event.button !== 0) return;
-      const rect = normalize(drag.x, drag.y, event.clientX, event.clientY);
+      const rect = freeDrag
+        ? normalize(drag.x, drag.y, event.clientX, event.clientY)
+        : hoverRect;
       drag = null;
+      freeDrag = false;
       if (!rect) {
-        paint(null);
+        paint(hoverRect);
         return;
       }
       pending = true;

@@ -1363,4 +1363,11 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   appQuitting = true;
   globalShortcut.unregisterAll();
+  if (recorderService?.isRecording()) {
+    try {
+      recorderService.stop();
+    } catch (error) {
+      console.error('[quit] failed to stop recording', error);
+    }
+  }
 });

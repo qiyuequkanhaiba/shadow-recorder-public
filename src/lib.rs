@@ -797,3 +797,32 @@ pub fn capture_screenshot(
         origin_y: output.origin_y,
     })
 }
+
+#[napi(object)]
+pub struct JsWindowBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[napi]
+pub fn window_bounds_at_point(x: i32, y: i32, ignore_hwnd: f64) -> Option<JsWindowBounds> {
+    let ignore = if ignore_hwnd.is_finite() {
+        ignore_hwnd as isize
+    } else {
+        0
+    };
+    let rect = crate::dxgi::top_level_window_rect_at_point(x, y, ignore)?;
+    let width = rect.right.saturating_sub(rect.left);
+    let height = rect.bottom.saturating_sub(rect.top);
+    if width <= 1 || height <= 1 {
+        return None;
+    }
+    Some(JsWindowBounds {
+        x: rect.left,
+        y: rect.top,
+        width: width as u32,
+        height: height as u32,
+    })
+}

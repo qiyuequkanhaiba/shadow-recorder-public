@@ -12,7 +12,7 @@ import {
   shell,
 } from 'electron';
 
-import { captureScreenshot } from './native-binding';
+import { captureScreenshot, windowBoundsAtPoint } from './native-binding';
 import {
   normalizeScreenshotDelaySeconds,
   parseSelectionRect,
@@ -589,6 +589,54 @@ export async function captureInstantScreenshot(
     const message = error instanceof Error ? error.message : '截图失败';
     notify(message === '已取消' ? '已取消截图' : '截图失败', message === '已取消' ? '倒计时已取消' : message);
   }
+}
+
+function overlayHwnd(window: BrowserWindow): number {
+  const handle = window.getNativeWindowHandle();
+  if (handle.length >= 8) {
+    const value = handle.readBigUInt64LE(0);
+    if (value <= BigInt(Number.MAX_SAFE_INTEGER)) {
+      return Number(value);
+    }
+  }
+  return handle.length >= 4 ? handle.readUInt32LE(0) : 0;
+}
+
+export function windowSelectionAtClientPoint(clientX: number, clientY: number): ScreenshotRect | null {
+  const window = overlay;
+  if (!window || window.isDestroyed() || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+    return null;
+  }
+  const bounds = window.getBounds();
+  const physical = screen.dipToScreenPoint({
+    x: bounds.x + clientX,
+    y: bounds.y + clientY,
+  });
+  let found: { x: number; y: number; width: number; height: number } | null = null;
+  try {
+    found = windowBoundsAtPoint(physical.x, physical.y, overlayHwnd(window));
+  } catch (error: unknown) {
+    console.warn('Failed to resolve the window under the cursor', error);
+    return null;
+  }
+  if (!found) {
+    return null;
+  }
+  const origin = screen.screenToDipPoint({ x: found.x, y: found.y });
+  const far = screen.screenToDipPoint({
+    x: found.x + found.width,
+    y: found.y + found.height,
+  });
+  const local = {
+    x: Math.round(origin.x - bounds.x),
+    y: Math.round(origin.y - bounds.y),
+    width: Math.round(far.x - origin.x),
+    height: Math.round(far.y - origin.y),
+  };
+  if (local.width < 2 || local.height < 2) {
+    return null;
+  }
+  return local;
 }
 
 export async function confirmAreaSelection(value: unknown): Promise<{

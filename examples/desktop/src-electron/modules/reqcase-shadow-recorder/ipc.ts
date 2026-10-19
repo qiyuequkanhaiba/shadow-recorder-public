@@ -11,6 +11,7 @@ import {
   endPinnedDrag,
   movePinnedScreenshot,
   confirmAreaSelection,
+  windowSelectionAtClientPoint,
   copyFrozenScreenshot,
   copyPinnedScreenshot,
   listScreenshotHistory,
@@ -629,6 +630,12 @@ export function registerReqCaseShadowRecorderIpc(
   }
 
   handleTrusted('reqcase:screenshot:confirm', async (_event, rect: unknown) => confirmAreaSelection(rect));
+  handleTrusted('reqcase:screenshot:window-at', async (_event, x: unknown, y: unknown) => {
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+    return windowSelectionAtClientPoint(x, y);
+  });
   handleTrusted('reqcase:screenshot:cancel', async () => {
     cancelAreaScreenshot();
   });

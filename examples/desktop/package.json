@@ -41,6 +41,7 @@
     "test:operation-native-contract": "tsx scripts/native-declaration-contract-test.ts && tsx scripts/operation-native-contract-test.ts",
     "test:operation-compatibility": "tsx scripts/operation-compatibility-test.ts && tsx scripts/historical-session-matrix-test.ts",
     "test:historical-session-matrix": "tsx scripts/historical-session-matrix-test.ts",
+    "test:abandoned-session-seal": "tsx scripts/abandoned-session-seal-test.ts",
     "test:historical-session-real-packs": "tsx scripts/historical-session-real-pack-test.ts",
     "test:historical-session-ui-smoke": "node scripts/historical-session-ui-smoke.mjs",
     "test:recording-review-interaction": "tsx scripts/recording-review-interaction-test.ts",

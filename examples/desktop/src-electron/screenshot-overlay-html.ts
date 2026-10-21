@@ -4,12 +4,12 @@ export function createScreenshotOverlayHtml(): string {
 <head>
   <meta charset="utf-8" />
   <style>
-    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; cursor: crosshair; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
+    html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; cursor: crosshair; user-select: none; -webkit-user-select: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
     #dim { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.38); }
     #box { position: fixed; display: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.85), 0 12px 40px rgba(0, 0, 0, 0.18); box-sizing: border-box; }
-    #draw { display: none; width: 100%; height: 100%; }
+    #draw { display: none; width: 100%; height: 100%; touch-action: none; -webkit-user-drag: none; }
     #size { position: absolute; right: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; color: #fff; background: rgba(15, 23, 42, 0.82); font: 12px/1.4 sans-serif; letter-spacing: 0.02em; pointer-events: none; }
-    #editor { position: absolute; z-index: 5; display: none; min-width: 120px; max-width: 280px; padding: 4px 8px; border: 1px solid #fff; border-radius: 8px; background: rgba(15, 23, 42, 0.94); color: #fff; caret-color: #fff; font: 16px/1.4 sans-serif; outline: none; cursor: text; }
+    #editor { position: absolute; z-index: 5; display: none; min-width: 120px; max-width: 280px; padding: 4px 8px; border: 1px solid #fff; border-radius: 8px; background: rgba(15, 23, 42, 0.94); color: #fff; caret-color: #fff; font: 16px/1.4 sans-serif; outline: none; cursor: text; user-select: text; -webkit-user-select: text; }
     #chrome { position: absolute; left: 0; top: calc(100% + 10px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
     #tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; width: max-content; max-width: calc(100vw - 16px); padding: 4px; border-radius: 12px; background: rgba(15, 23, 42, 0.88); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); box-sizing: border-box; }
     #colors { display: flex; align-items: center; flex: 0 0 auto; flex-wrap: nowrap; gap: 4px; margin-left: 2px; }
@@ -74,6 +74,8 @@ export function createScreenshotOverlayHtml(): string {
     let hoverQueued = null;
     const DRAG_THRESHOLD = 6;
     let drawStart = null;
+    let drawCurrent = null;
+    let drawHeld = false;
     let frozen = false;
     let pending = false;
     const colors = document.getElementById('colors');
@@ -194,7 +196,7 @@ export function createScreenshotOverlayHtml(): string {
       const y = Math.max(0, Math.floor(Math.min(start.y, end.y)));
       const width = Math.min(canvas.width - x, Math.ceil(Math.abs(end.x - start.x)));
       const height = Math.min(canvas.height - y, Math.ceil(Math.abs(end.y - start.y)));
-      if (width < 4 || height < 4) return;
+      if (width < 4 || height < 4) return false;
       const block = Math.max(8, Math.round(Math.min(width, height) / 12));
       const image = ctx.getImageData(x, y, width, height);
       const data = image.data;
@@ -217,6 +219,7 @@ export function createScreenshotOverlayHtml(): string {
         }
       }
       ctx.putImageData(image, x, y);
+      return true;
     }
 
     function restore() {
@@ -267,8 +270,7 @@ export function createScreenshotOverlayHtml(): string {
         ctx.fillStyle = '#000';
         ctx.fillRect(x, y, Math.abs(width), Math.abs(height));
       } else if (tool === 'mosaic') {
-        if (commit) pixelate(start, end);
-        else ctx.strokeRect(x, y, width, height);
+        if (!pixelate(start, end)) return;
       } else if (tool === 'ellipse') {
         ctx.beginPath();
         ctx.ellipse(x + Math.abs(width) / 2, y + Math.abs(height) / 2, Math.max(1, Math.abs(width) / 2), Math.max(1, Math.abs(height) / 2), 0, 0, Math.PI * 2);
@@ -295,6 +297,56 @@ export function createScreenshotOverlayHtml(): string {
         ctx.strokeRect(start.x, start.y, width, height);
       }
       if (commit) commitHistory();
+    }
+
+    function finishAnnotate(end) {
+      if (!drawStart) return;
+      const start = drawStart;
+      const point = end || drawCurrent || start;
+      const activeTool = tool;
+      drawStart = null;
+      drawCurrent = null;
+      drawHeld = false;
+      penLast = null;
+      if (activeTool === 'text') {
+        if (baseReady) openTextEditor(point);
+        else pendingEditor = point;
+        return;
+      }
+      if (activeTool === 'pen') {
+        commitHistory();
+        return;
+      }
+      strokeShape(start, point, true);
+    }
+
+    function beginAnnotate(event) {
+      if (drawStart) {
+        finishAnnotate(drawCurrent);
+        return;
+      }
+      event.preventDefault();
+      drawHeld = false;
+      drawStart = bitmapPoint(event);
+      drawCurrent = drawStart;
+      penLast = drawStart;
+      if (tool !== 'text') remember();
+    }
+
+    function previewAnnotate(point) {
+      drawCurrent = point;
+      if (tool === 'pen' && penLast) {
+        ctx.strokeStyle = color;
+        ctx.lineWidth = Math.max(2, canvas.width / 400);
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(penLast.x, penLast.y);
+        ctx.lineTo(point.x, point.y);
+        ctx.stroke();
+        penLast = point;
+        return;
+      }
+      if (tool !== 'text') strokeShape(drawStart, point, false);
     }
 
     function showFrozen(result) {
@@ -362,14 +414,40 @@ export function createScreenshotOverlayHtml(): string {
       }
     });
 
+    function annotationHost(event) {
+      const target = event.target;
+      if (!target || target === editor) return null;
+      if (target.closest && target.closest('#chrome')) return null;
+      return target.closest ? target : canvas;
+    }
+
+    window.addEventListener('pointerdown', (event) => {
+      if (!frozen || pending || event.button !== 0) return;
+      const host = annotationHost(event);
+      if (!host || !host.setPointerCapture) return;
+      try { host.setPointerCapture(event.pointerId); } catch { /* The pointer can already be gone. */ }
+    }, true);
+    window.addEventListener('pointerup', (event) => {
+      if (!frozen || !drawStart) return;
+      if (event.button !== 0 && (event.buttons & 1) !== 0) return;
+      finishAnnotate(bitmapPoint(event));
+    }, true);
+    window.addEventListener('pointercancel', (event) => {
+      if (!frozen || !drawStart) return;
+      finishAnnotate(bitmapPoint(event));
+    }, true);
+    window.addEventListener('dragstart', (event) => {
+      if (frozen) event.preventDefault();
+    });
+    window.addEventListener('blur', () => {
+      if (frozen && drawStart) finishAnnotate(drawCurrent);
+    });
     window.addEventListener('mousedown', (event) => {
       if (pending || event.button !== 0 || event.target === editor) return;
       if (editing) commitText();
       if (event.target.closest('#chrome')) return;
       if (frozen) {
-        drawStart = bitmapPoint(event);
-        penLast = drawStart;
-        if (tool !== 'text') remember();
+        beginAnnotate(event);
         return;
       }
       drag = { x: event.clientX, y: event.clientY, cx: event.clientX, cy: event.clientY };
@@ -377,20 +455,17 @@ export function createScreenshotOverlayHtml(): string {
       chrome.hidden = true;
     });
     window.addEventListener('mousemove', (event) => {
-      if (frozen && drawStart && tool === 'pen' && penLast) {
+      if (frozen && drawStart) {
         const point = bitmapPoint(event);
-        ctx.strokeStyle = color;
-        ctx.lineWidth = Math.max(2, canvas.width / 400);
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(penLast.x, penLast.y);
-        ctx.lineTo(point.x, point.y);
-        ctx.stroke();
-        penLast = point;
-        return;
-      }
-      if (frozen && drawStart && tool !== 'text') {
-        strokeShape(drawStart, bitmapPoint(event), false);
+        if ((event.buttons & 1) === 1) {
+          drawHeld = true;
+          previewAnnotate(point);
+          return;
+        }
+        if ((event.buttons & 1) === 0 && drawHeld) {
+          if (tool === 'pen') previewAnnotate(point);
+          finishAnnotate(point);
+        }
         return;
       }
       if (!drag || frozen) {
@@ -405,17 +480,8 @@ export function createScreenshotOverlayHtml(): string {
       if (freeDrag) paint(normalize(drag.x, drag.y, drag.cx, drag.cy));
     });
     window.addEventListener('mouseup', async (event) => {
-      if (frozen && drawStart && event.button === 0) {
-        const end = bitmapPoint(event);
-        if (tool === 'text') {
-          if (baseReady) openTextEditor(end);
-          else pendingEditor = end;
-        } else if (tool === 'pen') {
-          commitHistory();
-        } else {
-          strokeShape(drawStart, end, true);
-        }
-        drawStart = null;
+      if (frozen && drawStart && (event.button === 0 || (event.buttons & 1) === 0)) {
+        finishAnnotate(bitmapPoint(event));
         return;
       }
       if (!drag || frozen || pending || event.button !== 0) return;

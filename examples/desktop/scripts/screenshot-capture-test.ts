@@ -191,6 +191,16 @@ function run(): void {
   assert.match(html, /id="editor"/);
   assert.match(html, /输入文字/);
   assert.doesNotMatch(html, /window\.prompt/);
+  assert.match(html, /else if \(tool === 'mosaic'\) \{\s*if \(!pixelate\(start, end\)\) return;/);
+  assert.doesNotMatch(html, /if \(commit\) pixelate/);
+  assert.doesNotMatch(html, /tool === 'mosaic'[\s\S]{0,120}strokeRect/);
+  assert.match(html, /function finishAnnotate/);
+  assert.match(html, /function beginAnnotate/);
+  assert.match(html, /setPointerCapture/);
+  assert.match(html, /\(event\.buttons & 1\) === 0/);
+  assert.match(html, /if \(drawStart\) \{\s*finishAnnotate\(drawCurrent\);/);
+  assert.match(html, /addEventListener\('pointerup'/);
+  assert.match(html, /addEventListener\('pointercancel'/);
 
   const pin = createPinHtml('pin-1', 'pin-1.png');
   assert.match(pin, /src="pin-1.png"/);

@@ -666,8 +666,9 @@ impl SessionManager {
                 append_event_to_storage(active, &event)?;
                 persist_manifest(active)?;
                 let session_id = active.session_id.clone();
+                let active_record = active.clone();
                 push_event(&mut state.events_by_session, session_id, event.clone());
-                (event, window_start_ms, window_end_ms, Some(active.clone()))
+                (event, window_start_ms, window_end_ms, Some(active_record))
             } else {
                 let target_id = requested_session_id
                     .clone()

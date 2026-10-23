@@ -1,3 +1,4 @@
+import { selectionToWallClockRange, type TimelineExportSelection } from "../lib/export-range";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 
@@ -44,7 +45,7 @@ export type RecorderPlaybackStageProps = {
   onNotice?: (message: string) => void;
   onMarked?: () => void;
   onPlaybackFocusChange?: (focus: TestSessionPlaybackFocus | null) => void;
-  onExportSession?: () => Promise<void>;
+  onExportSession?: (options?: { range?: { startMs: number; endMs: number }; clipMode?: 'precise' | 'fast' }) => Promise<void>;
   isExporting?: boolean;
   onClearEvents?: () => Promise<void> | void;
 };
@@ -166,7 +167,8 @@ function findSegmentIndexForPlaybackTime(
     Math.max(segments[segments.length - 1]?.accumulatedEndMs ?? 0, 0),
   );
 
-  return segments.findIndex((segment) => clampedTimeMs < segment.accumulatedEndMs);
+  const idx = segments.findIndex((segment) => clampedTimeMs < segment.accumulatedEndMs);
+  return idx !== -1 ? idx : segments.length - 1;
 }
 
 export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
@@ -189,16 +191,29 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState(0);
   const [selectedStreamId, setSelectedStreamId] = useState<string | null>(null);
   const [isQuickDefectPending, setIsQuickDefectPending] = useState(false);
+  const [telemetryCollapsed, setTelemetryCollapsed] = useState(
+    () => !(props.isRecording && !props.isPaused),
+  );
 
   // Drawer state
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState<DrawerTab>('defect');
+  const [timelineSelection, setTimelineSelection] = useState<TimelineExportSelection | null>(null);
+  const [isLoopingSelection, setIsLoopingSelection] = useState(false);
   const [selectedItem, setSelectedItem] = useState<SelectedTimelineItem | null>(null);
   const [semanticSteps, setSemanticSteps] = useState<SemanticStepRow[]>([]);
   const [operations, setOperations] = useState<TestSessionOperationRecord[]>([]);
   const [frameDimensions, setFrameDimensions] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
 
   const currentSessionId = props.activeSession?.sessionId || props.playbackSession?.sessionId || null;
+
+  useEffect(() => {
+    setTimelineSelection(null);
+  }, [currentSessionId]);
+
+  useEffect(() => {
+    setTelemetryCollapsed(!(props.isRecording && !props.isPaused));
+  }, [props.isPaused, props.isRecording]);
 
   // Measure actual dimensions of player frame for precise coordinate overlay mapping
   useEffect(() => {
@@ -554,7 +569,13 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
     if (continuousSegments.length === 0) {
       return;
     }
-    if (globalPlaybackMs >= totalDurationMs) {
+    if (!isPlaybackRunning && isLoopingSelection && timelineSelection) {
+      const inMs = Math.min(timelineSelection.inPlaybackMs, timelineSelection.outPlaybackMs);
+      const outMs = Math.max(timelineSelection.inPlaybackMs, timelineSelection.outPlaybackMs);
+      if (outMs > inMs && (globalPlaybackMs >= outMs || globalPlaybackMs < inMs)) {
+        seekToPlaybackTime(inMs);
+      }
+    } else if (globalPlaybackMs >= totalDurationMs) {
       seekToPlaybackTime(0);
     }
     setIsPlaybackRunning((current) => !current);
@@ -791,6 +812,42 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
         void enterOrExitFullscreen();
         return;
       }
+      if (event.key === 'l' || event.key === 'L') {
+        event.preventDefault();
+        setIsLoopingSelection((prev) => {
+          const nextVal = !prev;
+          props.onNotice?.(nextVal ? "已开启选区循环预览" : "已关闭选区循环预览");
+          return nextVal;
+        });
+        return;
+      }
+      if (event.key === 'i' || event.key === 'I') {
+        if (continuousSegments.length === 0) return;
+        event.preventDefault();
+        setTimelineSelection((prev) => ({
+          inPlaybackMs: globalPlaybackMs,
+          outPlaybackMs: prev ? Math.max(prev.outPlaybackMs, globalPlaybackMs) : totalDurationMs,
+        }));
+        props.onNotice?.('已设置入点 (In Point)');
+        return;
+      }
+      if (event.key === 'o' || event.key === 'O') {
+        if (continuousSegments.length === 0) return;
+        event.preventDefault();
+        setTimelineSelection((prev) => ({
+          inPlaybackMs: prev ? Math.min(prev.inPlaybackMs, globalPlaybackMs) : 0,
+          outPlaybackMs: globalPlaybackMs,
+        }));
+        props.onNotice?.('已设置出点 (Out Point)');
+        return;
+      }
+      if (event.key === 'x' || event.key === 'X') {
+        if (continuousSegments.length === 0) return;
+        event.preventDefault();
+        setTimelineSelection(null);
+        props.onNotice?.('已清除选区');
+        return;
+      }
       if (event.key === 'Escape') {
         revealControls();
       }
@@ -800,7 +857,7 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
     return () => {
       window.removeEventListener('keydown', onKeyDown);
     };
-  }, [continuousSegments.length, isFullscreen, isPlaybackRunning, props.activeSession?.recordingProfile, props.isPaused, props.isRecording, props.onNotice, props.playbackSession?.recordingProfile, totalDurationMs]);
+  }, [continuousSegments.length, globalPlaybackMs, isFullscreen, isPlaybackRunning, props.activeSession?.recordingProfile, props.isPaused, props.isRecording, props.onNotice, props.playbackSession?.recordingProfile, totalDurationMs]);
 
   // Encoder brand (only when encoder name actually contains nvenc/qsv/amf)
   const hardwareBrand = resolveHardwareEncoderBrand(activeContinuousSegment?.encoderName);
@@ -1180,39 +1237,66 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
 
           {/* Top-Right Corner HUD: 4 Metrics Boxes + Backend Badge */}
           <div className="hud-corner-top-right" aria-label="实时核心指标">
-            <div className="hud-metrics-grid">
-              <div className="hud-metric-box">
-                <span className="hud-metric-kicker">捕获时延</span>
-                <span className="hud-metric-num accent-cyan">
+            {telemetryCollapsed ? (
+              <button
+                type="button"
+                className="hud-telemetry-pill-toggle"
+                onClick={() => setTelemetryCollapsed(false)}
+                title="展开实时遥测指标"
+                aria-label="展开实时遥测指标"
+              >
+                <span className="telemetry-pill-dot" />
+                <span className="telemetry-pill-text">
+                  ⚡ 遥测{' '}
                   {typeof props.metrics?.lastCaptureLatencyMs === 'number'
-                    ? `${props.metrics.lastCaptureLatencyMs.toFixed(1)} ms`
-                    : '--'}
+                    ? `${props.metrics.lastCaptureLatencyMs.toFixed(1)}ms`
+                    : backendLabel}
                 </span>
-              </div>
-              <div className="hud-metric-box">
-                <span className="hud-metric-kicker">编码时延</span>
-                <span className="hud-metric-num">
-                  {typeof props.metrics?.lastEncodeLatencyMs === 'number'
-                    ? `${props.metrics.lastEncodeLatencyMs.toFixed(1)} ms`
-                    : '--'}
-                </span>
-              </div>
-              <div className="hud-metric-box">
-                <span className="hud-metric-kicker">步骤丢弃</span>
-                <span className="hud-metric-num">
-                  {stepDropDisplay}
-                </span>
-              </div>
-              <div className="hud-metric-box">
-                <span className="hud-metric-kicker">内存</span>
-                <span className="hud-metric-num">
-                  {memoryDisplay}
-                </span>
-              </div>
-            </div>
-            <div className="hud-backend-badge" title="捕获后端引擎">
-              {backendLabel}
-            </div>
+                <span className="telemetry-pill-arrow">▾</span>
+              </button>
+            ) : (
+              <>
+                <div className="hud-metrics-grid">
+                  <div className="hud-metric-box">
+                    <span className="hud-metric-kicker">捕获时延</span>
+                    <span className="hud-metric-num accent-cyan">
+                      {typeof props.metrics?.lastCaptureLatencyMs === 'number'
+                        ? `${props.metrics.lastCaptureLatencyMs.toFixed(1)} ms`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="hud-metric-box">
+                    <span className="hud-metric-kicker">编码时延</span>
+                    <span className="hud-metric-num">
+                      {typeof props.metrics?.lastEncodeLatencyMs === 'number'
+                        ? `${props.metrics.lastEncodeLatencyMs.toFixed(1)} ms`
+                        : '--'}
+                    </span>
+                  </div>
+                  <div className="hud-metric-box">
+                    <span className="hud-metric-kicker">步骤丢弃</span>
+                    <span className="hud-metric-num">
+                      {stepDropDisplay}
+                    </span>
+                  </div>
+                  <div className="hud-metric-box">
+                    <span className="hud-metric-kicker">内存</span>
+                    <span className="hud-metric-num">
+                      {memoryDisplay}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="hud-backend-badge hud-backend-btn"
+                  onClick={() => setTelemetryCollapsed(true)}
+                  title="收起遥测指标 (点击折叠)"
+                  aria-label="收起遥测指标"
+                >
+                  {backendLabel} ▴
+                </button>
+              </>
+            )}
           </div>
 
           {/* Center Stage: Three States */}
@@ -1269,6 +1353,14 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
                   if (!currentSegment) return;
                   const nextPlaybackMs = currentSegment.accumulatedStartMs
                     + Math.round(e.currentTarget.currentTime * 1000);
+                  if (isPlaybackRunning && isLoopingSelection && timelineSelection) {
+                    const inMs = Math.min(timelineSelection.inPlaybackMs, timelineSelection.outPlaybackMs);
+                    const outMs = Math.max(timelineSelection.inPlaybackMs, timelineSelection.outPlaybackMs);
+                    if (outMs > inMs && nextPlaybackMs >= outMs) {
+                      seekToPlaybackTime(inMs);
+                      return;
+                    }
+                  }
                   globalPlaybackMsRef.current = nextPlaybackMs;
                   const now = performance.now();
                   if (now - lastTimeUpdateEmitAtRef.current < 250) {
@@ -1291,6 +1383,14 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
                     setCurrentSegmentIndex(nextIndex);
                     setGlobalPlaybackMs(continuousSegments[nextIndex].accumulatedStartMs);
                     return;
+                  }
+                  if (isLoopingSelection && timelineSelection) {
+                    const inMs = Math.min(timelineSelection.inPlaybackMs, timelineSelection.outPlaybackMs);
+                    const outMs = Math.max(timelineSelection.inPlaybackMs, timelineSelection.outPlaybackMs);
+                    if (outMs > inMs) {
+                      seekToPlaybackTime(inMs);
+                      return;
+                    }
                   }
                   setGlobalPlaybackMs(totalDurationMs);
                   setIsPlaybackRunning(false);
@@ -1410,7 +1510,9 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
               title="上一帧 (,)"
               aria-label="上一帧"
             >
-              上一帧
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                <path d="M6 5h2v14H6zm3 7 9 7V5z" />
+              </svg>
             </button>
 
             <button
@@ -1434,7 +1536,9 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
               title="下一帧 (.)"
               aria-label="下一帧"
             >
-              下一帧
+              <svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor" aria-hidden="true">
+                <path d="M16 5h2v14h-2zM6 19l9-7-9-7z" />
+              </svg>
             </button>
 
             {/* Timecode & Scrubber Track */}
@@ -1464,6 +1568,40 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
                   onChange={handleSeekBarInput}
                 />
               </div>
+            </div>
+
+            {/* Range In / Out Buttons */}
+            <div className="btn-group-range">
+              <button
+                type="button"
+                className="btn-dock-pill"
+                disabled={continuousSegments.length === 0}
+                onClick={() => {
+                  setTimelineSelection((prev) => ({
+                    inPlaybackMs: globalPlaybackMs,
+                    outPlaybackMs: prev ? Math.max(prev.outPlaybackMs, globalPlaybackMs) : totalDurationMs,
+                  }));
+                  props.onNotice?.("已设置入点 (In Point)");
+                }}
+                title="设置导出入点 (I)"
+              >
+                [ 入点
+              </button>
+              <button
+                type="button"
+                className="btn-dock-pill"
+                disabled={continuousSegments.length === 0}
+                onClick={() => {
+                  setTimelineSelection((prev) => ({
+                    inPlaybackMs: prev ? Math.min(prev.inPlaybackMs, globalPlaybackMs) : 0,
+                    outPlaybackMs: globalPlaybackMs,
+                  }));
+                  props.onNotice?.("已设置出点 (Out Point)");
+                }}
+                title="设置导出出点 (O)"
+              >
+                出点 ]
+              </button>
             </div>
 
             {/* Instant Defect Mark */}
@@ -1509,7 +1647,19 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
           preWindowSeconds={props.config?.defectPreWindowSeconds ?? 10}
           postWindowSeconds={props.config?.defectPostWindowSeconds ?? 10}
           onNotice={props.onNotice}
-          onExportSession={props.onExportSession}
+          hasTimelineSelection={Boolean(timelineSelection)}
+          onSelectDefectWindowForExport={selectedItem && totalDurationMs > 0 ? () => {
+            const preMs = (props.config?.defectPreWindowSeconds ?? 10) * 1000;
+            const postMs = (props.config?.defectPostWindowSeconds ?? 10) * 1000;
+            const inPlaybackMs = clampNumber(selectedItem.playbackMs - preMs, 0, totalDurationMs);
+            const outPlaybackMs = clampNumber(selectedItem.playbackMs + postMs, 0, totalDurationMs);
+            setTimelineSelection({ inPlaybackMs, outPlaybackMs });
+            props.onNotice?.('已将缺陷前后时间窗口设为导出选区');
+          } : undefined}
+          onExportSession={props.onExportSession ? () => {
+            const wallRange = timelineSelection ? selectionToWallClockRange(timelineSelection, continuousSegments) : null;
+            return props.onExportSession!(wallRange ? { range: wallRange, clipMode: 'precise' } : undefined);
+          } : undefined}
           isExporting={props.isExporting}
           semanticSteps={semanticSteps}
           operations={operations}
@@ -1536,6 +1686,26 @@ export function RecorderPlaybackStage(props: RecorderPlaybackStageProps) {
         onToggleDrawer={() => setDrawerOpen((open) => !open)}
         onSelectAction={handleSelectAction}
         onSelectDefect={handleSelectDefect}
+        selection={timelineSelection}
+        onSelectionChange={setTimelineSelection}
+        isLoopingSelection={isLoopingSelection}
+        onToggleLoopSelection={() => {
+          setIsLoopingSelection((prev) => {
+            const nextVal = !prev;
+            props.onNotice?.(nextVal ? "已开启选区循环预览" : "已关闭选区循环预览");
+            return nextVal;
+          });
+        }}
+        onExportSelection={props.onExportSession ? () => {
+          if (!timelineSelection) return;
+          const wallRange = selectionToWallClockRange(timelineSelection, continuousSegments);
+          if (!wallRange) {
+            props.onNotice?.("无法计算选中区间的绝对时间");
+            return;
+          }
+          void props.onExportSession?.({ range: wallRange, clipMode: "precise" });
+        } : undefined}
+        isExporting={props.isExporting}
       />
     </section>
   );

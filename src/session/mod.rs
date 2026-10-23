@@ -42,7 +42,7 @@ pub use defect_config::{
 pub use defect_pack::DefectPackResult;
 pub use manager::{SessionError, TEST_SESSION_MANAGER};
 pub use models::{
-    TEST_SESSION_EVENT_KIND, TEST_SESSION_SCHEMA_VERSION, TestSessionDefectMarkInput,
+    ProtectedTimeRange, TEST_SESSION_EVENT_KIND, TEST_SESSION_SCHEMA_VERSION, TestSessionDefectMarkInput,
     TestSessionDefectMarkRecord, TestSessionEventRecord, TestSessionEventType, TestSessionLogInput,
     TestSessionNoteInput, TestSessionRecord, TestSessionStartOptions, TestSessionStatus,
     TestSessionStepEditInput, TestSessionStepRecord, TestSessionSystemEventInput,

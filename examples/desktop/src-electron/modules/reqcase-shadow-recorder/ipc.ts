@@ -382,9 +382,13 @@ function withOperationIpcErrors<T>(label: string, action: () => T): T {
 function resolveEvidenceZipSaveDialogFileName(
   input: ReqCaseShadowRecorderTestSessionEvidenceExportInput,
 ): string {
+  const lookbackSuffix =
+    input.lookbackSeconds != null && Number.isFinite(input.lookbackSeconds) && input.lookbackSeconds > 0
+      ? `-last-${Math.round(input.lookbackSeconds)}s`
+      : '';
   const fallbackName = input.sessionId?.trim()
-    ? `evidence-${input.sessionId.trim()}`
-    : 'evidence.zip';
+    ? `evidence-${input.sessionId.trim()}${lookbackSuffix}`
+    : `evidence${lookbackSuffix}.zip`;
   const preferredName = input.zipFileName?.trim() || input.bundleName?.trim() || fallbackName;
   const safeName = path.basename(preferredName).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim();
   const fileName = safeName || 'evidence.zip';

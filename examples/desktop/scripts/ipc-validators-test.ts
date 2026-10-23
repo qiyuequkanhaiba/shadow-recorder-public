@@ -185,3 +185,19 @@ function run(): void {
 }
 
 run();
+
+// Test range & clipMode validation
+const validRangeInput = parseIpcInput(ExportEvidenceInputSchema, {
+  targetDir: "/valid/dir",
+  range: { startMs: 1000, endMs: 5000 },
+  clipMode: "precise",
+}, "export evidence with range");
+assert.equal(validRangeInput.clipMode, "precise");
+assert.equal(validRangeInput.range?.startMs, 1000);
+
+assertThrowsValidation("export evidence inverted range", () => {
+  parseIpcInput(ExportEvidenceInputSchema, {
+    targetDir: "/valid/dir",
+    range: { startMs: 5000, endMs: 1000 },
+  }, "export evidence inverted range");
+});

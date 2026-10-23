@@ -829,6 +829,10 @@ function testFloatingToolbarHasStatusAndExport(): void {
   assert.match(html, /id="export-btn"/);
   assert.match(html, /show-on-idle/);
   assert.match(html, /exportTestSessionEvidence\(\{[\s\S]*outputMode: 'zip'/);
+  assert.match(html, /LOOKBACK_PRESETS = \[null, 30, 60, 300\]/);
+  assert.match(html, /export-range-badge/);
+  assert.match(html, /buttons\.export\.addEventListener\('contextmenu'/);
+  assert.match(html, /lookbackSeconds: lookbackSeconds \|\| undefined/);
   assert.doesNotMatch(html, /window\.confirm/);
   assert.match(html, /sessionStartedAtMs/);
   assert.match(html, /status-capsule/);
@@ -1130,6 +1134,33 @@ function testCompactTimelineUsesMiniEventRows(): void {
   assert.match(source, /清除/);
 }
 
+function testPhase3StudioAndFloatingToolbarUiPolish(): void {
+  const html = createFloatingToolbarHtml({ initialCollapsed: false });
+  const stage = readFileSync(join(__dirname, '../src-react/components/RecorderPlaybackStage.tsx'), 'utf8');
+  const timeline = readFileSync(join(__dirname, '../src-react/components/StudioTimelineDock.tsx'), 'utf8');
+  const historyPanel = readFileSync(join(__dirname, '../src-react/features/evidence/HistorySessionPanel.tsx'), 'utf8');
+  const recorderPage = readFileSync(join(__dirname, '../src-react/pages/RecorderPage.tsx'), 'utf8');
+
+  assert.match(html, /dragHandle\.addEventListener\('mouseenter'/);
+  assert.match(html, /录制中 · /);
+  assert.match(html, /buttons\.export\.classList\.add\('is-switching'\)/);
+  assert.match(html, /\.btn-export\.is-switching/);
+
+  assert.match(stage, /hud-telemetry-pill-toggle/);
+  assert.match(stage, /telemetryCollapsed/);
+  assert.match(stage, /btn-dock-pill/);
+
+  assert.match(timeline, /timeline-header-selection-bar/);
+  assert.match(timeline, /timeline-selection-duration-badge/);
+  assert.match(timeline, /selection-handle-grip/);
+  assert.match(timeline, /handleTrackPointerDown/);
+  assert.match(timeline, /onDoubleClick=/);
+
+  assert.match(historyPanel, /strip-inline-action-bar/);
+  assert.match(historyPanel, /is-in-range/);
+  assert.match(recorderPage, /录制会话 #\$\{session\.sessionId\.slice\(0, 6\)\}/);
+}
+
 function run(): void {
   testFloatingToolbarDisplayMetricsRefreshCoordinatesDragAndNativeInput();
   testFloatingToolbarProtocolAcceptsOnlyDocumentScopedCommands();
@@ -1163,6 +1194,7 @@ function run(): void {
   testRecorderPlaybackStageUsesFluidTransportDock();
   testRecorderPageUsesSlimHeaderAndRecPill();
   testCompactTimelineUsesMiniEventRows();
+  testPhase3StudioAndFloatingToolbarUiPolish();
   console.log('[floating-toolbar-layout-test] PASS');
 }
 

@@ -332,6 +332,115 @@ async function run(): Promise<void> {
     assert.ok(existsSync(expectedCustomZipPath));
     assert.equal(customZipResult.bundleRootName.startsWith('evidence-bundle-custom-zip-name-'), true);
 
+
+    // Range Export Test (Multi-segment filtering + videoOffsetMs remapping + paddingMs)
+    writeFileSync(
+      path.join(sourceSessionDir, 'video', 'streams', 'vs-primary', 'segment-0002.mp4'),
+      Buffer.from([10, 11, 12, 13, 14, 15]),
+    );
+    const multiSegments: ReqCaseShadowRecorderTestSessionVideoSegment[] = [
+      ...segments,
+      {
+        ...segments[0],
+        segmentId: 'seg-2',
+        startedAtMs: 1710000005000,
+        endedAtMs: 1710000010000,
+        durationMs: 5000,
+        relativePath: 'video/streams/vs-primary/segment-0002.mp4',
+        filePath: `D:/tmp/${session.sessionId}/video/streams/vs-primary/segment-0002.mp4`,
+      },
+    ];
+    const multiEvents: ReqCaseShadowRecorderTestSessionTimelineEvent[] = [
+      ...events,
+      {
+        schemaVersion: 1,
+        kind: 'reqcase.test-session-event',
+        eventId: 'evt-3',
+        sessionId: session.sessionId,
+        eventType: 'step_captured',
+        logCategory: 'operation',
+        occurredAtMs: 1710000007000,
+        stepId: '43',
+        action: 'WM_LBUTTONUP',
+        processName: 'demo.exe',
+        windowTitle: 'Demo Window',
+        displayId: 'display-primary',
+      },
+    ];
+
+    const rangeDir = path.resolve(tempRoot, 'range-export-out');
+    mkdirSync(rangeDir, { recursive: true });
+    const rangeResult = await exportTestSessionEvidence(
+      {
+        targetDir: rangeDir,
+        outputMode: 'directory',
+        range: {
+          startMs: session.startedAtMs + 6000,
+          endMs: session.startedAtMs + 8000,
+        },
+        paddingMs: 500,
+        clipMode: 'fast',
+        privacyAcknowledgedAt: new Date(session.startedAtMs).toISOString(),
+      },
+      {
+        session,
+        events: multiEvents,
+        videoStreams: streams,
+        videoSegments: multiSegments,
+      },
+    );
+
+    assert.ok(rangeResult.range);
+    // requestedStartMs / requestedEndMs preserve caller's exact input even when paddingMs is applied
+    assert.equal(rangeResult.range.requestedStartMs, session.startedAtMs + 6000);
+    assert.equal(rangeResult.range.requestedEndMs, session.startedAtMs + 8000);
+    // In fast mode, aligned to seg-2 boundaries (5000..10000)
+    assert.equal(rangeResult.range.actualStartMs, session.startedAtMs + 5000);
+    assert.equal(rangeResult.range.actualEndMs, session.startedAtMs + 10000);
+    assert.equal(rangeResult.clipMode, 'fast');
+    assert.equal(rangeResult.exportedDurationMs, 5000);
+    assert.equal(rangeResult.videoSegmentCount, 2);
+    assert.equal(rangeResult.playableVideoSegmentCount, 1);
+    assert.equal(rangeResult.eventCount, 1);
+    assert.equal(rangeResult.stepEventCount, 1);
+
+    // Verify exported events.json contains range and remapped videoOffsetMs relative to clipped video
+    const eventsJson = JSON.parse(readFileSync(rangeResult.eventsLogPath!, 'utf-8')) as {
+      range?: { requestedStartMs: number; requestedEndMs: number; actualStartMs: number; actualEndMs: number };
+      records: Array<{ eventId: string; videoOffsetMs?: number; segmentId?: string }>;
+    };
+    assert.ok(eventsJson.range);
+    assert.equal(eventsJson.range.requestedStartMs, session.startedAtMs + 6000);
+    assert.equal(eventsJson.records.length, 1);
+    assert.equal(eventsJson.records[0].eventId, 'evt-3');
+    assert.equal(eventsJson.records[0].segmentId, 'seg-2');
+    // evt-3 occurred at +7000ms, which is 2000ms into seg-2 (5000..10000ms)
+    assert.equal(eventsJson.records[0].videoOffsetMs, 2000);
+
+    // Lookback Range Export Test (lookbackSeconds = 4 seconds before session endedAtMs 1710000010000)
+    const lookbackDir = path.resolve(tempRoot, "lookback-export-out");
+    mkdirSync(lookbackDir, { recursive: true });
+    const lookbackResult = await exportTestSessionEvidence(
+      {
+        targetDir: lookbackDir,
+        outputMode: "directory",
+        lookbackSeconds: 4,
+        clipMode: "fast",
+        privacyAcknowledgedAt: new Date(session.startedAtMs).toISOString(),
+      },
+      {
+        session,
+        events: multiEvents,
+        videoStreams: streams,
+        videoSegments: multiSegments,
+      },
+    );
+
+    assert.ok(lookbackResult.range);
+    assert.equal(lookbackResult.range.requestedStartMs, (session.endedAtMs ?? 0) - 4000);
+    assert.equal(lookbackResult.range.requestedEndMs, session.endedAtMs);
+    assert.equal(lookbackResult.bundleRootName.includes("last-4s"), true);
+
     console.log('[evidence-export-test] PASS');
   } finally {
     rmSync(tempRoot, { recursive: true, force: true });

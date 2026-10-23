@@ -63,6 +63,14 @@ pub struct TestSessionStartOptions {
     pub history_retention_max_segments: Option<u32>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedTimeRange {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub label: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TestSessionRecord {
@@ -97,6 +105,8 @@ pub struct TestSessionRecord {
     pub target_display_id: Option<String>,
     pub target_display_ids: Option<Vec<String>>,
     pub target_capture_mode: String,
+    #[serde(default)]
+    pub protected_ranges: Vec<ProtectedTimeRange>,
 }
 
 impl TestSessionRecord {
@@ -165,6 +175,7 @@ impl TestSessionRecord {
             target_display_id: normalized_target_display_id,
             target_display_ids: normalized_target_display_ids,
             target_capture_mode: normalized_capture_mode,
+            protected_ranges: Vec::new(),
         }
     }
 }

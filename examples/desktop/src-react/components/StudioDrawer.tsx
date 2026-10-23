@@ -70,6 +70,8 @@ export type StudioDrawerProps = {
   postWindowSeconds: number;
   onNotice?: (message: string) => void;
   onExportSession?: () => Promise<void>;
+  hasTimelineSelection?: boolean;
+  onSelectDefectWindowForExport?: () => void;
   isExporting?: boolean;
   semanticSteps: SemanticStepRow[];
   operations?: TestSessionOperationRecord[];
@@ -151,6 +153,8 @@ export function StudioDrawer(props: StudioDrawerProps) {
     postWindowSeconds,
     onNotice,
     onExportSession,
+    hasTimelineSelection = false,
+    onSelectDefectWindowForExport,
     isExporting = false,
     semanticSteps,
     operations = [],
@@ -406,6 +410,16 @@ export function StudioDrawer(props: StudioDrawerProps) {
                   >
                     {copiedKey === 'defect_all' ? '✓ 已复制' : '复制信息'}
                   </button>
+                  {onSelectDefectWindowForExport ? (
+                    <button
+                      type="button"
+                      className="btn btn-secondary btn-sm"
+                      onClick={onSelectDefectWindowForExport}
+                      title="将该缺陷前后时间窗口设为导出选区"
+                    >
+                      ✂️ 选定缺陷窗口
+                    </button>
+                  ) : null}
                   {onExportSession ? (
                     <button
                       type="button"
@@ -413,7 +427,7 @@ export function StudioDrawer(props: StudioDrawerProps) {
                       disabled={isExporting}
                       onClick={() => { void onExportSession(); }}
                     >
-                      {isExporting ? '导出中…' : '导出当前会话'}
+                      {isExporting ? '导出中…' : (hasTimelineSelection ? '导出选中区间' : '导出当前会话')}
                     </button>
                   ) : null}
                 </div>

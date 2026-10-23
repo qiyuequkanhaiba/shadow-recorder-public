@@ -42,6 +42,13 @@ type ReqCaseShadowRecorderEvidenceExportRequest = {
   zipFileName?: string;
   outputMode?: 'directory' | 'zip';
   privacyAcknowledgedAt?: string;
+  range?: {
+    startMs: number;
+    endMs: number;
+  };
+  lookbackSeconds?: number;
+  clipMode?: 'precise' | 'fast';
+  paddingMs?: number;
 };
 
 const REQCASE_SHADOW_RECORDER_CHANNELS = {

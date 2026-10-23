@@ -1872,6 +1872,7 @@ mod tests {
             target_display_id: Some("display-1".to_string()),
             target_display_ids: Some(vec!["display-1".to_string(), "display-2".to_string()]),
             target_capture_mode: "foreground_window".to_string(),
+            protected_ranges: Vec::new(),
         };
 
         let mapped: JsTestSessionRecord = session.into();

@@ -23,7 +23,7 @@ use crate::session::models::{
     DEFAULT_DEFECT_POST_WINDOW_SECONDS, DEFAULT_DEFECT_PRE_WINDOW_SECONDS,
     TEST_SESSION_SCHEMA_VERSION, TestSessionDefectMarkInput, TestSessionDefectMarkRecord,
     TestSessionEventRecord, TestSessionEventType, TestSessionLogInput, TestSessionNoteInput,
-    TestSessionRecord, TestSessionStartOptions, TestSessionStatus, TestSessionStepRecord,
+    ProtectedTimeRange, TestSessionRecord, TestSessionStartOptions, TestSessionStatus, TestSessionStepRecord,
     TestSessionSystemEventInput, TestSessionVideoSegmentRecord, TestSessionVideoStreamRecord,
     normalize_encoder_preference, normalize_optional_string, normalize_recording_profile,
 };
@@ -627,7 +627,7 @@ impl SessionManager {
             .map(|value| value.trim().to_string())
             .filter(|value| !value.is_empty());
 
-        let (event, window_start_ms, window_end_ms) = {
+        let (event, window_start_ms, window_end_ms, updated_active) = {
             let mut state = self.state.lock().map_err(|_| SessionError::LockPoisoned)?;
 
             // Prefer active session when recording; otherwise mark the reviewed/historical session.
@@ -648,6 +648,11 @@ impl SessionManager {
                     post_window_seconds,
                 );
                 active.updated_at_ms = active.updated_at_ms.max(marked_at_ms);
+                active.protected_ranges.push(ProtectedTimeRange {
+                    start_ms: window_start_ms,
+                    end_ms: window_end_ms,
+                    label: note.clone(),
+                });
                 let event = TestSessionEventRecord::new_defect_mark(
                     self.next_event_id(marked_at_ms),
                     active.session_id.clone(),
@@ -662,7 +667,7 @@ impl SessionManager {
                 persist_manifest(active)?;
                 let session_id = active.session_id.clone();
                 push_event(&mut state.events_by_session, session_id, event.clone());
-                (event, window_start_ms, window_end_ms)
+                (event, window_start_ms, window_end_ms, Some(active.clone()))
             } else {
                 let target_id = requested_session_id
                     .clone()
@@ -684,6 +689,11 @@ impl SessionManager {
                     post_window_seconds,
                 );
                 record.updated_at_ms = record.updated_at_ms.max(marked_at_ms);
+                record.protected_ranges.push(ProtectedTimeRange {
+                    start_ms: window_start_ms,
+                    end_ms: window_end_ms,
+                    label: note.clone(),
+                });
                 let event = TestSessionEventRecord::new_defect_mark(
                     self.next_event_id(marked_at_ms),
                     record.session_id.clone(),
@@ -698,9 +708,12 @@ impl SessionManager {
                 persist_manifest(record)?;
                 let session_id = record.session_id.clone();
                 push_event(&mut state.events_by_session, session_id, event.clone());
-                (event, window_start_ms, window_end_ms)
+                (event, window_start_ms, window_end_ms, None)
             }
         };
+        if let Some(ref active_record) = updated_active {
+            self.set_video_runtime_session(active_record);
+        }
 
         // Rebuild is best-effort: marking must never fail or disrupt video retention.
         let steps = self

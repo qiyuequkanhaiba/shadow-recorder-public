@@ -74,6 +74,13 @@ export const RecorderSettingsSchema = z.object({
   floatingToolbarCollapsed: z.boolean().optional(),
 }).passthrough() satisfies z.ZodType<ReqCaseShadowRecorderPersistedSettings>;
 
+export const ExportEvidenceRangeSchema = z.object({
+  startMs: z.number().nonnegative(),
+  endMs: z.number().nonnegative(),
+}).refine((data) => data.startMs <= data.endMs, {
+  message: "range.startMs must be less than or equal to range.endMs",
+});
+
 export const ExportEvidenceInputSchema = z.preprocess(
   (value) => (value === undefined || value === null ? {} : value),
   z.object({
@@ -83,6 +90,10 @@ export const ExportEvidenceInputSchema = z.preprocess(
     zipFileName: z.string().optional(),
     outputMode: z.enum(['directory', 'zip']).optional(),
     privacyAcknowledgedAt: z.string().optional(),
+    range: ExportEvidenceRangeSchema.optional(),
+    lookbackSeconds: z.number().positive().max(86400).optional(),
+    clipMode: z.enum(['precise', 'fast']).optional(),
+    paddingMs: z.number().nonnegative().optional(),
   }).passthrough(),
 ) satisfies z.ZodType<ReqCaseShadowRecorderTestSessionEvidenceExportInput>;
 

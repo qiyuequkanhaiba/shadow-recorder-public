@@ -386,10 +386,27 @@ pub fn export_defect_pack_with_operations(
         window_operations = legacy_operations_from_steps(&session.session_id, &window_steps);
     }
 
+    let target_stream_id = segments
+        .iter()
+        .find(|s| {
+            if let Some(target_d) = session.target_display_id.as_deref() {
+                s.display_id.as_deref() == Some(target_d)
+            } else {
+                false
+            }
+        })
+        .map(|s| s.stream_id.clone())
+        .or_else(|| segments.first().map(|s| s.stream_id.clone()));
+
     let window_segments = segments
         .iter()
         .filter(|segment| {
-            segment.ended_at_ms >= request.window_start_ms
+            let stream_matches = target_stream_id
+                .as_ref()
+                .map(|t| t == &segment.stream_id)
+                .unwrap_or(true);
+            stream_matches
+                && segment.ended_at_ms >= request.window_start_ms
                 && segment.started_at_ms <= request.window_end_ms
                 && (segment.is_playable
                     || segment.file_path.is_some()

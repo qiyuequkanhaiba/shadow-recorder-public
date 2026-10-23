@@ -1289,10 +1289,18 @@ fn trim_segments_to_window(
     let retain_cutoff = now_ms.saturating_sub(retention_hours as u64 * 3600_000);
     let mut to_remove = Vec::new();
 
+    let is_protected = |seg: &TestSessionVideoSegmentRecord| -> bool {
+        session.protected_ranges.iter().any(|range| {
+            seg.ended_at_ms >= range.start_ms && seg.started_at_ms <= range.end_ms
+        })
+    };
+
     if retention_mode == "age" {
         for (idx, seg) in segments.iter().enumerate() {
             if seg.retention_tier.as_deref() == Some("retained") && seg.ended_at_ms < retain_cutoff {
-                to_remove.push(idx);
+                if !is_protected(seg) {
+                    to_remove.push(idx);
+                }
             }
         }
     } else {
@@ -1301,7 +1309,9 @@ fn trim_segments_to_window(
             if seg.retention_tier.as_deref() == Some("retained") {
                 retained_count += 1;
                 if retained_count > retention_max {
-                    to_remove.push(idx);
+                    if !is_protected(seg) {
+                        to_remove.push(idx);
+                    }
                 }
             }
         }
@@ -2089,6 +2099,7 @@ mod tests {
             target_display_id: Some("display-1".to_string()),
             target_display_ids: Some(vec!["display-1".to_string()]),
             target_capture_mode: "target_display".to_string(),
+            protected_ranges: Vec::new(),
         }
     }
 
@@ -2205,6 +2216,7 @@ mod history_retention_tests {
             target_display_id: None,
             target_display_ids: None,
             target_capture_mode: DEFAULT_TARGET_CAPTURE_MODE.to_string(),
+            protected_ranges: Vec::new(),
         }
     }
 
@@ -2391,6 +2403,43 @@ mod history_retention_tests {
             .join("test-stream")
             .join("fresh.mp4");
         assert!(!retained.exists());
+        let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_trim_protects_segments_in_protected_ranges() {
+        let temp_dir = unique_temp_dir("shadowrecord-test-protected");
+        let session_dir = temp_dir.join("session");
+        fs::create_dir_all(&session_dir).unwrap();
+        let mut session = mock_session();
+        session.session_dir = Some(session_dir.to_string_lossy().to_string());
+        session.history_retention_mode = Some("count".to_string());
+        session.history_retention_max_segments = Some(1);
+        session.protected_ranges.push(crate::session::models::ProtectedTimeRange {
+            start_ms: 900,
+            end_ms: 5100,
+            label: Some("defect-1".to_string()),
+        });
+
+        let mut segments = Vec::new();
+        for i in 1..=3 {
+            let file_path = session_dir.join(format!("{i}.mp4"));
+            fs::write(&file_path, b"dummy").unwrap();
+            super::age_segment_file_for_retention_test(&file_path);
+            segments.push(mock_segment(
+                &format!("seg-{i}"),
+                "test-stream",
+                i * 5000,
+                Some(file_path.to_string_lossy().into()),
+            ));
+        }
+
+        // max_segments = 1 (seg-3 stays live), retention_max = 1 (seg-2 stays retained),
+        // seg-1 (0..5000) would be deleted by count limit, except it overlaps protected_ranges (900..5100)!
+        super::trim_segments_to_window(&session, &session_dir, &mut segments, 1).unwrap();
+
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0].segment_id, "seg-1");
         let _ = fs::remove_dir_all(&temp_dir);
     }
 

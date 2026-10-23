@@ -18,6 +18,11 @@ type TranslationKey =
   | 'config.debounce'
   | 'config.shortcutStart'
   | 'config.shortcutStop'
+  | 'config.shortcutCaptureArea'
+  | 'config.shortcutCaptureMonitor'
+  | 'config.shortcutCaptureWindow'
+  | 'config.shortcutCapturePin'
+  | 'config.screenshotDelay'
   | 'config.captureBackend'
   | 'config.transportMode'
   | 'config.captureReuse'
@@ -55,6 +60,11 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     'config.debounce': '防抖 (ms)',
     'config.shortcutStart': '全局快捷键: 开始录制',
     'config.shortcutStop': '全局快捷键: 停止录制',
+    'config.shortcutCaptureArea': '全局快捷键: 区域截图',
+    'config.shortcutCaptureMonitor': '全局快捷键: 截取当前屏幕',
+    'config.shortcutCaptureWindow': '全局快捷键: 截取光标下的窗口',
+    'config.shortcutCapturePin': '全局快捷键: 一键贴图',
+    'config.screenshotDelay': '截图倒计时',
     'config.captureBackend': '捕获后端',
     'config.transportMode': '传输模式',
     'config.captureReuse': '捕获上下文复用',
@@ -91,6 +101,11 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     'config.debounce': 'Debounce (ms)',
     'config.shortcutStart': 'Global Shortcut: Start',
     'config.shortcutStop': 'Global Shortcut: Stop',
+    'config.shortcutCaptureArea': 'Global Shortcut: Capture Area',
+    'config.shortcutCaptureMonitor': 'Global Shortcut: Capture Screen',
+    'config.shortcutCaptureWindow': 'Global Shortcut: Capture Window',
+    'config.shortcutCapturePin': 'Global Shortcut: Pin Image',
+    'config.screenshotDelay': 'Screenshot Delay',
     'config.captureBackend': 'Capture Backend',
     'config.transportMode': 'Transport Mode',
     'config.captureReuse': 'Capture Context Reuse',

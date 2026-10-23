@@ -404,15 +404,19 @@ export function RecorderPage() {
     });
   }, [dashboard.sessions, sessionSearchQuery]);
 
-  async function handleExportCurrentSession(): Promise<void> {
-    const session = dashboard.selectedSession ?? dashboard.activeSession;
+  async function handleExportCurrentSession(options?: {
+    range?: { startMs: number; endMs: number };
+    clipMode?: 'precise' | 'fast';
+  }): Promise<void> {
+    const session = dashboard.selectedSession ?? dashboard.activeSession ?? dashboard.playbackSession;
     if (!session || !window.reqcaseShadowRecorder.exportTestSessionEvidence) {
       showToast('当前没有可导出的会话');
       return;
     }
     setBusy(true);
     try {
-      const bundleName = session.name?.trim() || session.sessionId;
+      const baseName = session.name?.trim() || session.sessionId;
+      const bundleName = options?.range ? `${baseName}-clip` : baseName;
       await window.reqcaseShadowRecorder.exportTestSessionEvidence({
         sessionId: session.sessionId,
         outputMode: 'zip',
@@ -420,6 +424,8 @@ export function RecorderPage() {
         targetDir: '',
         zipFileName: `${bundleName}.zip`,
         privacyAcknowledgedAt: new Date().toISOString(),
+        range: options?.range,
+        clipMode: options?.clipMode,
       });
     } catch {
       // 完成、取消和失败只由导出进度通知显示一次。
@@ -736,7 +742,7 @@ export function RecorderPage() {
                             >
                               <div className="evidence-session-row-headline">
                                 <strong>
-                                  {session.name?.trim() || formatSessionListTime(session.startedAtMs)}
+                                  {session.name?.trim() || `录制会话 #${session.sessionId.slice(0, 6)}`}
                                   {isLive ? ' · LIVE' : ` · ${formatSessionDuration(session)}`}
                                 </strong>
                                 {isLive ? (

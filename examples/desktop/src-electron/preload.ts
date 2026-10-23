@@ -42,6 +42,13 @@ type ReqCaseShadowRecorderEvidenceExportRequest = {
   zipFileName?: string;
   outputMode?: 'directory' | 'zip';
   privacyAcknowledgedAt?: string;
+  range?: {
+    startMs: number;
+    endMs: number;
+  };
+  lookbackSeconds?: number;
+  clipMode?: 'precise' | 'fast';
+  paddingMs?: number;
 };
 
 const REQCASE_SHADOW_RECORDER_CHANNELS = {
@@ -197,6 +204,12 @@ export type ReqCaseShadowRecorderRendererApi = {
   unsubscribeMetrics: () => Promise<void>;
   onMetrics: (handler: (metrics: ReqCaseShadowRecorderMetrics) => void) => () => void;
   setConfig: (config: ReqCaseShadowRecorderConfig) => Promise<void>;
+  beginAreaScreenshot?: () => Promise<void>;
+  suspendScreenshotHotkeys?: () => Promise<void>;
+  resumeScreenshotHotkeys?: () => Promise<void>;
+  listScreenshotHistory?: () => Promise<Array<{ id: string; createdAtMs: number; width: number; height: number; filePath: string }>>;
+  pinScreenshotHistory?: (id: string) => Promise<{ ok: boolean; message: string }>;
+  revealScreenshotHistory?: () => Promise<void>;
   clearBuffer: () => Promise<void>;
   pause: () => Promise<void>;
   resume: () => Promise<void>;
@@ -328,6 +341,12 @@ const api: ReqCaseShadowRecorderRendererApi = {
     };
   },
   setConfig: (config) => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.setConfig, config),
+  beginAreaScreenshot: () => ipcRenderer.invoke('reqcase:screenshot:begin-area'),
+  suspendScreenshotHotkeys: () => ipcRenderer.invoke('reqcase:screenshot:suspend-hotkeys'),
+  resumeScreenshotHotkeys: () => ipcRenderer.invoke('reqcase:screenshot:resume-hotkeys'),
+  listScreenshotHistory: () => ipcRenderer.invoke('reqcase:screenshot:list-history'),
+  pinScreenshotHistory: (id: string) => ipcRenderer.invoke('reqcase:screenshot:pin-history', id),
+  revealScreenshotHistory: () => ipcRenderer.invoke('reqcase:screenshot:reveal-history'),
   getBuffer: () => ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getBuffer),
   getBufferPage: (cursor, limit, includeImage) =>
     ipcRenderer.invoke(REQCASE_SHADOW_RECORDER_CHANNELS.getBufferPage, {
@@ -382,3 +401,42 @@ const api: ReqCaseShadowRecorderRendererApi = {
 };
 
 contextBridge.exposeInMainWorld('reqcaseShadowRecorder', api);
+
+const pinRequestHandlers = new Set<() => void>();
+
+contextBridge.exposeInMainWorld('screenshotOverlay', {
+  confirmSelection: (rect: { x: number; y: number; width: number; height: number }) =>
+    ipcRenderer.invoke('reqcase:screenshot:confirm', rect),
+  windowAtPoint: (x: number, y: number) => ipcRenderer.invoke('reqcase:screenshot:window-at', x, y),
+  cancel: () => ipcRenderer.invoke('reqcase:screenshot:cancel'),
+  cancelDelay: () => ipcRenderer.invoke('reqcase:screenshot:cancel-delay'),
+  copyFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:copy', pngBase64),
+  saveFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:save', pngBase64),
+  pinFrozen: (pngBase64?: string) => ipcRenderer.invoke('reqcase:screenshot:pin', pngBase64),
+  closePin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:close-pin', id),
+  copyPin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:copy-pin', id),
+  savePin: (id: string) => ipcRenderer.invoke('reqcase:screenshot:save-pin', id),
+  onPinRequest: (handler: () => void) => {
+    pinRequestHandlers.add(handler);
+    return () => {
+      pinRequestHandlers.delete(handler);
+    };
+  },
+  beginPinDrag: (id: string, screenX: number, screenY: number) =>
+    ipcRenderer.send('reqcase:screenshot:pin-drag-start', id, screenX, screenY),
+  movePin: (id: string, screenX: number, screenY: number) =>
+    ipcRenderer.send('reqcase:screenshot:pin-drag', id, screenX, screenY),
+  endPinDrag: (id: string) => ipcRenderer.send('reqcase:screenshot:pin-drag-end', id),
+  scalePin: (id: string, deltaY: number, screenX: number, screenY: number) =>
+    ipcRenderer.send('reqcase:screenshot:pin-scale', id, deltaY, screenX, screenY),
+  resetPin: (id: string) => ipcRenderer.send('reqcase:screenshot:pin-reset', id),
+  setPinClickThrough: (id: string, enabled: boolean) =>
+    ipcRenderer.send('reqcase:screenshot:pin-click-through', id, enabled),
+  closeAllPins: () => ipcRenderer.send('reqcase:screenshot:pin-close-all'),
+});
+
+ipcRenderer.on('reqcase:screenshot:pin-request', () => {
+  for (const handler of pinRequestHandlers) {
+    handler();
+  }
+});

@@ -29,6 +29,12 @@ export type StudioTimelineDockProps = {
   onToggleDrawer: () => void;
   onSelectAction: (event: TestSessionTimelineEvent, playbackMs: number) => void;
   onSelectDefect: (event: TestSessionTimelineEvent, playbackMs: number) => void;
+  selection?: { inPlaybackMs: number; outPlaybackMs: number } | null;
+  onSelectionChange?: (selection: { inPlaybackMs: number; outPlaybackMs: number } | null) => void;
+  isLoopingSelection?: boolean;
+  onToggleLoopSelection?: () => void;
+  onExportSelection?: () => void;
+  isExporting?: boolean;
 };
 
 function clampNumber(value: number, min: number, max: number): number {
@@ -121,6 +127,12 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
     onToggleDrawer,
     onSelectAction,
     onSelectDefect,
+    selection,
+    onSelectionChange,
+    isLoopingSelection,
+    onToggleLoopSelection,
+    onExportSelection,
+    isExporting,
   } = props;
 
   const [zoom, setZoom] = useState(1);
@@ -257,21 +269,83 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
     return ticks;
   }, [totalDurationMs, zoom]);
 
-  // Click handler for content track
-  const handleContentTrackClick = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+  const isMarqueeDraggingRef = useRef(false);
+  const marqueeStartMsRef = useRef<number | null>(null);
+  const marqueeStartXRef = useRef<number | null>(null);
+
+  const handleTrackPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('.selection-handle, .timeline-action-pin, .timeline-defect-window-bar')) {
+      return;
+    }
     if (isRecording && !isPaused) {
       onNotice?.('暂停或停止后可回放');
       return;
     }
-    if (totalDurationMs <= 0 || !playableCanvasRef.current) {
-      return;
-    }
+    if (!playableCanvasRef.current || totalDurationMs <= 0) return;
     const rect = playableCanvasRef.current.getBoundingClientRect();
     const clickX = clampNumber(event.clientX - rect.left, 0, rect.width);
     const fraction = clampNumber(clickX / rect.width, 0, 1);
-    const clickedTimeMs = Math.round(fraction * totalDurationMs);
-    onSeek(clickedTimeMs);
-  }, [isRecording, isPaused, onNotice, onSeek, totalDurationMs]);
+    const startMs = Math.round(fraction * totalDurationMs);
+    marqueeStartMsRef.current = startMs;
+    marqueeStartXRef.current = event.clientX;
+    isMarqueeDraggingRef.current = false;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }, [isPaused, isRecording, onNotice, totalDurationMs]);
+
+  const handleTrackPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (marqueeStartMsRef.current === null || marqueeStartXRef.current === null || !playableCanvasRef.current || totalDurationMs <= 0) {
+      return;
+    }
+    const deltaX = Math.abs(event.clientX - marqueeStartXRef.current);
+    if (!isMarqueeDraggingRef.current && deltaX >= 6) {
+      isMarqueeDraggingRef.current = true;
+    }
+    if (isMarqueeDraggingRef.current) {
+      const rect = playableCanvasRef.current.getBoundingClientRect();
+      const currentX = clampNumber(event.clientX - rect.left, 0, rect.width);
+      const currentFraction = clampNumber(currentX / rect.width, 0, 1);
+      const currentMs = Math.round(currentFraction * totalDurationMs);
+      const inMs = Math.min(marqueeStartMsRef.current, currentMs);
+      const outMs = Math.max(marqueeStartMsRef.current, currentMs);
+      onSelectionChange?.({ inPlaybackMs: inMs, outPlaybackMs: outMs });
+    }
+  }, [onSelectionChange, totalDurationMs]);
+
+  const handleTrackPointerUp = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    } catch {}
+    const startMs = marqueeStartMsRef.current;
+    const wasDragging = isMarqueeDraggingRef.current;
+    marqueeStartMsRef.current = null;
+    marqueeStartXRef.current = null;
+    isMarqueeDraggingRef.current = false;
+
+    if (startMs === null) return;
+    if (totalDurationMs <= 0 || !playableCanvasRef.current) return;
+    const rect = playableCanvasRef.current.getBoundingClientRect();
+    const clickX = clampNumber(event.clientX - rect.left, 0, rect.width);
+    const fraction = clampNumber(clickX / rect.width, 0, 1);
+    const endMs = Math.round(fraction * totalDurationMs);
+
+    if (!wasDragging) {
+      onSeek(endMs);
+    } else if (Math.abs(endMs - startMs) < 200) {
+      onSelectionChange?.(null);
+    } else {
+      onSeek(Math.min(startMs, endMs));
+    }
+  }, [onSeek, onSelectionChange, totalDurationMs]);
+
+  const handleTrackPointerCancel = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    } catch {}
+    marqueeStartMsRef.current = null;
+    marqueeStartXRef.current = null;
+    isMarqueeDraggingRef.current = false;
+  }, []);
 
   // Handle clicking an action dot or cluster
   const handleActionClick = useCallback((cluster: ActionCluster, event: ReactMouseEvent) => {
@@ -308,6 +382,46 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
     onSelectDefect(item.event, item.playbackMs);
   }, [isRecording, isPaused, onNotice, onPlaybackFocusChange, onSeek, onSelectDefect]);
 
+  const draggingHandleRef = useRef<'in' | 'out' | null>(null);
+
+  const handlePointerDownHandle = useCallback((type: 'in' | 'out', event: React.PointerEvent) => {
+    event.stopPropagation();
+    event.preventDefault();
+    if (isRecording && !isPaused) return;
+    draggingHandleRef.current = type;
+    (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+  }, [isRecording, isPaused]);
+
+  const handlePointerMoveHandle = useCallback((event: React.PointerEvent) => {
+    const handleType = draggingHandleRef.current;
+    if (!handleType || !selection || totalDurationMs <= 0 || !playableCanvasRef.current) return;
+    const rect = playableCanvasRef.current.getBoundingClientRect();
+    const clickX = clampNumber(event.clientX - rect.left, 0, rect.width);
+    const fraction = clampNumber(clickX / rect.width, 0, 1);
+    const targetMs = clampNumber(Math.round(fraction * totalDurationMs), 0, totalDurationMs);
+
+    const currentIn = Math.min(selection.inPlaybackMs, selection.outPlaybackMs);
+    const currentOut = Math.max(selection.inPlaybackMs, selection.outPlaybackMs);
+    if (handleType === 'in') {
+      const nextIn = Math.min(targetMs, currentOut);
+      onSelectionChange?.({ inPlaybackMs: nextIn, outPlaybackMs: currentOut });
+      onSeek(nextIn);
+    } else {
+      const nextOut = Math.max(targetMs, currentIn);
+      onSelectionChange?.({ inPlaybackMs: currentIn, outPlaybackMs: nextOut });
+      onSeek(nextOut);
+    }
+  }, [onSelectionChange, onSeek, selection, totalDurationMs]);
+
+  const handlePointerUpHandle = useCallback((event: React.PointerEvent) => {
+    if (draggingHandleRef.current) {
+      draggingHandleRef.current = null;
+      try {
+        (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+      } catch {}
+    }
+  }, []);
+
   // Whether writing bar is appended outside the 100% playable range
   const isWritingActive = isRecording && !isPaused;
 
@@ -328,6 +442,50 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
             </span>
           ) : null}
         </div>
+
+        {selection && totalDurationMs > 0 ? (
+          <div className="timeline-header-selection-bar" role="toolbar" aria-label="导出选区控制">
+            <span className="selection-range-readout">
+              ✂️ {formatClock(Math.min(selection.inPlaybackMs, selection.outPlaybackMs))} - {formatClock(Math.max(selection.inPlaybackMs, selection.outPlaybackMs))}
+              <strong className="selection-range-dur">
+                ({((Math.abs(selection.outPlaybackMs - selection.inPlaybackMs)) / 1000).toFixed(1)}s)
+              </strong>
+            </span>
+            {onToggleLoopSelection ? (
+              <button
+                type="button"
+                className={`btn-timeline-action btn-timeline-loop${isLoopingSelection ? ' is-active' : ''}`}
+                onClick={onToggleLoopSelection}
+                title="A-B 选区循环预览 (L)"
+              >
+                🔁 循环
+              </button>
+            ) : null}
+            {onExportSelection ? (
+              <button
+                type="button"
+                className="btn-timeline-action btn-timeline-export"
+                disabled={isExporting}
+                onClick={onExportSelection}
+                title="导出所选区间为 ZIP"
+              >
+                {isExporting ? '导出中…' : '导出选区'}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn-timeline-action btn-timeline-clear"
+              onClick={() => {
+                onSelectionChange?.(null);
+                onNotice?.('已清除导出选区');
+              }}
+              title="清除导出选区"
+              aria-label="清除导出选区"
+            >
+              ✕
+            </button>
+          </div>
+        ) : null}
 
         <div className="timeline-dock-controls">
           <label className="timeline-zoom-control" title="时间轴缩放">
@@ -377,7 +535,10 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
           <div
             className="timeline-content-track"
             style={{ width: isWritingActive ? `${trackPixelWidth + 60}px` : `${trackPixelWidth}px` }}
-            onClick={handleContentTrackClick}
+            onPointerDown={handleTrackPointerDown}
+            onPointerMove={handleTrackPointerMove}
+            onPointerUp={handleTrackPointerUp}
+            onPointerCancel={handleTrackPointerCancel}
           >
             {/* The 0%–100% Playable Time Canvas */}
             <div
@@ -385,6 +546,46 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
               ref={playableCanvasRef}
               style={{ width: `${trackPixelWidth}px` }}
             >
+              {selection && totalDurationMs > 0 ? (
+                <div
+                  className="timeline-selection-range-overlay"
+                  style={{
+                    left: `${(Math.min(selection.inPlaybackMs, selection.outPlaybackMs) / totalDurationMs) * 100}%`,
+                    width: `${Math.max(0.5, (Math.abs(selection.outPlaybackMs - selection.inPlaybackMs) / totalDurationMs) * 100)}%`,
+                  }}
+                  title="选中导出区间（左右两侧可拖拽微调）"
+                >
+                  <div
+                    className="timeline-selection-duration-badge"
+                    title="当前导出选区时长"
+                  >
+                    ✂️ {((Math.abs(selection.outPlaybackMs - selection.inPlaybackMs)) / 1000).toFixed(1)}s
+                  </div>
+                  <div
+                    className="selection-handle handle-in"
+                    onPointerDown={(e) => handlePointerDownHandle('in', e)}
+                    onPointerMove={handlePointerMoveHandle}
+                    onPointerUp={handlePointerUpHandle}
+                    onPointerCancel={handlePointerUpHandle}
+                    onClick={(e) => e.stopPropagation()}
+                    title="拖拽微调入点"
+                  >
+                    <span className="selection-handle-grip" />
+                  </div>
+                  <div
+                    className="selection-handle handle-out"
+                    onPointerDown={(e) => handlePointerDownHandle('out', e)}
+                    onPointerMove={handlePointerMoveHandle}
+                    onPointerUp={handlePointerUpHandle}
+                    onPointerCancel={handlePointerUpHandle}
+                    onClick={(e) => e.stopPropagation()}
+                    title="拖拽微调出点"
+                  >
+                    <span className="selection-handle-grip" />
+                  </div>
+                </div>
+              ) : null}
+
               {/* Playhead Vertical Needle (Spans all tracks within 0%–100%) */}
               {totalDurationMs > 0 ? (
                 <div
@@ -429,8 +630,18 @@ export function StudioTimelineDock(props: StudioTimelineDockProps) {
                     <div
                       key={segment.segmentId}
                       className="timeline-video-segment-bar"
-                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
-                      title={`分段 #${idx + 1} (${formatDuration(segment.durationMs)})`}
+                      style={{ left: `${leftPct}%`, width: `${widthPct}%`, pointerEvents: 'auto', cursor: 'pointer' }}
+                      title={`分段 #${idx + 1} (${formatDuration(segment.durationMs)}) · 双击设为选区`}
+                      onDoubleClick={(e) => {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        onSelectionChange?.({
+                          inPlaybackMs: segment.accumulatedStartMs,
+                          outPlaybackMs: segment.accumulatedEndMs,
+                        });
+                        onSeek(segment.accumulatedStartMs);
+                        onNotice?.(`已选中分段 #${idx + 1} (${formatDuration(segment.durationMs)}) 作为导出选区`);
+                      }}
                     >
                       {isWideEnough ? (
                         <span className="timeline-segment-label">

@@ -1,6 +1,6 @@
 {
   "name": "shadow-recorder-desktop-example",
-  "version": "0.1.17",
+  "version": "0.1.21",
   "private": true,
   "author": "ReqCase",
   "description": "Electron + React demo for shadow_recorder napi plugin",
@@ -25,9 +25,12 @@
     "test:ipc-validators": "tsx scripts/ipc-validators-test.ts",
     "test:report-export": "tsx scripts/report-export-test.ts",
     "test:evidence-export": "tsx scripts/evidence-export-test.ts",
+    "test:clip-planner": "tsx scripts/clip-planner-test.ts",
+    "test:export-range": "tsx scripts/export-range-test.ts",
     "test:export-progress": "tsx scripts/export-progress-test.ts",
     "test:studio-segment-window": "tsx scripts/studio-segment-window-test.ts",
     "test:playback-review": "tsx scripts/playback-review-test.ts",
+    "test:screenshot-capture": "tsx scripts/screenshot-capture-test.ts",
     "test:evidence-manifest-v2": "tsx scripts/evidence-manifest-v2-test.ts && tsx scripts/evidence-export-manifest-v2-test.ts",
     "test:recording-smoke": "tsx scripts/recording-smoke-metadata-test.ts && tsx scripts/recording-smoke-test.ts",
     "test:encoding-benchmark": "tsx scripts/encoding-benchmark-test.ts",
@@ -40,6 +43,7 @@
     "test:operation-native-contract": "tsx scripts/native-declaration-contract-test.ts && tsx scripts/operation-native-contract-test.ts",
     "test:operation-compatibility": "tsx scripts/operation-compatibility-test.ts && tsx scripts/historical-session-matrix-test.ts",
     "test:historical-session-matrix": "tsx scripts/historical-session-matrix-test.ts",
+    "test:abandoned-session-seal": "tsx scripts/abandoned-session-seal-test.ts",
     "test:historical-session-real-packs": "tsx scripts/historical-session-real-pack-test.ts",
     "test:historical-session-ui-smoke": "node scripts/historical-session-ui-smoke.mjs",
     "test:recording-review-interaction": "tsx scripts/recording-review-interaction-test.ts",
@@ -89,6 +93,10 @@
         "to": "ffmpeg"
       },
       {
+        "from": "../../ico.png",
+        "to": "ico.png"
+      },
+      {
         "from": "../../ico.ico",
         "to": "ico.ico"
       }
@@ -98,14 +106,14 @@
       "icon": "../../ico.ico"
     },
     "nsis": {
-      "artifactName": "${productName} 安装包 ${version}.${ext}",
+      "artifactName": "ShadowRecorder-Setup-${version}-x64.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
     "msi": {
-      "artifactName": "${productName} ${version}.${ext}"
+      "artifactName": "ShadowRecorder-${version}-x64.${ext}"
     }
   },
   "dependencies": {

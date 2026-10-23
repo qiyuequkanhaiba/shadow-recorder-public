@@ -1094,6 +1094,60 @@ export function isRecordingPaused(): boolean {
   return false;
 }
 
+export type ScreenshotCaptureRequest = {
+  mode: 'region' | 'monitor' | 'window';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  privacyEnabled: boolean;
+  masks: Array<{ x: number; y: number; width: number; height: number }>;
+};
+
+export function captureScreenshot(request: ScreenshotCaptureRequest): {
+  pngBase64: string;
+  width: number;
+  height: number;
+  originX: number;
+  originY: number;
+} {
+  const binding = getBinding() as {
+    captureScreenshot?: (input: ScreenshotCaptureRequest) => {
+      pngBase64: string;
+      width: number;
+      height: number;
+      originX: number;
+      originY: number;
+    };
+  };
+  if (typeof binding.captureScreenshot !== 'function') {
+    throw new Error('当前原生模块没有截图接口');
+  }
+  return binding.captureScreenshot(request);
+}
+
+export function windowBoundsAtPoint(
+  x: number,
+  y: number,
+  ignoreHwnd: number,
+): { x: number; y: number; width: number; height: number } | null {
+  const binding = getBinding() as {
+    windowBoundsAtPoint?: (
+      x: number,
+      y: number,
+      ignoreHwnd: number,
+    ) => { x: number; y: number; width: number; height: number } | null | undefined;
+  };
+  if (typeof binding.windowBoundsAtPoint !== 'function') {
+    return null;
+  }
+  const found = binding.windowBoundsAtPoint(Math.round(x), Math.round(y), ignoreHwnd);
+  if (!found || found.width < 2 || found.height < 2) {
+    return null;
+  }
+  return found;
+}
+
 export function setRecorderConfig(config: ReqCaseShadowRecorderConfig): void {
   const semanticRecordingEnabled =
     !!(config.semanticRecordingEnabled ?? config.defectEvidenceEnabled);

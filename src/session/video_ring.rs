@@ -382,6 +382,7 @@ mod tests {
                     .collect()
             }),
             target_capture_mode: capture_mode.to_string(),
+            protected_ranges: Vec::new(),
         }
     }
 

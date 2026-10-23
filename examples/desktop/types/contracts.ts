@@ -217,6 +217,11 @@ export interface RecorderConfigPayload {
   maskRegions?: RecorderMaskRegionPayload[];
   shortcutStartRecording?: string;
   shortcutStopRecording?: string;
+  shortcutCaptureArea?: string;
+  shortcutCaptureMonitor?: string;
+  shortcutCaptureWindow?: string;
+  shortcutCapturePin?: string;
+  screenshotDelaySeconds?: number;
   [key: string]: unknown;
 }
 
@@ -444,6 +449,11 @@ export interface TestSessionLogInput {
   [key: string]: unknown;
 }
 
+export interface TestSessionEvidenceExportRange {
+  startMs: number;
+  endMs: number;
+}
+
 export interface TestSessionEvidenceExportInput {
   sessionId?: string;
   targetDir: string;
@@ -451,6 +461,10 @@ export interface TestSessionEvidenceExportInput {
   zipFileName?: string;
   outputMode?: 'directory' | 'zip';
   privacyAcknowledgedAt?: string;
+  range?: TestSessionEvidenceExportRange;
+  lookbackSeconds?: number;
+  clipMode?: 'precise' | 'fast';
+  paddingMs?: number;
   [key: string]: unknown;
 }
 
@@ -461,6 +475,14 @@ export interface TestSessionEvidenceExportResult {
   artifactPath: string;
   generatedAtMs?: number;
   privacyAcknowledgedAt?: string;
+  range?: {
+    requestedStartMs: number;
+    requestedEndMs: number;
+    actualStartMs: number;
+    actualEndMs: number;
+  };
+  clipMode?: 'precise' | 'fast';
+  exportedDurationMs?: number;
   exportDir?: string;
   zipPath?: string;
   videoDirPath?: string;

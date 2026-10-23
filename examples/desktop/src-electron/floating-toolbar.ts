@@ -40,6 +40,9 @@ const ICONS = {
   main: createIconSvg(
     '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line>',
   ),
+  screenshot: createIconSvg(
+    '<path d="M4 8V4h4"></path><path d="M16 4h4v4"></path><path d="M20 16v4h-4"></path><path d="M8 20H4v-4"></path>',
+  ),
 } as const;
 
 export function createFloatingToolbarHtml(input: {
@@ -316,7 +319,7 @@ export function createFloatingToolbarHtml(input: {
       }
       .island[data-collapsed="false"] .capsule-slim-deck,
       .island[data-collapsed="false"] .actions {
-        max-width: calc(140px * var(--ui-scale));
+        max-width: calc(169px * var(--ui-scale));
         margin-left: var(--inner-gap);
         opacity: 1;
         transform: scale(1) translateX(0);
@@ -447,10 +450,27 @@ export function createFloatingToolbarHtml(input: {
         color: var(--stop);
         border-color: rgba(220, 38, 38, 0.4);
       }
+      .btn-export {
+        position: relative;
+      }
       .btn-export:hover:not(:disabled) {
         background: rgba(56, 189, 248, 0.2);
         color: #38bdf8;
         border-color: rgba(56, 189, 248, 0.4);
+      }
+      .export-range-badge {
+        position: absolute;
+        right: -2px;
+        bottom: -2px;
+        background: #0284c7;
+        color: #fff;
+        font-size: 8px;
+        font-weight: 700;
+        line-height: 1;
+        padding: 1px 2.5px;
+        border-radius: 999px;
+        pointer-events: none;
+        letter-spacing: -0.2px;
       }
       .toolbar-icon {
         width: var(--icon);
@@ -523,6 +543,14 @@ export function createFloatingToolbarHtml(input: {
         animation: toolbarCheckBounce 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
         transform-origin: center;
         color: #22c55e !important;
+      }
+      @keyframes toolbarBounce {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.18); }
+        100% { transform: scale(1); }
+      }
+      .btn-export.is-switching {
+        animation: toolbarBounce 0.22s cubic-bezier(0.16, 1, 0.3, 1);
       }
       @keyframes toolbarShake {
         0%, 100% { transform: translateX(0); }
@@ -607,6 +635,7 @@ export function createFloatingToolbarHtml(input: {
             <button type="button" class="slim-btn btn btn-flag show-on-live show-on-paused" id="flag-btn" title="瞬时打标" aria-label="瞬时打标">${ICONS.flag}</button>
             <button type="button" class="slim-btn btn btn-stop show-on-live show-on-paused" id="stop-btn" title="停止录制" aria-label="停止录制">${ICONS.stop}</button>
             <button type="button" class="slim-btn btn btn-export show-on-idle" id="export-btn" title="导出证据 ZIP" aria-label="导出证据 ZIP">${ICONS.export}</button>
+            <button type="button" class="slim-btn btn show-on-idle show-on-live show-on-paused" id="screenshot-btn" title="框选截图" aria-label="框选截图">${ICONS.screenshot}</button>
             <button type="button" class="slim-btn btn show-on-idle show-on-live show-on-paused" id="main-btn" title="打开主工作台" aria-label="打开主工作台">${ICONS.main}</button>
           </div>
         </div>
@@ -634,6 +663,7 @@ export function createFloatingToolbarHtml(input: {
         flag: document.getElementById('flag-btn'),
         stop: document.getElementById('stop-btn'),
         export: document.getElementById('export-btn'),
+        screenshot: document.getElementById('screenshot-btn'),
         main: document.getElementById('main-btn'),
       };
 
@@ -1072,7 +1102,7 @@ export function createFloatingToolbarHtml(input: {
             .sort((a, b) => (Number(b.updatedAtMs) || 0) - (Number(a.updatedAtMs) || 0));
 
           for (const session of sorted.slice(0, 6)) {
-            if (session.status === 'active' && session.endedAtMs == null) {
+            if (session.status === 'active' && !paused && session.endedAtMs == null) {
               continue;
             }
             let segments = null;
@@ -1125,7 +1155,7 @@ export function createFloatingToolbarHtml(input: {
         buttons.pause.disabled = busy || !recording || paused;
         buttons.resume.disabled = busy || !recording || !paused;
         buttons.flag.disabled = busy || !recording;
-        buttons.export.disabled = isExporting || busy || recording || !canExport;
+        buttons.export.disabled = isExporting || busy || (recording && !paused) || !canExport;
         buttons.main.disabled = busy;
         syncAutoCollapse();
         const effectiveCollapsed = pointerInside && requestedCollapsed ? collapsed : requestedCollapsed;
@@ -1311,6 +1341,15 @@ export function createFloatingToolbarHtml(input: {
       };
       window.addEventListener('mouseup', onPassivePointerUp, true);
       dragHandle.addEventListener('pointerdown', beginDrag);
+      dragHandle.addEventListener('mouseenter', () => {
+        if (lastRecording && sessionStartedAtMs != null) {
+          const elapsedSec = Math.max(0, Math.floor((Date.now() - sessionStartedAtMs) / 1000));
+          const m = String(Math.floor(elapsedSec / 60)).padStart(2, '0');
+          const s = String(elapsedSec % 60).padStart(2, '0');
+          const label = paused ? '已暂停 · ' : '录制中 · ';
+          flashStatus(label + m + ':' + s, 2000);
+        }
+      });
       islandInner.addEventListener('pointerdown', (event) => {
         if (event.target.closest('.btn, .slim-btn, .status-capsule, .capsule-core-cluster')) return;
         beginDrag(event);
@@ -1400,6 +1439,14 @@ export function createFloatingToolbarHtml(input: {
           await api.showWindow();
         });
       });
+      buttons.screenshot.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        void runTask(async () => {
+          if (!api.beginAreaScreenshot) throw new Error('No beginAreaScreenshot API');
+          await api.beginAreaScreenshot();
+        });
+      });
 
       const flashStatus = (text, ms = 1800) => {
         if (!statusToast) return;
@@ -1413,6 +1460,19 @@ export function createFloatingToolbarHtml(input: {
         }, ms);
       };
 
+      const LOOKBACK_PRESETS = [null, 30, 60, 300];
+      const LOOKBACK_LABELS = {
+        null: "全部",
+        30: "最近 30 秒",
+        60: "最近 1 分钟",
+        300: "最近 5 分钟",
+      };
+      const LOOKBACK_BADGES = {
+        30: "30s",
+        60: "1m",
+        300: "5m",
+      };
+      let lookbackIndex = 0;
       let exportStateTimer = null;
       function setExportButtonState(state, tooltip) {
         if (!buttons.export) return;
@@ -1439,15 +1499,8 @@ export function createFloatingToolbarHtml(input: {
             exportProgressFill.style.width = '100%';
           }
           exportStateTimer = window.setTimeout(() => {
-            buttons.export.classList.remove('is-exported');
-            island.classList.remove('is-exported');
-            buttons.export.innerHTML = '${ICONS.export}';
-            buttons.export.setAttribute('title', '导出证据 ZIP');
-            buttons.export.setAttribute('aria-label', '导出证据 ZIP');
-            if (exportProgressFill) {
-              exportProgressFill.style.width = '0%';
-            }
             exportStateTimer = null;
+            setExportButtonState('idle');
           }, 2400);
         } else if (state === 'error') {
           buttons.export.classList.add('is-error');
@@ -1458,21 +1511,22 @@ export function createFloatingToolbarHtml(input: {
             exportProgressFill.style.width = '0%';
           }
           exportStateTimer = window.setTimeout(() => {
-            buttons.export.classList.remove('is-error');
-            buttons.export.innerHTML = '${ICONS.export}';
-            buttons.export.setAttribute('title', '导出证据 ZIP');
-            buttons.export.setAttribute('aria-label', '导出证据 ZIP');
             exportStateTimer = null;
+            setExportButtonState('idle');
           }, 1800);
         } else {
-          buttons.export.innerHTML = '${ICONS.export}';
-          buttons.export.setAttribute('title', '导出证据 ZIP');
-          buttons.export.setAttribute('aria-label', '导出证据 ZIP');
+          const currentLookback = LOOKBACK_PRESETS[lookbackIndex];
+          const rangeLabel = LOOKBACK_LABELS[currentLookback];
+          const badgeText = currentLookback != null ? LOOKBACK_BADGES[currentLookback] : null;
+          buttons.export.innerHTML = '${ICONS.export}' + (badgeText ? '<span class="export-range-badge">' + badgeText + '</span>' : '');
+          buttons.export.setAttribute('title', '导出证据 ZIP (' + rangeLabel + '，右键切换时长)');
+          buttons.export.setAttribute('aria-label', '导出证据 ZIP (' + rangeLabel + ')');
           if (exportProgressFill) {
             exportProgressFill.style.width = '0%';
           }
         }
       }
+      setExportButtonState('idle');
 
       if (api && api.onExportProgress) {
         api.onExportProgress((progress) => {
@@ -1520,10 +1574,13 @@ export function createFloatingToolbarHtml(input: {
         buttons.export.disabled = true;
         setExportButtonState('exporting', '正在准备导出…');
         try {
+          const lookbackSeconds = LOOKBACK_PRESETS[lookbackIndex];
           await api.exportTestSessionEvidence({
             targetDir: '',
             outputMode: 'zip',
             privacyAcknowledgedAt: new Date().toISOString(),
+            lookbackSeconds: lookbackSeconds || undefined,
+            clipMode: 'precise',
           });
         } catch (err) {
           const isCancel = err && /cancel/i.test(String(err && err.message || err));
@@ -1535,6 +1592,18 @@ export function createFloatingToolbarHtml(input: {
         }
       };
       buttons.export.addEventListener('click', (event) => runExport(event));
+      buttons.export.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (isExporting || busy) return;
+        lookbackIndex = (lookbackIndex + 1) % LOOKBACK_PRESETS.length;
+        const currentLookback = LOOKBACK_PRESETS[lookbackIndex];
+        const rangeLabel = LOOKBACK_LABELS[currentLookback];
+        flashStatus('导出范围：' + rangeLabel, 1800);
+        buttons.export.classList.add('is-switching');
+        window.setTimeout(() => buttons.export.classList.remove('is-switching'), 220);
+        setExportButtonState('idle');
+      });
 
       applyTheme('${initialTheme}');
       applyPresentation(visualState, collapsed);

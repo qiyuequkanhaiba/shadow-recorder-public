@@ -71,6 +71,7 @@ import {
   findHistoricalTestSession,
   findHistoricalVideoSegmentsForTimestamp,
   listHistoricalTestSessions,
+  sealAbandonedRecordingSessions,
   readHistoricalSessionEvents,
   readHistoricalSessionEventsTail,
   readHistoricalSessionOperationsTail,
@@ -450,7 +451,26 @@ export class ReqCaseShadowRecorderService {
   }
 
   public listSessions(): ReqCaseShadowRecorderTestSessionState[] {
-    const nativeSessions = this.getNativeSessionsSafe();
+    let nativeSessions: ReqCaseShadowRecorderTestSessionState[] = [];
+    let nativeListReady = false;
+    try {
+      nativeSessions = listTestSessions();
+      nativeListReady = true;
+    } catch {
+      nativeSessions = [];
+    }
+    if (nativeListReady) {
+      const liveSessionIds = new Set(
+        nativeSessions
+          .filter((session) => session.status === 'active' || session.status === 'paused')
+          .map((session) => session.sessionId),
+      );
+      try {
+        sealAbandonedRecordingSessions(this.resolveTestSessionsRoot(), liveSessionIds);
+      } catch (error) {
+        console.warn('[shadow-recorder] failed to seal abandoned sessions', error);
+      }
+    }
     const merged = [
       ...nativeSessions,
       ...listHistoricalTestSessions(this.resolveTestSessionsRoot(), nativeSessions),

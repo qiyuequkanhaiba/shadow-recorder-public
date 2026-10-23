@@ -3,7 +3,7 @@ import {
   IDLE_EXPORT_PROGRESS,
   reduceExportProgress,
   type ExportProgressEvent,
-} from '../src-electron/export-progress.ts';
+} from '../src-electron/export-progress';
 
 function apply(events: ExportProgressEvent[]) {
   let state = IDLE_EXPORT_PROGRESS;

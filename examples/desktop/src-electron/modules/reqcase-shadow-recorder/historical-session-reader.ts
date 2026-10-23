@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
 import type {
@@ -193,6 +193,47 @@ export function readHistoricalTestSessionFromDir(
     return null;
   }
   return normalizeHistoricalSession(manifest, path.resolve(rootDir), resolvedSessionDir, manifestPath);
+}
+
+export function sealAbandonedRecordingSessions(
+  rootDir: string,
+  liveSessionIds: ReadonlySet<string>,
+): number {
+  const resolvedRoot = path.resolve(rootDir);
+  if (!existsSync(resolvedRoot)) {
+    return 0;
+  }
+
+  let sealed = 0;
+  for (const entry of readdirSync(resolvedRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      continue;
+    }
+    const manifestPath = path.join(resolvedRoot, entry.name, 'session.json');
+    const record = asRecord(readJsonFile(manifestPath));
+    if (!record) {
+      continue;
+    }
+    const status = stringValue(record, 'status');
+    if (status !== 'active' && status !== 'paused') {
+      continue;
+    }
+    const sessionId = stringValue(record, 'sessionId') ?? entry.name;
+    if (liveSessionIds.has(sessionId)) {
+      continue;
+    }
+    const startedAtMs = numberValue(record, 'startedAtMs') ?? 0;
+    const updatedAtMs = numberValue(record, 'updatedAtMs') ?? startedAtMs;
+    const endedAtMs = numberValue(record, 'endedAtMs') ?? updatedAtMs;
+    writeFileSync(manifestPath, `${JSON.stringify({
+      ...record,
+      status: 'stopped',
+      endedAtMs,
+      updatedAtMs: Math.max(updatedAtMs, endedAtMs),
+    }, null, 2)}\n`, 'utf8');
+    sealed += 1;
+  }
+  return sealed;
 }
 
 export function listHistoricalTestSessions(

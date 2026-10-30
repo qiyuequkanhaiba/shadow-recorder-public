@@ -64,6 +64,8 @@ export const RecorderConfigSchema = z.object({
   shortcutCapturePin: z.string().optional(),
   screenshotDelaySeconds: z.number().finite().optional(),
   hideScreenshotUiFromCapture: z.boolean().optional(),
+  minFreeBytesToStart: z.number().finite().nonnegative().optional(),
+  minFreeBytesWhileRecording: z.number().finite().nonnegative().optional(),
 }).passthrough() satisfies z.ZodType<ReqCaseShadowRecorderConfig>;
 
 export const RecorderSettingsSchema = z.object({

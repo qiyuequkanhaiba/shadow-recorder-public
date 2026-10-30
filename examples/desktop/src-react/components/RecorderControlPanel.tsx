@@ -13,6 +13,12 @@ import {
 } from '../../types/recording-defaults';
 import { DEFAULT_BUFFER_BYTES } from '../lib/tuning-advisor';
 import { DEFAULT_SCREENSHOT_SHORTCUTS, acceleratorFromKeyboardEvent, canAssignScreenshotShortcut, formatScreenshotAccelerator, normalizeScreenshotDelaySeconds } from '../../src-electron/screenshot-capture';
+import {
+  MIN_FREE_BYTES_TO_START,
+  MIN_FREE_BYTES_WHILE_RECORDING,
+  bytesToGiB,
+  giBToBytes,
+} from '../../src-electron/modules/reqcase-shadow-recorder/disk-space';
 import { t } from '../lib/i18n';
 import type { VideoEncoderSummary } from '../lib/video-encoder-summary';
 
@@ -341,6 +347,40 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
                   ),
                 }))
               }
+            />
+          </label>
+
+          <label className="settings-field">
+            <span className="settings-field-label">{t('config.minFreeGiBToStart')}</span>
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              value={bytesToGiB(props.config.minFreeBytesToStart ?? MIN_FREE_BYTES_TO_START)}
+              onChange={(event) => {
+                const gib = Number(event.target.value);
+                props.setConfig((current) => ({
+                  ...current,
+                  minFreeBytesToStart: giBToBytes(gib, MIN_FREE_BYTES_TO_START),
+                }));
+              }}
+            />
+          </label>
+
+          <label className="settings-field">
+            <span className="settings-field-label">{t('config.minFreeGiBWhileRecording')}</span>
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              value={bytesToGiB(props.config.minFreeBytesWhileRecording ?? MIN_FREE_BYTES_WHILE_RECORDING)}
+              onChange={(event) => {
+                const gib = Number(event.target.value);
+                props.setConfig((current) => ({
+                  ...current,
+                  minFreeBytesWhileRecording: giBToBytes(gib, MIN_FREE_BYTES_WHILE_RECORDING),
+                }));
+              }}
             />
           </label>
 

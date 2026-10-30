@@ -224,6 +224,10 @@ export interface RecorderConfigPayload {
   screenshotDelaySeconds?: number;
   /** When true, screenshot selection UI is excluded from screen capture while this app is recording. Default true. */
   hideScreenshotUiFromCapture?: boolean;
+  /** Free bytes required before a recording may start. Default 2 GiB. */
+  minFreeBytesToStart?: number;
+  /** Free bytes that stop an active recording. Default 1 GiB. */
+  minFreeBytesWhileRecording?: number;
   [key: string]: unknown;
 }
 
@@ -272,6 +276,7 @@ export interface TestSessionStartInput {
   targetDisplayIds?: string[];
   recordingProfile?: 'efficiency' | 'balanced' | 'smooth';
   encoderPreference?: 'auto' | 'hardware' | 'software';
+  minFreeBytesToStart?: number;
   [key: string]: unknown;
 }
 

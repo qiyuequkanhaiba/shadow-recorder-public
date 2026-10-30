@@ -267,6 +267,8 @@ try {
   Invoke-NpmScript "test:ipc-validators"
   Invoke-NpmScript "test:report-export"
   Invoke-NpmScript "test:evidence-export"
+  Invoke-NpmScript "test:concat-list"
+  Invoke-NpmScript "test:disk-space"
   Invoke-NpmScript "test:evidence-manifest-v2"
 
   # Operation semantic Release A contract/compatibility suite (M8-T1 skeleton)

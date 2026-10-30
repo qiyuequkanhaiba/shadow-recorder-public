@@ -33,6 +33,13 @@ function sanitizeNonNegativeInteger(value: unknown): number {
   return Number.isFinite(parsed) && parsed > 0 ? Math.trunc(parsed) : 0;
 }
 
+function sanitizeByteThreshold(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return Math.round(value);
+}
+
 function sanitizeMaskRegions(value: unknown): ReqCaseShadowRecorderConfig['maskRegions'] | undefined {
   if (!Array.isArray(value)) {
     return undefined;
@@ -201,6 +208,19 @@ function sanitizeRecorderConfig(input: ReqCaseShadowRecorderConfig): ReqCaseShad
     output.hideScreenshotUiFromCapture = input.hideScreenshotUiFromCapture;
   } else {
     delete output.hideScreenshotUiFromCapture;
+  }
+
+  const minFreeBytesToStart = sanitizeByteThreshold(input.minFreeBytesToStart);
+  if (minFreeBytesToStart !== undefined) {
+    output.minFreeBytesToStart = minFreeBytesToStart;
+  } else {
+    delete output.minFreeBytesToStart;
+  }
+  const minFreeBytesWhileRecording = sanitizeByteThreshold(input.minFreeBytesWhileRecording);
+  if (minFreeBytesWhileRecording !== undefined) {
+    output.minFreeBytesWhileRecording = minFreeBytesWhileRecording;
+  } else {
+    delete output.minFreeBytesWhileRecording;
   }
 
   const excludedWindowTitleKeywords = sanitizeStringArray(input.excludedWindowTitleKeywords);

@@ -89,6 +89,7 @@ pub enum SessionError {
     UiaObserver(UiaObserverError),
     OperationStore(OperationStoreError),
     OperationOverride(OperationOverrideError),
+    DiskSpace(String),
 }
 
 impl std::fmt::Display for SessionError {
@@ -106,7 +107,11 @@ impl std::fmt::Display for SessionError {
             Self::Io(err) => write!(f, "test session io failed: {err}"),
             Self::Serialize(err) => write!(f, "test session serialization failed: {err}"),
             Self::FfmpegLoopRuntime(err) => write!(f, "ffmpeg loop runtime failed: {err}"),
+            Self::DefectPack(crate::session::defect_pack::DefectPackError::DiskSpace(message)) => {
+                write!(f, "{message}")
+            }
             Self::DefectPack(err) => write!(f, "defect pack failed: {err}"),
+            Self::DiskSpace(message) => write!(f, "{message}"),
             Self::SemanticEventStore(err) => write!(f, "semantic event store failed: {err}"),
             Self::UiaObserver(err) => write!(f, "UIA observer failed: {err}"),
             Self::OperationStore(err) => write!(f, "operation store failed: {err}"),
@@ -246,6 +251,25 @@ impl SessionManager {
         let now_ms = now_timestamp_ms();
         let session_id = self.next_session_id(now_ms);
         let storage_root_dir = normalize_optional_string(options.storage_dir.clone());
+        if let Some(storage) = storage_root_dir.as_deref() {
+            let minimum = crate::disk_space::threshold_bytes(
+                options.min_free_bytes_to_start,
+                crate::disk_space::MIN_FREE_BYTES_TO_START,
+            );
+            match crate::disk_space::disk_free_bytes(Path::new(storage)) {
+                Ok(free) if crate::disk_space::can_start_recording(free, minimum) => {}
+                Ok(_) => {
+                    return Err(SessionError::DiskSpace(
+                        crate::disk_space::start_refused_message(minimum),
+                    ));
+                }
+                Err(err) => {
+                    return Err(SessionError::DiskSpace(format!(
+                        "无法读取磁盘剩余空间，不能开始录制：{err}"
+                    )));
+                }
+            }
+        }
         let (session_dir, manifest_path) =
             prepare_session_storage(storage_root_dir.as_deref(), &session_id)?;
 
@@ -4814,5 +4838,28 @@ mod tests {
             is_playable: true,
             retention_tier: None,
         }
+    }
+
+    #[test]
+    fn start_refuses_when_free_space_is_below_the_threshold() {
+        struct Guard;
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                crate::disk_space::set_free_bytes_override_for_test(None);
+            }
+        }
+        let _guard = Guard;
+        crate::disk_space::set_free_bytes_override_for_test(Some(0));
+        let manager = SessionManager::default();
+        let err = manager
+            .start(TestSessionStartOptions {
+                storage_dir: Some(std::env::temp_dir().to_string_lossy().to_string()),
+                target_capture_mode: Some("desktop".to_string()),
+                ..TestSessionStartOptions::default()
+            })
+            .expect_err("low disk must refuse start");
+        let message = err.to_string();
+        assert!(message.contains("无法开始录制"), "{message}");
+        assert!(!message.contains("defect pack failed"), "{message}");
     }
 }

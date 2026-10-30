@@ -503,6 +503,20 @@ export function stopRecording(): void {
   (getBinding() as any).stopRecording();
 }
 
+export function diskFreeBytes(targetPath: string): number | null {
+  try {
+    const binding = getBinding() as any;
+    if (typeof binding.diskFreeBytes !== 'function') {
+      return null;
+    }
+    const value = binding.diskFreeBytes(targetPath);
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  } catch (error) {
+    console.warn('[disk-space] failed to read free bytes', error);
+    return null;
+  }
+}
+
 export function protectFloatingToolbarSurface(nativeWindowHandle: Buffer): boolean {
   try {
     const binding = getBinding() as any;

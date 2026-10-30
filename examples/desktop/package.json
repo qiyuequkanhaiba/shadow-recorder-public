@@ -25,6 +25,8 @@
     "test:ipc-validators": "tsx scripts/ipc-validators-test.ts",
     "test:report-export": "tsx scripts/report-export-test.ts",
     "test:evidence-export": "tsx scripts/evidence-export-test.ts",
+    "test:concat-list": "tsx scripts/concat-list-test.ts",
+    "test:disk-space": "tsx scripts/disk-space-test.ts",
     "test:clip-planner": "tsx scripts/clip-planner-test.ts",
     "test:export-range": "tsx scripts/export-range-test.ts",
     "test:export-progress": "tsx scripts/export-progress-test.ts",

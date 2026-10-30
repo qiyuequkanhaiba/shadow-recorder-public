@@ -537,6 +537,7 @@ pub struct JsTestSessionStartOptions {
     pub history_retention_mode: Option<String>,
     pub history_retention_hours: Option<u32>,
     pub history_retention_max_segments: Option<u32>,
+    pub min_free_bytes_to_start: Option<f64>,
 }
 
 impl From<JsTestSessionStartOptions> for TestSessionStartOptions {
@@ -557,6 +558,7 @@ impl From<JsTestSessionStartOptions> for TestSessionStartOptions {
             history_retention_mode: value.history_retention_mode,
             history_retention_hours: value.history_retention_hours,
             history_retention_max_segments: value.history_retention_max_segments,
+            min_free_bytes_to_start: value.min_free_bytes_to_start,
             show_mouse_in_video: value.show_mouse_in_video,
             notes: value.notes,
         }

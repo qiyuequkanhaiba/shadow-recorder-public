@@ -61,6 +61,7 @@ pub struct TestSessionStartOptions {
     pub history_retention_mode: Option<String>,
     pub history_retention_hours: Option<u32>,
     pub history_retention_max_segments: Option<u32>,
+    pub min_free_bytes_to_start: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

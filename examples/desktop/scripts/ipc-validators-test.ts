@@ -272,3 +272,23 @@ assert.throws(
 assert.doesNotThrow(() => {
   assertRendererExportDirAllowed('C:\\Users\\lew\\Documents\\证据包', exportAllowlist, windowsPath);
 });
+
+const ipcSource = readFileSync(
+  join(__dirname, '../src-electron/modules/reqcase-shadow-recorder/ipc.ts'),
+  'utf8',
+);
+
+function assertRendererDirIsCheckedUnlessDialogChoseIt(marker: string): void {
+  const start = ipcSource.indexOf(marker);
+  assert.ok(start >= 0, marker);
+  const window = ipcSource.slice(start, start + 1600);
+  const dialogAt = window.indexOf('chosenByDialog = true');
+  const guardAt = window.indexOf('if (!chosenByDialog)');
+  const checkAt = window.indexOf('assertRendererExportDirAllowed(targetDir');
+  assert.ok(dialogAt > 0, `${marker} dialog choice`);
+  assert.ok(guardAt > dialogAt, `${marker} guard`);
+  assert.ok(checkAt > guardAt, `${marker} allowlist`);
+}
+
+assertRendererDirIsCheckedUnlessDialogChoseIt('REQCASE_SHADOW_RECORDER_CHANNELS.exportDiagnostics');
+assertRendererDirIsCheckedUnlessDialogChoseIt("'reqcase:shadow-recorder:export-test-defect-pack'");

@@ -1470,7 +1470,8 @@ export function registerReqCaseShadowRecorderIpc(
     REQCASE_SHADOW_RECORDER_CHANNELS.exportDiagnostics,
     async (_event, rawInput: unknown) => {
       const input = parseDiagnosticsInput(rawInput);
-      let targetDir = input.targetDir;
+      let targetDir = input.targetDir.trim();
+      let chosenByDialog = false;
       if (!targetDir) {
         const result = await dialog.showOpenDialog({
           title: 'Select diagnostics export directory',
@@ -1480,6 +1481,15 @@ export function registerReqCaseShadowRecorderIpc(
           throw new Error('Export canceled by user');
         }
         targetDir = result.filePaths[0];
+        chosenByDialog = true;
+      }
+      if (!chosenByDialog) {
+        assertRendererExportDirAllowed(targetDir, {
+          documentsDir: app.getPath('documents'),
+          desktopDir: app.getPath('desktop'),
+          downloadsDir: app.getPath('downloads'),
+          savedExportDirs,
+        });
       }
       return exportDiagnostics(targetDir);
     },
@@ -1593,7 +1603,8 @@ export function registerReqCaseShadowRecorderIpc(
 
   ipcMain.handle('reqcase:shadow-recorder:export-test-defect-pack', async (event, input) => {
     const record = requireRecord(input, 'exportTestDefectPack');
-    let targetDir = optionalString(record, 'targetDir');
+    let targetDir = optionalString(record, 'targetDir')?.trim() ?? '';
+    let chosenByDialog = false;
     if (!targetDir) {
       const result = await dialog.showOpenDialog({
         title: '选择缺陷证据包导出目录',
@@ -1603,6 +1614,15 @@ export function registerReqCaseShadowRecorderIpc(
         throw new Error('export canceled');
       }
       targetDir = result.filePaths[0];
+      chosenByDialog = true;
+    }
+    if (!chosenByDialog) {
+      assertRendererExportDirAllowed(targetDir, {
+        documentsDir: app.getPath('documents'),
+        desktopDir: app.getPath('desktop'),
+        downloadsDir: app.getPath('downloads'),
+        savedExportDirs,
+      });
     }
     return service.exportTestDefectPack({
       sessionId: optionalString(record, 'sessionId'),

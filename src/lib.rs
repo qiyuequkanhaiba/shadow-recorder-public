@@ -35,6 +35,7 @@ pub mod operation_semantic_test_api {
 }
 
 use napi::Result;
+use napi::bindgen_prelude::{AsyncTask, Task};
 use napi_derive::napi;
 
 use crate::config::{RecorderConfig, StreamPayloadMode};
@@ -577,29 +578,64 @@ pub fn render_test_session_repro_steps(
         .map_err(map_session_error)
 }
 
+pub struct ExportDefectPackTask {
+    session_id: Option<String>,
+    target_dir: String,
+    marked_at_ms: Option<u64>,
+    pre_window_seconds: Option<u32>,
+    post_window_seconds: Option<u32>,
+    note: Option<String>,
+    expected: Option<String>,
+    actual: Option<String>,
+}
+
+impl Task for ExportDefectPackTask {
+    type Output = crate::types::JsTestSessionDefectPackResult;
+    type JsValue = crate::types::JsTestSessionDefectPackResult;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        // Session data is copied under the manager lock inside export_defect_pack.
+        // ffmpeg runs only after that lock is released.
+        TEST_SESSION_MANAGER
+            .export_defect_pack(
+                self.session_id.as_deref(),
+                self.target_dir.clone(),
+                self.marked_at_ms,
+                self.pre_window_seconds,
+                self.post_window_seconds,
+                self.note.clone(),
+                self.expected.clone(),
+                self.actual.clone(),
+            )
+            .map(Into::into)
+            .map_err(map_session_error)
+    }
+
+    fn resolve(&mut self, _env: napi::Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
 #[napi]
 pub fn export_test_defect_pack(
     input: Option<crate::types::JsTestSessionDefectPackExportInput>,
-) -> Result<crate::types::JsTestSessionDefectPackResult> {
+) -> Result<AsyncTask<ExportDefectPackTask>> {
     let input = input.unwrap_or_default();
     let target_dir = input
         .target_dir
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| napi::Error::from_reason("targetDir is required for defect pack export"))?;
-    TEST_SESSION_MANAGER
-        .export_defect_pack(
-            input.session_id.as_deref(),
-            target_dir,
-            parse_optional_js_timestamp(input.marked_at_ms, "markedAtMs")?,
-            input.pre_window_seconds,
-            input.post_window_seconds,
-            input.note,
-            input.expected,
-            input.actual,
-        )
-        .map(Into::into)
-        .map_err(map_session_error)
+    Ok(AsyncTask::new(ExportDefectPackTask {
+        session_id: input.session_id,
+        target_dir,
+        marked_at_ms: parse_optional_js_timestamp(input.marked_at_ms, "markedAtMs")?,
+        pre_window_seconds: input.pre_window_seconds,
+        post_window_seconds: input.post_window_seconds,
+        note: input.note,
+        expected: input.expected,
+        actual: input.actual,
+    }))
 }
 
 #[napi]

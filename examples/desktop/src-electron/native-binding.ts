@@ -1439,7 +1439,7 @@ export function renderTestSessionReproSteps(
   return binding.renderTestSessionReproSteps(sessionId, windowStartMs, windowEndMs, defectNote) ?? '';
 }
 
-export function exportTestDefectPack(input?: {
+export async function exportTestDefectPack(input?: {
   sessionId?: string;
   targetDir?: string;
   markedAtMs?: number;
@@ -1448,12 +1448,12 @@ export function exportTestDefectPack(input?: {
   note?: string;
   expected?: string;
   actual?: string;
-}): any {
+}): Promise<any> {
   const binding = getBinding() as any;
   if (typeof binding.exportTestDefectPack !== 'function') {
     throw new Error('exportTestDefectPack is unavailable in native binding');
   }
-  return binding.exportTestDefectPack(input);
+  return await binding.exportTestDefectPack(input);
 }
 
 

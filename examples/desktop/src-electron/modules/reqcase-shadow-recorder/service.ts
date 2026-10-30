@@ -1234,7 +1234,7 @@ export class ReqCaseShadowRecorderService {
     }
   }
 
-  public exportTestDefectPack(input: {
+  public async exportTestDefectPack(input: {
     sessionId?: string;
     targetDir?: string;
     markedAtMs?: number;
@@ -1244,7 +1244,7 @@ export class ReqCaseShadowRecorderService {
     expected?: string;
     actual?: string;
   }) {
-    return nativeExportTestDefectPack(input);
+    return await nativeExportTestDefectPack(input);
   }
 
   private listExportOperations(sessionId: string): unknown[] {

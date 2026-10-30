@@ -1,9 +1,11 @@
 //! Defect evidence pack export (time-window video + steps + screenshots + repro text).
 
 use std::fs;
-use std::io::{self, Write};
+use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Stdio;
+use std::process::{Child, ChildStderr, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
@@ -28,9 +30,13 @@ pub enum DefectPackError {
     Io(io::Error),
     Serialize(serde_json::Error),
     MissingSessionDir,
-    #[allow(dead_code)]
     Ffmpeg(String),
 }
+
+const FFMPEG_STREAM_COPY_TIMEOUT: Duration = Duration::from_secs(120);
+const FFMPEG_REENCODE_TIMEOUT: Duration = Duration::from_secs(600);
+const FFMPEG_QUIT_GRACE: Duration = Duration::from_secs(2);
+const FFMPEG_STDERR_TAIL_BYTES: usize = 4096;
 
 impl std::fmt::Display for DefectPackError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -531,7 +537,7 @@ pub fn export_defect_pack_with_operations(
 
     let segment_files = collect_segment_files(&pack_dir.join("video").join("segments"))?;
     let clip_path = pack_dir.join("video").join("clip.mp4");
-    let clip_built = try_build_clip_mp4(&segment_files, &clip_path);
+    let clip_built = try_build_clip_mp4(&segment_files, &clip_path)?;
     let clip_path_str = if clip_built && clip_path.exists() {
         Some(path_to_string(&clip_path))
     } else {
@@ -643,16 +649,17 @@ fn collect_segment_files(segments_dir: &Path) -> Result<Vec<PathBuf>, DefectPack
 
 /// Best-effort concat into a single playable clip.mp4.
 /// Strategy: copy-concat first; on failure, re-encode with libx264.
-fn try_build_clip_mp4(segment_files: &[PathBuf], output: &Path) -> bool {
+/// A timeout is an error. Other ffmpeg failures still leave the pack without a clip.
+fn try_build_clip_mp4(segment_files: &[PathBuf], output: &Path) -> Result<bool, DefectPackError> {
     if segment_files.is_empty() {
-        return false;
+        return Ok(false);
     }
     let Some(ffmpeg) = resolve_ffmpeg_executable() else {
-        return false;
+        return Ok(false);
     };
 
     if segment_files.len() == 1 {
-        return fs::copy(&segment_files[0], output).is_ok() && output.exists();
+        return Ok(fs::copy(&segment_files[0], output).is_ok() && output.exists());
     }
 
     let list_path = output.with_extension("concat.txt");
@@ -665,22 +672,42 @@ fn try_build_clip_mp4(segment_files: &[PathBuf], output: &Path) -> bool {
         list_body.push_str(&format!("file '{escaped}'\n"));
     }
     if fs::write(&list_path, list_body).is_err() {
-        return false;
+        return Ok(false);
     }
 
     // Prefer stream copy for speed/quality.
-    let copy_ok = run_ffmpeg_concat(&ffmpeg, &list_path, output, true);
+    let copy_ok = run_ffmpeg_concat(&ffmpeg, &list_path, output, true)?;
     if copy_ok {
         let _ = fs::remove_file(&list_path);
-        return true;
+        return Ok(true);
     }
     let _ = fs::remove_file(output);
-    let reencode_ok = run_ffmpeg_concat(&ffmpeg, &list_path, output, false);
+    let reencode_ok = run_ffmpeg_concat(&ffmpeg, &list_path, output, false)?;
     let _ = fs::remove_file(&list_path);
-    reencode_ok
+    Ok(reencode_ok)
 }
 
-fn run_ffmpeg_concat(ffmpeg: &Path, list_path: &Path, output: &Path, stream_copy: bool) -> bool {
+fn run_ffmpeg_concat(
+    ffmpeg: &Path,
+    list_path: &Path,
+    output: &Path,
+    stream_copy: bool,
+) -> Result<bool, DefectPackError> {
+    let timeout = if stream_copy {
+        FFMPEG_STREAM_COPY_TIMEOUT
+    } else {
+        FFMPEG_REENCODE_TIMEOUT
+    };
+    run_ffmpeg_concat_with_timeout(ffmpeg, list_path, output, stream_copy, timeout)
+}
+
+fn run_ffmpeg_concat_with_timeout(
+    ffmpeg: &Path,
+    list_path: &Path,
+    output: &Path,
+    stream_copy: bool,
+    timeout: Duration,
+) -> Result<bool, DefectPackError> {
     let mut command = build_hidden_command(ffmpeg);
     command
         .arg("-y")
@@ -699,14 +726,107 @@ fn run_ffmpeg_concat(ffmpeg: &Path, list_path: &Path, output: &Path, stream_copy
     }
     command
         .arg(output)
-        .stdin(Stdio::null())
+        .stdin(Stdio::piped())
         .stdout(Stdio::null())
-        .stderr(Stdio::null());
+        .stderr(Stdio::piped());
 
-    command
-        .status()
-        .map(|status| status.success() && output.exists())
-        .unwrap_or(false)
+    let mut child = match command.spawn() {
+        Ok(child) => child,
+        Err(_) => return Ok(false),
+    };
+    let stderr_pipe = child.stderr.take();
+    let stderr_handle = thread::spawn(move || read_stderr_tail(stderr_pipe));
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let _ = join_stderr(stderr_handle);
+                return Ok(status.success() && output.exists());
+            }
+            Ok(None) if started.elapsed() >= timeout => {
+                return finish_timed_out_ffmpeg(&mut child, stderr_handle, timeout, stream_copy);
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(50)),
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = join_stderr(stderr_handle);
+                return Ok(false);
+            }
+        }
+    }
+}
+
+fn finish_timed_out_ffmpeg(
+    child: &mut Child,
+    stderr_handle: thread::JoinHandle<Vec<u8>>,
+    timeout: Duration,
+    stream_copy: bool,
+) -> Result<bool, DefectPackError> {
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(b"q\n");
+        let _ = stdin.flush();
+    }
+    let grace_started = Instant::now();
+    while grace_started.elapsed() < FFMPEG_QUIT_GRACE {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                let tail = join_stderr(stderr_handle);
+                return Err(ffmpeg_timeout_error(timeout, stream_copy, &tail));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(50)),
+            Err(_) => break,
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    let tail = join_stderr(stderr_handle);
+    Err(ffmpeg_timeout_error(timeout, stream_copy, &tail))
+}
+
+fn ffmpeg_timeout_error(timeout: Duration, stream_copy: bool, tail: &[u8]) -> DefectPackError {
+    let mode = if stream_copy {
+        "stream copy"
+    } else {
+        "libx264 re-encode"
+    };
+    let stderr = String::from_utf8_lossy(tail);
+    DefectPackError::Ffmpeg(format!(
+        "{mode} timed out after {} seconds\n{stderr}",
+        timeout.as_secs()
+    ))
+}
+
+fn read_stderr_tail(pipe: Option<ChildStderr>) -> Vec<u8> {
+    let Some(mut pipe) = pipe else {
+        return Vec::new();
+    };
+    let mut tail = Vec::new();
+    let mut buf = [0u8; 1024];
+    loop {
+        match pipe.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => {
+                tail.extend_from_slice(&buf[..n]);
+                if tail.len() > FFMPEG_STDERR_TAIL_BYTES {
+                    let extra = tail.len() - FFMPEG_STDERR_TAIL_BYTES;
+                    tail.drain(..extra);
+                }
+            }
+        }
+    }
+    tail
+}
+
+fn join_stderr(handle: thread::JoinHandle<Vec<u8>>) -> Vec<u8> {
+    let started = Instant::now();
+    while started.elapsed() < Duration::from_secs(2) {
+        if handle.is_finished() {
+            return handle.join().unwrap_or_default();
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
+    Vec::new()
 }
 
 fn write_json<T: Serialize>(path: &Path, value: &T) -> Result<(), DefectPackError> {
@@ -861,5 +981,144 @@ mod tests {
         }));
         assert_eq!(operations[0].action.kind, OperationActionKind::Click);
         assert_eq!(operations[1].action.kind, OperationActionKind::WindowSwitch);
+    }
+
+    #[test]
+    fn ffmpeg_concat_timeout_reaps_spawned_child() {
+        assert_eq!(FFMPEG_STREAM_COPY_TIMEOUT, Duration::from_secs(120));
+        assert_eq!(FFMPEG_REENCODE_TIMEOUT, Duration::from_secs(600));
+        assert_eq!(FFMPEG_QUIT_GRACE, Duration::from_secs(2));
+        assert_eq!(FFMPEG_STDERR_TAIL_BYTES, 4096);
+
+        let dir = std::env::temp_dir().join(format!(
+            "s2-fake-ffmpeg-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let source = dir.join("sleeper.rs");
+        fs::write(
+            &source,
+            r#"fn main() {
+    let mut body = vec![b'A'; 8192];
+    let marker = format!("\nTAIL-MARKER pid={}\n", std::process::id());
+    body.extend_from_slice(marker.as_bytes());
+    let _ = std::io::Write::write_all(&mut std::io::stderr(), &body);
+    let _ = std::io::Write::flush(&mut std::io::stderr());
+    std::thread::sleep(std::time::Duration::from_secs(30));
+}
+"#,
+        )
+        .unwrap();
+        let exe = dir.join(if cfg!(windows) {
+            "sleeper.exe"
+        } else {
+            "sleeper"
+        });
+        let compiled = std::process::Command::new("rustc")
+            .arg("--edition")
+            .arg("2021")
+            .arg("-O")
+            .arg(&source)
+            .arg("-o")
+            .arg(&exe)
+            .status()
+            .expect("rustc sleeper");
+        assert!(compiled.success(), "rustc sleeper failed");
+
+        let list = dir.join("list.txt");
+        let output = dir.join("out.mp4");
+        fs::write(&list, "file 'missing.mp4'\n").unwrap();
+        let started = Instant::now();
+        let err =
+            run_ffmpeg_concat_with_timeout(&exe, &list, &output, true, Duration::from_secs(1))
+                .expect_err("timeout must be an error");
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= Duration::from_secs(1),
+            "returned before the timeout: {elapsed:?}"
+        );
+        assert!(
+            elapsed < Duration::from_secs(8),
+            "timeout did not stop the child: {elapsed:?}"
+        );
+        let message = err.to_string();
+        assert!(message.contains("timed out"), "{message}");
+        assert!(message.contains("TAIL-MARKER"), "{message}");
+        assert!(
+            message.matches('A').count() <= FFMPEG_STDERR_TAIL_BYTES,
+            "{message}"
+        );
+        let pid = message
+            .split("pid=")
+            .nth(1)
+            .and_then(|rest| rest.split(|ch: char| !ch.is_ascii_digit()).next())
+            .and_then(|value| value.parse::<u32>().ok())
+            .expect("pid in stderr tail");
+        let _guard = ReapGuard(pid);
+        assert!(
+            !process_is_running(pid),
+            "spawned sleeper {pid} is still running"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    struct ReapGuard(u32);
+
+    impl Drop for ReapGuard {
+        fn drop(&mut self) {
+            if !process_is_running_once(self.0) {
+                return;
+            }
+            #[cfg(windows)]
+            {
+                let _ = std::process::Command::new("taskkill")
+                    .args(["/PID", &self.0.to_string(), "/F"])
+                    .status();
+            }
+            #[cfg(not(windows))]
+            {
+                let _ = std::process::Command::new("kill")
+                    .arg(self.0.to_string())
+                    .status();
+            }
+        }
+    }
+
+    fn process_is_running(pid: u32) -> bool {
+        for _ in 0..5 {
+            if !process_is_running_once(pid) {
+                return false;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        true
+    }
+
+    fn process_is_running_once(pid: u32) -> bool {
+        #[cfg(windows)]
+        {
+            let output = std::process::Command::new("tasklist")
+                .args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"])
+                .output();
+            match output {
+                Ok(output) => {
+                    String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\""))
+                }
+                Err(_) => false,
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            std::process::Command::new("kill")
+                .args(["-0", &pid.to_string()])
+                .status()
+                .map(|status| status.success())
+                .unwrap_or(false)
+        }
     }
 }

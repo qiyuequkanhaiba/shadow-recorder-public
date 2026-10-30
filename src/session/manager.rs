@@ -947,7 +947,7 @@ impl SessionManager {
         history_retention_hours: Option<u32>,
         history_retention_max_segments: Option<u32>,
     ) -> Result<TestSessionRecord, SessionError> {
-        let mut guard = self.state.lock().unwrap();
+        let mut guard = self.state.lock().map_err(|_| SessionError::LockPoisoned)?;
         let session = guard.active.as_mut().filter(|s| s.session_id == session_id)
             .ok_or_else(|| SessionError::SessionNotFound(session_id.to_string()))?;
         if let Some(n) = name {
@@ -1198,6 +1198,7 @@ impl SessionManager {
             expected: normalize_optional_string(expected),
             actual: normalize_optional_string(actual),
         };
+        // The manager lock is not held here. export_defect_pack_with_operations may run ffmpeg.
         export_defect_pack_with_operations(&session, &steps, &operations, &segments, &request)
             .map_err(Into::into)
     }

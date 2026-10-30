@@ -1628,7 +1628,7 @@ export function registerReqCaseShadowRecorderIpc(
         savedExportDirs,
       });
     }
-    return service.exportTestDefectPack({
+    return await service.exportTestDefectPack({
       sessionId: optionalString(record, 'sessionId'),
       targetDir,
       markedAtMs: optionalNumber(record, 'markedAtMs'),

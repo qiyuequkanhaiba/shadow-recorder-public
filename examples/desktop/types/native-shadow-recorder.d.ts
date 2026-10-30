@@ -29,6 +29,27 @@ export interface ShadowRecorderNativeOperationBinding {
   updateTestSessionMeta?(input?: any): any;
 
   updateTestSessionOperation?(input?: TestSessionOperationUpdateInput): TestSessionOperationRecord;
+  exportTestDefectPack?(input?: {
+    sessionId?: string;
+    targetDir?: string;
+    markedAtMs?: number;
+    preWindowSeconds?: number;
+    postWindowSeconds?: number;
+    note?: string;
+    expected?: string;
+    actual?: string;
+  }): Promise<{
+    packDir: string;
+    reproStepsPath: string;
+    summaryPath: string;
+    stepsPath: string;
+    manifestPath: string;
+    stepCount: number;
+    screenshotCount: number;
+    videoSegmentCount: number;
+    clipPath?: string;
+    clipBuilt: boolean;
+  }>;
   getTestSessionSteps?(sessionId?: string, limit?: number): unknown[];
   setSemanticAliasProfile?(profile?: unknown): unknown;
   getSemanticAliasProfile?(): unknown;

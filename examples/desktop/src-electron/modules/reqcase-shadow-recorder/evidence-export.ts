@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { resolveBundledFfmpegPath } from '../../ffmpeg-resource';
 import { planSessionClips, mapWallClockToVideoOffsetMs, type SessionClipPlan, type StreamClipPlan } from './clip-planner';
+import { ffmpegConcatFileLine } from './ffmpeg-concat-list';
 import { renderStreamClipVideo } from './ffmpeg-clip';
 import { buildChecksumEntries as buildArchiveChecksumEntries, createZipArchive as createArchiveZip } from './evidence-archive';
 import {
@@ -849,9 +850,7 @@ async function exportMergedStreamVideo(
   }
 
   const concatListPath = path.resolve(path.dirname(outputPath), `${path.basename(outputPath, '.mp4')}.concat.txt`);
-  const concatPayload = resolvedSegments
-    .map((segmentPath) => `file '${segmentPath.replaceAll("'", "'\\''").replaceAll('\\', '/')}'`)
-    .join('\n');
+  const concatPayload = resolvedSegments.map((segmentPath) => ffmpegConcatFileLine(segmentPath)).join('\n');
   await writeFile(concatListPath, concatPayload, 'utf-8');
 
   await runFfmpegConcat(ffmpegPath, concatListPath, outputPath);

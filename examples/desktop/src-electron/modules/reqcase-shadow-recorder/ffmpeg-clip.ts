@@ -3,6 +3,7 @@ import { copyFile, rm, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveBundledFfmpegPath } from '../../ffmpeg-resource';
 import type { StreamClipPlan } from './clip-planner';
+import { ffmpegConcatFileLine } from './ffmpeg-concat-list';
 
 export type ClipRenderProgress = {
   percent: number;
@@ -47,8 +48,7 @@ export async function renderStreamClipVideo(options: ClipRenderOptions): Promise
 
   const lines: string[] = [];
   for (const piece of plan.pieces) {
-    const escaped = piece.filePath.replaceAll("'", "'\\''").replaceAll('\\', '/');
-    lines.push(`file '${escaped}'`);
+    lines.push(ffmpegConcatFileLine(piece.filePath));
     if (requiresReencode) {
       if (typeof piece.inpointSeconds === 'number' && piece.inpointSeconds > 0) {
         lines.push(`inpoint ${piece.inpointSeconds.toFixed(3)}`);

@@ -13,7 +13,9 @@ mod raw_input;
 mod recorder;
 mod retry;
 mod screenshot;
+mod disk_space;
 mod session;
+mod sha256;
 mod storage;
 mod telemetry;
 mod types;
@@ -771,6 +773,13 @@ fn map_session_error(err: SessionError) -> napi::Error {
 #[napi]
 pub fn protect_floating_toolbar_surface(hwnd: i64) -> bool {
     window_surface::protect_floating_toolbar_hwnd(hwnd)
+}
+
+#[napi]
+pub fn disk_free_bytes(path: String) -> Result<f64> {
+    let bytes = crate::disk_space::disk_free_bytes(std::path::Path::new(&path))
+        .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    Ok(bytes as f64)
 }
 
 #[napi(object)]

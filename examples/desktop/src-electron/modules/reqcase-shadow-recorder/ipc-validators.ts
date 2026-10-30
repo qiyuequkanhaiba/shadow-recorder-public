@@ -154,6 +154,16 @@ export const GetBufferPageInputSchema = z.preprocess(
   }).passthrough(),
 );
 
+export const ScreenshotDragStartSchema = z.object({
+  clientX: z.number().finite(),
+  clientY: z.number().finite(),
+});
+
+export const ScreenshotDragCursorSchema = z.preprocess(
+  (value) => (value == null ? {} : value),
+  z.object({}).strip(),
+);
+
 export function parseIpcInput<T>(schema: z.ZodType<T>, value: unknown, label: string): T {
   const result = schema.safeParse(value);
   if (!result.success) {

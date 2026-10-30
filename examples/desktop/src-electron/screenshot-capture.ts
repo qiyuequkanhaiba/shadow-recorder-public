@@ -258,6 +258,227 @@ export function physicalSelectionOnDisplay(
   );
 }
 
+export type DisplayGeometry = {
+  id: number;
+  bounds: ScreenshotRect;
+  scaleFactor: number;
+  physicalOrigin: DipPoint;
+};
+
+function positiveScale(scaleFactor: number): number | null {
+  return Number.isFinite(scaleFactor) && scaleFactor > 0 ? scaleFactor : null;
+}
+
+export function physicalPointOnDisplay(
+  display: { scaleFactor: number; physicalOrigin: DipPoint },
+  local: DipPoint,
+): DipPoint | null {
+  const scale = positiveScale(display?.scaleFactor);
+  const origin = display?.physicalOrigin;
+  if (scale === null || !origin || !local) {
+    return null;
+  }
+  if (![origin.x, origin.y, local.x, local.y].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  return {
+    x: origin.x + local.x * scale,
+    y: origin.y + local.y * scale,
+  };
+}
+
+function displayPhysicalBounds(
+  display: { bounds: ScreenshotRect; scaleFactor: number; physicalOrigin: DipPoint },
+): ScreenshotRect | null {
+  const scale = positiveScale(display?.scaleFactor);
+  const origin = display?.physicalOrigin;
+  const bounds = display?.bounds;
+  if (scale === null || !origin || !bounds) {
+    return null;
+  }
+  if (![origin.x, origin.y, bounds.width, bounds.height].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  if (bounds.width <= 0 || bounds.height <= 0) {
+    return null;
+  }
+  return {
+    x: origin.x,
+    y: origin.y,
+    width: bounds.width * scale,
+    height: bounds.height * scale,
+  };
+}
+
+function intersectPhysicalRects(left: ScreenshotRect, right: ScreenshotRect): ScreenshotRect | null {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const width = Math.min(left.x + left.width, right.x + right.width) - x;
+  const height = Math.min(left.y + left.height, right.y + right.height) - y;
+  if (!(width > 0) || !(height > 0)) {
+    return null;
+  }
+  return { x, y, width, height };
+}
+
+/** Physical rectangle clipped to one display, in that display's local DIP. */
+export function localDipSegmentOnDisplay(
+  display: { bounds: ScreenshotRect; scaleFactor: number; physicalOrigin: DipPoint },
+  physical: ScreenshotRect,
+): ScreenshotRect | null {
+  const scale = positiveScale(display?.scaleFactor);
+  const origin = display?.physicalOrigin;
+  const screenBounds = displayPhysicalBounds(display);
+  if (scale === null || !origin || !screenBounds || !physical) {
+    return null;
+  }
+  if (![physical.x, physical.y, physical.width, physical.height].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  if (physical.width <= 0 || physical.height <= 0) {
+    return null;
+  }
+  const hit = intersectPhysicalRects(physical, screenBounds);
+  if (!hit) {
+    return null;
+  }
+  return {
+    x: (hit.x - origin.x) / scale,
+    y: (hit.y - origin.y) / scale,
+    width: hit.width / scale,
+    height: hit.height / scale,
+  };
+}
+
+export function physicalRectInsideDisplay(
+  display: { bounds: ScreenshotRect; scaleFactor: number; physicalOrigin: DipPoint },
+  physical: ScreenshotRect,
+): boolean {
+  const screenBounds = displayPhysicalBounds(display);
+  if (!screenBounds || !physical) {
+    return false;
+  }
+  if (![physical.x, physical.y, physical.width, physical.height].every((value) => Number.isFinite(value))) {
+    return false;
+  }
+  const epsilon = 1e-6;
+  return physical.x >= screenBounds.x - epsilon
+    && physical.y >= screenBounds.y - epsilon
+    && physical.x + physical.width <= screenBounds.x + screenBounds.width + epsilon
+    && physical.y + physical.height <= screenBounds.y + screenBounds.height + epsilon;
+}
+
+export function selectionSegmentsByDisplay(
+  physical: ScreenshotRect,
+  displays: DisplayGeometry[],
+): Array<{ displayId: number; local: ScreenshotRect }> {
+  if (!physical || !Array.isArray(displays)) {
+    return [];
+  }
+  const segments: Array<{ displayId: number; local: ScreenshotRect }> = [];
+  for (const display of displays) {
+    if (!display || !Number.isFinite(display.id)) {
+      continue;
+    }
+    const local = localDipSegmentOnDisplay(display, physical);
+    if (!local) {
+      continue;
+    }
+    segments.push({ displayId: display.id, local });
+  }
+  return segments;
+}
+
+export function chooseAnnotationDisplay(
+  physical: ScreenshotRect,
+  displays: DisplayGeometry[],
+): number | null {
+  if (!physical || !Array.isArray(displays)) {
+    return null;
+  }
+  let bestId: number | null = null;
+  let bestArea = 0;
+  for (const display of displays) {
+    if (!display || !Number.isFinite(display.id)) {
+      continue;
+    }
+    const scale = positiveScale(display.scaleFactor);
+    const local = localDipSegmentOnDisplay(display, physical);
+    if (!local || scale === null) {
+      continue;
+    }
+    const area = local.width * scale * (local.height * scale);
+    if (area > bestArea) {
+      bestArea = area;
+      bestId = display.id;
+    }
+  }
+  return bestId;
+}
+
+export function annotationFrameOnDisplay(
+  image: ScreenshotRect,
+  display: { bounds: ScreenshotRect; scaleFactor: number; physicalOrigin: DipPoint },
+): ScreenshotRect | null {
+  const scale = positiveScale(display?.scaleFactor);
+  const origin = display?.physicalOrigin;
+  const bounds = display?.bounds;
+  if (scale === null || !origin || !bounds || !image) {
+    return null;
+  }
+  if (![
+    origin.x,
+    origin.y,
+    bounds.width,
+    bounds.height,
+    image.x,
+    image.y,
+    image.width,
+    image.height,
+  ].every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  if (image.width <= 0 || image.height <= 0 || bounds.width <= 0 || bounds.height <= 0) {
+    return null;
+  }
+  const naturalWidth = image.width / scale;
+  const naturalHeight = image.height / scale;
+  const fit = Math.min(1, bounds.width / naturalWidth, bounds.height / naturalHeight);
+  if (!(fit > 0)) {
+    return null;
+  }
+  if (fit < 1) {
+    const width = Math.min(bounds.width, naturalWidth * fit);
+    const height = Math.min(bounds.height, naturalHeight * fit);
+    return {
+      x: Math.max(0, (bounds.width - width) / 2),
+      y: Math.max(0, (bounds.height - height) / 2),
+      width,
+      height,
+    };
+  }
+  let x = (image.x - origin.x) / scale;
+  let y = (image.y - origin.y) / scale;
+  if (x < 0) {
+    x = 0;
+  }
+  if (y < 0) {
+    y = 0;
+  }
+  if (x + naturalWidth > bounds.width) {
+    x = bounds.width - naturalWidth;
+  }
+  if (y + naturalHeight > bounds.height) {
+    y = bounds.height - naturalHeight;
+  }
+  return {
+    x,
+    y,
+    width: naturalWidth,
+    height: naturalHeight,
+  };
+}
+
 export function unionDisplayBounds(
   displays: ScreenshotRect[],
 ): ScreenshotRect {

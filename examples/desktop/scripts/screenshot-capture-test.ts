@@ -2,21 +2,30 @@ import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { RecorderConfigSchema } from '../src-electron/modules/reqcase-shadow-recorder/ipc-validators';
+import {
+  RecorderConfigSchema,
+  ScreenshotDragCursorSchema,
+  ScreenshotDragStartSchema,
+} from '../src-electron/modules/reqcase-shadow-recorder/ipc-validators';
 import {
   acceleratorFromKeyboardEvent,
+  annotationFrameOnDisplay,
   canAssignScreenshotShortcut,
-  formatScreenshotAccelerator,
-  normalizeScreenshotDelaySeconds,
+  chooseAnnotationDisplay,
   chooseAreaSelection,
+  formatScreenshotAccelerator,
+  localDipSegmentOnDisplay,
+  normalizeScreenshotDelaySeconds,
   parseSelectionRect,
   physicalRectFromDipCorners,
   physicalSelectionOnDisplay,
   planAreaOverlayWindows,
   resolveScreenshotShortcuts,
+  selectionSegmentsByDisplay,
   shouldHideScreenshotUiFromCapture,
   trimScreenshotHistory,
   unionDisplayBounds,
+  type DisplayGeometry,
 } from '../src-electron/screenshot-capture';
 import { createPinHtml, createScreenshotOverlayHtml } from '../src-electron/screenshot-overlay-html';
 
@@ -24,6 +33,10 @@ const desktopRoot = path.resolve(__dirname, '..');
 
 function read(relativePath: string): string {
   return readFileSync(path.resolve(desktopRoot, relativePath), 'utf8');
+}
+
+function near(actual: number, expected: number, epsilon = 1e-6): void {
+  assert.ok(Math.abs(actual - expected) < epsilon, `${actual} !~ ${expected}`);
 }
 
 function run(): void {
@@ -174,6 +187,157 @@ function run(): void {
     },
     { x: 1, y: 1, width: 0, height: 4 },
   ), null);
+
+  const leftScreen: DisplayGeometry = {
+    id: 1,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    scaleFactor: 1,
+    physicalOrigin: { x: 0, y: 0 },
+  };
+  const rightScreen: DisplayGeometry = {
+    id: 2,
+    bounds: { x: 1920, y: 0, width: 2560 / 1.5, height: 1600 / 1.5 },
+    scaleFactor: 1.5,
+    physicalOrigin: { x: 1920, y: 0 },
+  };
+  const across = { x: 960, y: 540, width: 3520, height: 1060 };
+  const acrossSegments = selectionSegmentsByDisplay(across, [leftScreen, rightScreen]);
+  assert.deepEqual(acrossSegments.find((segment) => segment.displayId === 1)?.local, {
+    x: 960,
+    y: 540,
+    width: 960,
+    height: 540,
+  });
+  const rightSegment = acrossSegments.find((segment) => segment.displayId === 2)?.local;
+  assert.ok(rightSegment);
+  assert.equal(rightSegment.x, 0);
+  assert.equal(rightSegment.y, 360);
+  near(rightSegment.width * rightScreen.scaleFactor, 2560);
+  near(rightSegment.height * rightScreen.scaleFactor, 1060);
+  assert.equal(chooseAnnotationDisplay(across, [leftScreen, rightScreen]), 2);
+  const acrossFrame = annotationFrameOnDisplay(across, rightScreen);
+  assert.ok(acrossFrame);
+  near(acrossFrame.x, 0);
+  assert.ok(Math.abs(acrossFrame.width - rightScreen.bounds.width) < 1e-9);
+  assert.ok(Math.abs((acrossFrame.width / acrossFrame.height) - (3520 / 1060)) < 1e-9);
+  assert.ok(Math.abs(acrossFrame.y - (rightScreen.bounds.height - acrossFrame.height) / 2) < 1e-6);
+  assert.ok(acrossFrame.width < 3520 / 1.5);
+
+  const secondaryScreen: DisplayGeometry = {
+    id: 2,
+    bounds: { x: -1280, y: 0, width: 1280, height: 720 },
+    scaleFactor: 1.5,
+    physicalOrigin: { x: -1920, y: 0 },
+  };
+  const negative = { x: -960, y: 540, width: 2880, height: 540 };
+  const negativeSegments = selectionSegmentsByDisplay(negative, [secondaryScreen, leftScreen]);
+  assert.deepEqual(negativeSegments.find((segment) => segment.displayId === 2)?.local, {
+    x: 640,
+    y: 360,
+    width: 640,
+    height: 360,
+  });
+  assert.deepEqual(negativeSegments.find((segment) => segment.displayId === 1)?.local, {
+    x: 0,
+    y: 540,
+    width: 1920,
+    height: 540,
+  });
+
+  const lowerScreen: DisplayGeometry = {
+    id: 2,
+    bounds: { x: 0, y: 1080, width: 1536, height: 864 },
+    scaleFactor: 1.25,
+    physicalOrigin: { x: 0, y: 1080 },
+  };
+  const vertical = { x: 960, y: 540, width: 960, height: 1620 };
+  const verticalSegments = selectionSegmentsByDisplay(vertical, [leftScreen, lowerScreen]);
+  assert.deepEqual(verticalSegments.find((segment) => segment.displayId === 1)?.local, {
+    x: 960,
+    y: 540,
+    width: 960,
+    height: 540,
+  });
+  assert.deepEqual(verticalSegments.find((segment) => segment.displayId === 2)?.local, {
+    x: 768,
+    y: 0,
+    width: 768,
+    height: 864,
+  });
+  assert.equal(chooseAnnotationDisplay(vertical, [leftScreen, lowerScreen]), 2);
+
+  const onlyScreen: DisplayGeometry = {
+    id: 7,
+    bounds: { x: 0, y: 0, width: 1920, height: 1080 },
+    scaleFactor: 1,
+    physicalOrigin: { x: 0, y: 0 },
+  };
+  const singleLocal = { x: 100, y: 80, width: 200, height: 50 };
+  const singlePhysical = physicalSelectionOnDisplay(onlyScreen, singleLocal);
+  assert.deepEqual(singlePhysical, singleLocal);
+  assert.deepEqual(selectionSegmentsByDisplay(singlePhysical!, [onlyScreen]), [
+    { displayId: 7, local: singleLocal },
+  ]);
+  assert.equal(chooseAnnotationDisplay(singlePhysical!, [onlyScreen]), 7);
+  assert.deepEqual(annotationFrameOnDisplay(singlePhysical!, onlyScreen), singleLocal);
+
+  const tiedA: DisplayGeometry = {
+    id: 11,
+    bounds: { x: 0, y: 0, width: 100, height: 100 },
+    scaleFactor: 1,
+    physicalOrigin: { x: 0, y: 0 },
+  };
+  const tiedB: DisplayGeometry = {
+    id: 12,
+    bounds: { x: 100, y: 0, width: 100, height: 100 },
+    scaleFactor: 1,
+    physicalOrigin: { x: 100, y: 0 },
+  };
+  const tied = { x: 50, y: 0, width: 100, height: 100 };
+  assert.equal(chooseAnnotationDisplay(tied, [tiedA, tiedB]), 11);
+  assert.equal(chooseAnnotationDisplay(tied, [tiedB, tiedA]), 12);
+
+  const dipHeavy: DisplayGeometry = {
+    id: 21,
+    bounds: { x: 0, y: 0, width: 200, height: 200 },
+    scaleFactor: 1,
+    physicalOrigin: { x: 0, y: 0 },
+  };
+  const pixelHeavy: DisplayGeometry = {
+    id: 22,
+    bounds: { x: 200, y: 0, width: 100, height: 100 },
+    scaleFactor: 3,
+    physicalOrigin: { x: 200, y: 0 },
+  };
+  assert.equal(chooseAnnotationDisplay(
+    { x: 0, y: 0, width: 500, height: 300 },
+    [dipHeavy, pixelHeavy],
+  ), 22);
+
+  const spanned = { x: 1600, y: 100, width: 800, height: 400 };
+  assert.deepEqual(localDipSegmentOnDisplay(leftScreen, spanned), {
+    x: 1600,
+    y: 100,
+    width: 320,
+    height: 400,
+  });
+  const spannedRight = localDipSegmentOnDisplay(rightScreen, spanned);
+  assert.ok(spannedRight);
+  assert.equal(spannedRight.x, 0);
+  near(spannedRight.y * rightScreen.scaleFactor, 100);
+  assert.equal(spannedRight.width, 320);
+  near(spannedRight.height * rightScreen.scaleFactor, 400);
+  assert.equal(localDipSegmentOnDisplay(leftScreen, { x: 5000, y: 0, width: 10, height: 10 }), null);
+  assert.equal(chooseAnnotationDisplay({ x: 1, y: 1, width: 0, height: 4 }, [leftScreen]), null);
+
+  assert.deepEqual(ScreenshotDragStartSchema.parse({ clientX: 12, clientY: 8 }), {
+    clientX: 12,
+    clientY: 8,
+  });
+  assert.equal(ScreenshotDragStartSchema.safeParse({ clientX: Number.NaN, clientY: 1 }).success, false);
+  assert.equal(ScreenshotDragCursorSchema.safeParse(undefined).success, true);
+  assert.equal(ScreenshotDragCursorSchema.safeParse({ clientX: 40 }).success, true);
+  assert.deepEqual(ScreenshotDragCursorSchema.parse({ clientX: 40 }), {});
   assert.equal(parseSelectionRect({ x: 1, y: 2, width: 0, height: 4 }), null);
   assert.deepEqual(parseSelectionRect({ x: 1.2, y: 2.6, width: 3, height: 4 }), {
     x: 1,
@@ -288,8 +452,23 @@ function run(): void {
   assert.match(session, /windowBoundsAtPoint/);
   assert.match(session, /planAreaOverlayWindows/);
   assert.match(session, /physicalSelectionOnDisplay/);
+  assert.match(session, /localDipSegmentOnDisplay/);
+  assert.match(session, /screen\.dipToScreenPoint\(screen\.getCursorScreenPoint\(\)\)/);
+  assert.match(session, /function confirmCrossDisplaySelection/);
+  const crossAt = session.indexOf('function confirmCrossDisplaySelection');
+  const crossGrab = session.indexOf("grab({ mode: 'region'", crossAt);
+  const crossHide = session.lastIndexOf('hideAreaOverlays()', crossGrab);
+  assert.ok(crossAt > 0 && crossHide > crossAt && crossGrab > crossHide);
+  assert.match(html, /api\.dragMove/);
+  assert.match(html, /api\.confirmCross/);
+  assert.match(html, /api\.onRemoteSegment/);
   assert.match(session, /bindTrustedDataDocument/);
   const ipc = read('src-electron/modules/reqcase-shadow-recorder/ipc.ts');
+  assert.match(ipc, /ScreenshotDragStartSchema\.safeParse/);
+  assert.match(ipc, /ScreenshotDragCursorSchema\.safeParse/);
+  assert.match(ipc, /reqcase:screenshot:drag-start/);
+  assert.match(ipc, /reqcase:screenshot:confirm-cross/);
+  assert.match(ipc, /handleTrusted\('reqcase:screenshot:drag-move'/);
   assert.match(ipc, /confirmAreaSelection\(rect, event\.sender\)/);
   assert.match(ipc, /windowSelectionAtClientPoint\(x, y, event\.sender\)/);
   assert.match(session, /function showExcludedFromCapture/);

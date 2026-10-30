@@ -73,6 +73,8 @@ export function createScreenshotOverlayHtml(): string {
     let hoverPending = false;
     let hoverQueued = null;
     const DRAG_THRESHOLD = 6;
+    let dragToken = 0;
+    let remoteHold = false;
     let drawStart = null;
     let drawCurrent = null;
     let drawHeld = false;
@@ -118,11 +120,11 @@ export function createScreenshotOverlayHtml(): string {
     }
 
     async function refreshHover(x, y) {
-      if (!api.windowAtPoint || frozen || drag) return;
+      if (!api.windowAtPoint || frozen || drag || remoteHold) return;
       hoverQueued = { x, y };
       if (hoverPending) return;
       hoverPending = true;
-      while (hoverQueued && !frozen && !drag) {
+      while (hoverQueued && !frozen && !drag && !remoteHold) {
         const point = hoverQueued;
         hoverQueued = null;
         const token = ++hoverToken;
@@ -152,6 +154,9 @@ export function createScreenshotOverlayHtml(): string {
       box.style.height = rect.height + 'px';
       size.hidden = false;
       size.textContent = Math.round(rect.width) + ' × ' + Math.round(rect.height);
+      if (rect.pixelWidth && rect.pixelHeight) {
+        size.textContent = Math.round(rect.pixelWidth) + ' × ' + Math.round(rect.pixelHeight);
+      }
       placeChrome();
     }
 
@@ -351,7 +356,14 @@ export function createScreenshotOverlayHtml(): string {
 
     function showFrozen(result) {
       frozen = true;
-      paint({ x: result.dipX, y: result.dipY, width: result.dipWidth, height: result.dipHeight });
+      paint({
+        x: result.dipX,
+        y: result.dipY,
+        width: result.dipWidth,
+        height: result.dipHeight,
+        pixelWidth: result.pixelWidth,
+        pixelHeight: result.pixelHeight,
+      });
       const image = new Image();
       image.onload = () => {
         if (baseReady) return;
@@ -452,7 +464,9 @@ export function createScreenshotOverlayHtml(): string {
       }
       drag = { x: event.clientX, y: event.clientY, cx: event.clientX, cy: event.clientY };
       freeDrag = false;
+      remoteHold = false;
       chrome.hidden = true;
+      if (api.dragStart) void api.dragStart(event.clientX, event.clientY);
     });
     window.addEventListener('mousemove', (event) => {
       if (frozen && drawStart) {
@@ -469,7 +483,7 @@ export function createScreenshotOverlayHtml(): string {
         return;
       }
       if (!drag || frozen) {
-        if (!frozen && !drag) void refreshHover(event.clientX, event.clientY);
+        if (!frozen && !drag && !remoteHold) void refreshHover(event.clientX, event.clientY);
         return;
       }
       drag.cx = event.clientX;
@@ -477,7 +491,26 @@ export function createScreenshotOverlayHtml(): string {
       if (!freeDrag && Math.hypot(drag.cx - drag.x, drag.cy - drag.y) >= DRAG_THRESHOLD) {
         freeDrag = true;
       }
-      if (freeDrag) paint(normalize(drag.x, drag.y, drag.cx, drag.cy));
+      if (!freeDrag) return;
+      const local = normalize(drag.x, drag.y, drag.cx, drag.cy);
+      if (!api.dragMove) {
+        paint(local);
+        return;
+      }
+      const token = ++dragToken;
+      void api.dragMove().then((preview) => {
+        if (token !== dragToken || !drag || frozen) return;
+        if (preview && preview.cross) {
+          paint(preview.local
+            ? Object.assign({}, preview.local, {
+              pixelWidth: preview.pixelWidth,
+              pixelHeight: preview.pixelHeight,
+            })
+            : null);
+          return;
+        }
+        paint(local);
+      }).catch(() => {});
     });
     window.addEventListener('mouseup', async (event) => {
       if (frozen && drawStart && (event.button === 0 || (event.buttons & 1) === 0)) {
@@ -485,11 +518,59 @@ export function createScreenshotOverlayHtml(): string {
         return;
       }
       if (!drag || frozen || pending || event.button !== 0) return;
-      const rect = freeDrag
-        ? normalize(drag.x, drag.y, event.clientX, event.clientY)
-        : hoverRect;
+      const wasFree = freeDrag;
+      const origin = drag;
+      const endX = event.clientX;
+      const endY = event.clientY;
       drag = null;
       freeDrag = false;
+      dragToken += 1;
+      const rect = wasFree ? normalize(origin.x, origin.y, endX, endY) : hoverRect;
+      if (wasFree && api.dragMove && api.confirmCross) {
+        pending = true;
+        let preview = null;
+        try {
+          preview = await api.dragMove();
+        } catch (error) {
+          preview = null;
+        }
+        if (preview && preview.cross) {
+          let crossed = null;
+          try {
+            crossed = await api.confirmCross();
+          } catch (error) {
+            pending = false;
+            paint(rect);
+            chrome.hidden = false;
+            hint.textContent = '截图失败';
+            placeChrome();
+            return;
+          }
+          if (crossed && crossed.ok) {
+            pending = false;
+            if (crossed.showHere === false) {
+              paint(null);
+              return;
+            }
+            showFrozen(crossed);
+            return;
+          }
+          if (crossed && crossed.cross !== false) {
+            pending = false;
+            paint(rect || (preview.local
+              ? Object.assign({}, preview.local, {
+                pixelWidth: preview.pixelWidth,
+                pixelHeight: preview.pixelHeight,
+              })
+              : null));
+            chrome.hidden = false;
+            hint.textContent = (crossed && crossed.message) || '截图失败';
+            placeChrome();
+            return;
+          }
+        }
+        pending = false;
+      }
       if (!rect) {
         paint(hoverRect);
         return;
@@ -544,6 +625,20 @@ export function createScreenshotOverlayHtml(): string {
       api.onPinRequest(async () => {
         if (!frozen) return;
         await api.pinFrozen(await pngBase64());
+      });
+    }
+    if (api.onRemoteSegment) {
+      api.onRemoteSegment((segment) => {
+        if (drag || frozen || pending) return;
+        remoteHold = Boolean(segment);
+        paint(segment);
+      });
+    }
+    if (api.onShowFrozen) {
+      api.onShowFrozen((result) => {
+        if (!result || !result.ok || frozen) return;
+        remoteHold = false;
+        showFrozen(result);
       });
     }
   </script>

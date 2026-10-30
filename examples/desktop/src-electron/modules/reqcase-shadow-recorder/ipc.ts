@@ -14,7 +14,10 @@ import {
   closePinnedScreenshot,
   endPinnedDrag,
   movePinnedScreenshot,
+  beginScreenshotDrag,
   confirmAreaSelection,
+  confirmCrossDisplaySelection,
+  previewScreenshotDrag,
   windowSelectionAtClientPoint,
   copyFrozenScreenshot,
   copyPinnedScreenshot,
@@ -44,6 +47,8 @@ import {
   RecorderConfigSchema,
   RecorderSettingsSchema,
   ReplayStepGenerateInputSchema,
+  ScreenshotDragCursorSchema,
+  ScreenshotDragStartSchema,
   parseIpcInput,
 } from './ipc-validators';
 import {
@@ -650,6 +655,27 @@ export function registerReqCaseShadowRecorderIpc(
   handleTrusted('reqcase:screenshot:confirm', async (event, rect: unknown) => (
     confirmAreaSelection(rect, event.sender)
   ));
+  handleTrusted('reqcase:screenshot:drag-start', async (event, raw: unknown) => {
+    const parsed = ScreenshotDragStartSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false };
+    }
+    return beginScreenshotDrag(parsed.data.clientX, parsed.data.clientY, event.sender);
+  });
+  handleTrusted('reqcase:screenshot:drag-move', async (event, raw: unknown) => {
+    const parsed = ScreenshotDragCursorSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { cross: false, local: null };
+    }
+    return previewScreenshotDrag(event.sender);
+  });
+  handleTrusted('reqcase:screenshot:confirm-cross', async (event, raw: unknown) => {
+    const parsed = ScreenshotDragCursorSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false, message: '选区无效' };
+    }
+    return confirmCrossDisplaySelection(event.sender);
+  });
   handleTrusted('reqcase:screenshot:window-at', async (event, x: unknown, y: unknown) => {
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
       return null;

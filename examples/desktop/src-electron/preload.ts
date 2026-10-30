@@ -403,10 +403,64 @@ const api: ReqCaseShadowRecorderRendererApi = {
 contextBridge.exposeInMainWorld('reqcaseShadowRecorder', api);
 
 const pinRequestHandlers = new Set<() => void>();
+const remoteSegmentHandlers = new Set<(segment: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pixelWidth?: number;
+  pixelHeight?: number;
+} | null) => void>();
+const showFrozenHandlers = new Set<(result: {
+  ok: boolean;
+  showHere?: boolean;
+  message?: string;
+  pngBase64?: string;
+  dipX?: number;
+  dipY?: number;
+  dipWidth?: number;
+  dipHeight?: number;
+  pixelWidth?: number;
+  pixelHeight?: number;
+}) => void>();
 
 contextBridge.exposeInMainWorld('screenshotOverlay', {
   confirmSelection: (rect: { x: number; y: number; width: number; height: number }) =>
     ipcRenderer.invoke('reqcase:screenshot:confirm', rect),
+  dragStart: (clientX: number, clientY: number) =>
+    ipcRenderer.invoke('reqcase:screenshot:drag-start', { clientX, clientY }),
+  dragMove: () => ipcRenderer.invoke('reqcase:screenshot:drag-move', {}),
+  confirmCross: () => ipcRenderer.invoke('reqcase:screenshot:confirm-cross', {}),
+  onRemoteSegment: (handler: (segment: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    pixelWidth?: number;
+    pixelHeight?: number;
+  } | null) => void) => {
+    remoteSegmentHandlers.add(handler);
+    return () => {
+      remoteSegmentHandlers.delete(handler);
+    };
+  },
+  onShowFrozen: (handler: (result: {
+    ok: boolean;
+    showHere?: boolean;
+    message?: string;
+    pngBase64?: string;
+    dipX?: number;
+    dipY?: number;
+    dipWidth?: number;
+    dipHeight?: number;
+    pixelWidth?: number;
+    pixelHeight?: number;
+  }) => void) => {
+    showFrozenHandlers.add(handler);
+    return () => {
+      showFrozenHandlers.delete(handler);
+    };
+  },
   windowAtPoint: (x: number, y: number) => ipcRenderer.invoke('reqcase:screenshot:window-at', x, y),
   cancel: () => ipcRenderer.invoke('reqcase:screenshot:cancel'),
   cancelDelay: () => ipcRenderer.invoke('reqcase:screenshot:cancel-delay'),
@@ -438,5 +492,17 @@ contextBridge.exposeInMainWorld('screenshotOverlay', {
 ipcRenderer.on('reqcase:screenshot:pin-request', () => {
   for (const handler of pinRequestHandlers) {
     handler();
+  }
+});
+
+ipcRenderer.on('reqcase:screenshot:remote-segment', (_event, segment) => {
+  for (const handler of remoteSegmentHandlers) {
+    handler(segment ?? null);
+  }
+});
+
+ipcRenderer.on('reqcase:screenshot:show-frozen', (_event, result) => {
+  for (const handler of showFrozenHandlers) {
+    handler(result);
   }
 });

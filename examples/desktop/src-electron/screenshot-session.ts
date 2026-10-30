@@ -19,13 +19,21 @@ import { allowExactDataUrl, allowExactFile } from './trusted-entries';
 import { fileUrlForPath } from './trusted-sender';
 import { installEntryNavigationGuard } from './window-guards';
 import {
+  annotationFrameOnDisplay,
+  chooseAnnotationDisplay,
+  localDipSegmentOnDisplay,
   normalizeScreenshotDelaySeconds,
-  shouldHideScreenshotUiFromCapture,
   parseSelectionRect,
+  physicalPointOnDisplay,
+  physicalRectFromDipCorners,
+  physicalRectInsideDisplay,
   physicalSelectionOnDisplay,
   planAreaOverlayWindows,
+  selectionSegmentsByDisplay,
+  shouldHideScreenshotUiFromCapture,
   trimScreenshotHistory,
   type AreaOverlayPlan,
+  type DisplayGeometry,
   type ScreenshotRect,
 } from './screenshot-capture';
 import {
@@ -64,6 +72,12 @@ type AreaOverlay = {
 let overlays: AreaOverlay[] = [];
 let activeOverlay: BrowserWindow | null = null;
 let frozen: FrozenShot | null = null;
+let areaDrag: {
+  senderId: number;
+  displayId: number;
+  start: { x: number; y: number };
+  physical: ScreenshotRect | null;
+} | null = null;
 let readPrivacy: () => PrivacyConfig | undefined = () => undefined;
 let readIsRecording: () => boolean = () => false;
 
@@ -114,6 +128,7 @@ function annotationWindow(): BrowserWindow | null {
 function closeOverlay(): void {
   frozen = null;
   activeOverlay = null;
+  areaDrag = null;
   const current = overlays;
   overlays = [];
   for (const entry of current) {
@@ -202,12 +217,16 @@ function createAreaOverlay(plan: AreaOverlayPlan): AreaOverlay {
     scaleFactor: plan.scaleFactor,
     release: () => {},
   };
+  const senderId = window.webContents.id;
   window.on('closed', () => {
     entry.release();
     overlays = overlays.filter((item) => item.window !== window);
     if (activeOverlay === window) {
       activeOverlay = null;
       frozen = null;
+    }
+    if (areaDrag?.senderId === senderId) {
+      areaDrag = null;
     }
   });
   const trustedOverlay = bindTrustedDataDocument(
@@ -721,13 +740,79 @@ function overlayHwnd(window: BrowserWindow): number {
   return handle.length >= 4 ? handle.readUInt32LE(0) : 0;
 }
 
+function overlayGeometry(entry: AreaOverlay): DisplayGeometry | null {
+  if (entry.window.isDestroyed()) {
+    return null;
+  }
+  const bounds = entry.window.getBounds();
+  const physicalOrigin = screen.dipToScreenPoint({ x: bounds.x, y: bounds.y });
+  if (!Number.isFinite(physicalOrigin.x) || !Number.isFinite(physicalOrigin.y)) {
+    return null;
+  }
+  return {
+    id: entry.displayId,
+    bounds,
+    scaleFactor: entry.scaleFactor,
+    physicalOrigin,
+  };
+}
+
+function overlayGeometries(): DisplayGeometry[] {
+  const geometries: DisplayGeometry[] = [];
+  for (const entry of overlays) {
+    const geometry = overlayGeometry(entry);
+    if (geometry) {
+      geometries.push(geometry);
+    }
+  }
+  return geometries;
+}
+
+function roundDipRect(rect: ScreenshotRect): ScreenshotRect | null {
+  const width = Math.round(rect.width);
+  const height = Math.round(rect.height);
+  if (width < 1 || height < 1) {
+    return null;
+  }
+  return {
+    x: Math.round(rect.x),
+    y: Math.round(rect.y),
+    width,
+    height,
+  };
+}
+
+function publishRemoteSegments(
+  senderId: number,
+  segments: Array<{ displayId: number; local: ScreenshotRect }> | null,
+  physical: ScreenshotRect | null,
+): void {
+  for (const entry of overlays) {
+    if (entry.window.isDestroyed() || entry.window.webContents.isDestroyed()) {
+      continue;
+    }
+    if (entry.window.webContents.id === senderId) {
+      continue;
+    }
+    const found = segments?.find((segment) => segment.displayId === entry.displayId)?.local ?? null;
+    const local = found ? roundDipRect(found) : null;
+    entry.window.webContents.send(
+      'reqcase:screenshot:remote-segment',
+      local && physical
+        ? { ...local, pixelWidth: physical.width, pixelHeight: physical.height }
+        : null,
+    );
+  }
+}
+
 export function windowSelectionAtClientPoint(
   clientX: number,
   clientY: number,
   sender?: WebContents,
 ): ScreenshotRect | null {
-  const window = overlayForSender(sender)?.window;
-  if (!window || window.isDestroyed() || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+  const entry = overlayForSender(sender);
+  const window = entry?.window;
+  if (!entry || !window || window.isDestroyed() || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return null;
   }
   const bounds = window.getBounds();
@@ -744,6 +829,18 @@ export function windowSelectionAtClientPoint(
   }
   if (!found) {
     return null;
+  }
+  const geometry = overlayGeometry(entry);
+  if (geometry && !physicalRectInsideDisplay(geometry, found)) {
+    const segment = localDipSegmentOnDisplay(geometry, found);
+    if (!segment) {
+      return null;
+    }
+    const clipped = roundDipRect(segment);
+    if (!clipped || clipped.width < 2 || clipped.height < 2) {
+      return null;
+    }
+    return clipped;
   }
   const origin = screen.screenToDipPoint({ x: found.x, y: found.y });
   const far = screen.screenToDipPoint({
@@ -816,6 +913,156 @@ export async function confirmAreaSelection(value: unknown, sender?: WebContents)
     }
     if (!window.isDestroyed()) {
       window.focus();
+    }
+    return { ok: false, message: error instanceof Error ? error.message : '截图失败' };
+  }
+}
+
+export function beginScreenshotDrag(
+  clientX: number,
+  clientY: number,
+  sender?: WebContents,
+): { ok: boolean } {
+  const entry = overlayForSender(sender);
+  const geometry = entry ? overlayGeometry(entry) : null;
+  const start = geometry ? physicalPointOnDisplay(geometry, { x: clientX, y: clientY }) : null;
+  if (!entry || !geometry || !start || entry.window.isDestroyed()) {
+    areaDrag = null;
+    return { ok: false };
+  }
+  areaDrag = {
+    senderId: entry.window.webContents.id,
+    displayId: entry.displayId,
+    start,
+    physical: null,
+  };
+  return { ok: true };
+}
+
+export type ScreenshotDragPreview = {
+  cross: boolean;
+  local: ScreenshotRect | null;
+  pixelWidth?: number;
+  pixelHeight?: number;
+};
+
+export function previewScreenshotDrag(sender?: WebContents): ScreenshotDragPreview {
+  const drag = areaDrag;
+  const entry = overlayForSender(sender);
+  if (!drag || !entry || entry.window.isDestroyed() || entry.window.webContents.id !== drag.senderId) {
+    return { cross: false, local: null };
+  }
+  const physical = physicalRectFromDipCorners(
+    drag.start,
+    screen.dipToScreenPoint(screen.getCursorScreenPoint()),
+    (point) => point,
+  );
+  drag.physical = physical;
+  if (!physical) {
+    publishRemoteSegments(drag.senderId, null, null);
+    return { cross: false, local: null };
+  }
+  const segments = selectionSegmentsByDisplay(physical, overlayGeometries());
+  const hitsAnother = segments.some((segment) => segment.displayId !== drag.displayId);
+  if (!hitsAnother) {
+    publishRemoteSegments(drag.senderId, null, null);
+    return { cross: false, local: null };
+  }
+  publishRemoteSegments(drag.senderId, segments, physical);
+  const mine = segments.find((segment) => segment.displayId === entry.displayId)?.local ?? null;
+  return {
+    cross: true,
+    local: mine ? roundDipRect(mine) : null,
+    pixelWidth: physical.width,
+    pixelHeight: physical.height,
+  };
+}
+
+export async function confirmCrossDisplaySelection(sender?: WebContents): Promise<{
+  ok: boolean;
+  cross?: boolean;
+  showHere?: boolean;
+  message?: string;
+  pngBase64?: string;
+  dipX?: number;
+  dipY?: number;
+  dipWidth?: number;
+  dipHeight?: number;
+  pixelWidth?: number;
+  pixelHeight?: number;
+}> {
+  const drag = areaDrag;
+  const entry = overlayForSender(sender);
+  const physical = drag?.physical ?? null;
+  areaDrag = null;
+  if (!drag || !entry || entry.window.isDestroyed() || entry.window.webContents.id !== drag.senderId || !physical) {
+    publishRemoteSegments(drag?.senderId ?? -1, null, null);
+    return { ok: false, cross: false, message: '选区无效' };
+  }
+  const geometries = overlayGeometries();
+  const segments = selectionSegmentsByDisplay(physical, geometries);
+  if (!segments.some((segment) => segment.displayId !== drag.displayId)) {
+    publishRemoteSegments(drag.senderId, null, null);
+    return { ok: false, cross: false };
+  }
+  const hostId = chooseAnnotationDisplay(physical, geometries);
+  const host = overlays.find((item) => item.displayId === hostId && !item.window.isDestroyed()) ?? null;
+  const hostGeometry = host ? overlayGeometry(host) : null;
+  const frame = hostGeometry ? annotationFrameOnDisplay(physical, hostGeometry) : null;
+  const rounded = frame ? roundDipRect(frame) : null;
+  if (!host || !rounded) {
+    publishRemoteSegments(drag.senderId, null, null);
+    return { ok: false, message: '选区无效' };
+  }
+  publishRemoteSegments(drag.senderId, null, null);
+  activeOverlay = host.window;
+  hideAreaOverlays();
+  try {
+    const captured = await grab({ mode: 'region', ...physical });
+    frozen = { png: captured.png, dip: rounded };
+    for (const item of [...overlays]) {
+      if (item.window === host.window || item.window === entry.window) {
+        continue;
+      }
+      if (!item.window.isDestroyed()) {
+        item.window.close();
+      }
+    }
+    if (!host.window.isDestroyed()) {
+      showExcludedFromCapture(host.window);
+      host.window.focus();
+    }
+    const payload = {
+      ok: true,
+      pngBase64: captured.png.toString('base64'),
+      dipX: rounded.x,
+      dipY: rounded.y,
+      dipWidth: rounded.width,
+      dipHeight: rounded.height,
+      pixelWidth: physical.width,
+      pixelHeight: physical.height,
+    };
+    if (entry.window === host.window) {
+      return { ...payload, showHere: true };
+    }
+    if (!host.window.isDestroyed()) {
+      host.window.webContents.send('reqcase:screenshot:show-frozen', payload);
+    }
+    const leaving = entry.window;
+    setImmediate(() => {
+      if (!leaving.isDestroyed()) {
+        leaving.close();
+      }
+    });
+    return { ok: true, showHere: false };
+  } catch (error: unknown) {
+    for (const item of overlays) {
+      if (!item.window.isDestroyed()) {
+        showExcludedFromCapture(item.window);
+      }
+    }
+    if (!entry.window.isDestroyed()) {
+      entry.window.focus();
     }
     return { ok: false, message: error instanceof Error ? error.message : '截图失败' };
   }

@@ -5,6 +5,7 @@ import { installEntryNavigationGuard } from '../../window-guards';
 import { syncScreenshotHotkeys, suspendScreenshotHotkeys } from '../../screenshot-hotkeys';
 import {
   beginAreaScreenshot,
+  bindScreenshotRecordingState,
   cancelAreaScreenshot,
   cancelScreenshotDelay,
   captureInstantScreenshot,
@@ -439,6 +440,7 @@ const DEFAULT_BASELINE_CONFIG: ReqCaseShadowRecorderConfig = {
   captureReuseEnabled: true,
   privacyEnabled: true,
   semanticPlaintextInputEnabled: false,
+  hideScreenshotUiFromCapture: true,
 };
 
 function createPresetConfig(
@@ -527,6 +529,7 @@ export function registerReqCaseShadowRecorderIpc(
   options: RegisterReqCaseIpcOptions,
 ): ReqCaseShadowRecorderService {
   const service = new ReqCaseShadowRecorderService();
+  bindScreenshotRecordingState(() => service.isRecording());
   const loadedSettings = loadRecorderSettings();
   const savedExportDirs = collectSavedExportDirs(loadedSettings);
 

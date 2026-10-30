@@ -197,6 +197,12 @@ function sanitizeRecorderConfig(input: ReqCaseShadowRecorderConfig): ReqCaseShad
     output.privacyEnabled = input.privacyEnabled;
   }
 
+  if (typeof input.hideScreenshotUiFromCapture === 'boolean') {
+    output.hideScreenshotUiFromCapture = input.hideScreenshotUiFromCapture;
+  } else {
+    delete output.hideScreenshotUiFromCapture;
+  }
+
   const excludedWindowTitleKeywords = sanitizeStringArray(input.excludedWindowTitleKeywords);
   if (excludedWindowTitleKeywords) {
     output.excludedWindowTitleKeywords = excludedWindowTitleKeywords;

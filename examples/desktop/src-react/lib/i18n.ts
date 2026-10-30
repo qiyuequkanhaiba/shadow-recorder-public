@@ -23,6 +23,8 @@ type TranslationKey =
   | 'config.shortcutCaptureWindow'
   | 'config.shortcutCapturePin'
   | 'config.screenshotDelay'
+  | 'config.hideScreenshotUiFromCapture'
+  | 'config.hideScreenshotUiFromCaptureHint'
   | 'config.captureBackend'
   | 'config.transportMode'
   | 'config.captureReuse'
@@ -65,6 +67,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     'config.shortcutCaptureWindow': '全局快捷键: 截取光标下的窗口',
     'config.shortcutCapturePin': '全局快捷键: 一键贴图',
     'config.screenshotDelay': '截图倒计时',
+    'config.hideScreenshotUiFromCapture': '截图界面不进录像',
+    'config.hideScreenshotUiFromCaptureHint': '用远程桌面时，如果看不到截图框，请关掉',
     'config.captureBackend': '捕获后端',
     'config.transportMode': '传输模式',
     'config.captureReuse': '捕获上下文复用',
@@ -106,6 +110,8 @@ const translations: Record<Language, Record<TranslationKey, string>> = {
     'config.shortcutCaptureWindow': 'Global Shortcut: Capture Window',
     'config.shortcutCapturePin': 'Global Shortcut: Pin Image',
     'config.screenshotDelay': 'Screenshot Delay',
+    'config.hideScreenshotUiFromCapture': 'Keep screenshot UI out of recordings',
+    'config.hideScreenshotUiFromCaptureHint': 'If a remote desktop cannot see the selection box, turn this off',
     'config.captureBackend': 'Capture Backend',
     'config.transportMode': 'Transport Mode',
     'config.captureReuse': 'Capture Context Reuse',

@@ -7,6 +7,14 @@ export const DEFAULT_SCREENSHOT_SHORTCUTS = {
 
 export type ScreenshotShortcutKind = keyof typeof DEFAULT_SCREENSHOT_SHORTCUTS;
 
+/** Hide the screenshot UI from screen capture only while this app is recording and the setting is on. */
+export function shouldHideScreenshotUiFromCapture(
+  isRecording: boolean,
+  hideScreenshotUiFromCapture: boolean,
+): boolean {
+  return isRecording && hideScreenshotUiFromCapture;
+}
+
 export type ScreenshotShortcutConfig = {
   shortcutStartRecording?: string;
   shortcutStopRecording?: string;

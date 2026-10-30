@@ -627,6 +627,22 @@ export function RecorderControlPanel(props: RecorderControlPanelProps) {
               <option value={5}>5 秒</option>
             </select>
           </label>
+          <label className="settings-toggle settings-field-span">
+            <input
+              type="checkbox"
+              checked={props.config.hideScreenshotUiFromCapture !== false}
+              onChange={(event) => {
+                props.setConfig((current) => ({
+                  ...current,
+                  hideScreenshotUiFromCapture: event.target.checked,
+                }));
+              }}
+            />
+            <span>
+              <strong>{t('config.hideScreenshotUiFromCapture')}</strong>
+              <small>{t('config.hideScreenshotUiFromCaptureHint')}</small>
+            </span>
+          </label>
           <div className="screenshot-actions">
           <button
             type="button"

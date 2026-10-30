@@ -222,6 +222,8 @@ export interface RecorderConfigPayload {
   shortcutCaptureWindow?: string;
   shortcutCapturePin?: string;
   screenshotDelaySeconds?: number;
+  /** When true, screenshot selection UI is excluded from screen capture while this app is recording. Default true. */
+  hideScreenshotUiFromCapture?: boolean;
   [key: string]: unknown;
 }
 

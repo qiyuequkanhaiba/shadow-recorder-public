@@ -14,6 +14,7 @@ import {
   physicalSelectionOnDisplay,
   planAreaOverlayWindows,
   resolveScreenshotShortcuts,
+  shouldHideScreenshotUiFromCapture,
   trimScreenshotHistory,
   unionDisplayBounds,
 } from '../src-electron/screenshot-capture';
@@ -292,7 +293,16 @@ function run(): void {
   assert.match(ipc, /confirmAreaSelection\(rect, event\.sender\)/);
   assert.match(ipc, /windowSelectionAtClientPoint\(x, y, event\.sender\)/);
   assert.match(session, /function showExcludedFromCapture/);
-  assert.match(session, /setContentProtection\(true\)/);
+  assert.match(session, /shouldHideScreenshotUiFromCapture\(readIsRecording\(\), hideScreenshotUiFromCaptureEnabled\(\)\)/);
+  assert.match(session, /bindScreenshotRecordingState/);
+  assert.match(ipc, /bindScreenshotRecordingState\(\(\) => service\.isRecording\(\)\)/);
+  assert.equal(shouldHideScreenshotUiFromCapture(true, true), true);
+  assert.equal(shouldHideScreenshotUiFromCapture(true, false), false);
+  assert.equal(shouldHideScreenshotUiFromCapture(false, true), false);
+  assert.equal(shouldHideScreenshotUiFromCapture(false, false), false);
+  assert.match(read('src-react/lib/i18n.ts'), /截图界面不进录像/);
+  assert.match(read('src-react/lib/i18n.ts'), /用远程桌面时，如果看不到截图框，请关掉/);
+  assert.match(read('src-react/components/RecorderControlPanel.tsx'), /hideScreenshotUiFromCapture !== false/);
   const pinStart = session.indexOf('function openPin');
   const pinEnd = session.indexOf('export async function copyPinnedScreenshot');
   assert.ok(pinStart >= 0 && pinEnd > pinStart);

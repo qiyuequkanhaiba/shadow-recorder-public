@@ -20,6 +20,7 @@ import { fileUrlForPath } from './trusted-sender';
 import { installEntryNavigationGuard } from './window-guards';
 import {
   normalizeScreenshotDelaySeconds,
+  shouldHideScreenshotUiFromCapture,
   parseSelectionRect,
   physicalSelectionOnDisplay,
   planAreaOverlayWindows,
@@ -37,6 +38,7 @@ type PrivacyConfig = {
   privacyEnabled?: boolean;
   maskRegions?: Array<{ x: number; y: number; width: number; height: number }>;
   screenshotDelaySeconds?: number;
+  hideScreenshotUiFromCapture?: boolean;
 };
 
 type HistoryItem = {
@@ -63,6 +65,15 @@ let overlays: AreaOverlay[] = [];
 let activeOverlay: BrowserWindow | null = null;
 let frozen: FrozenShot | null = null;
 let readPrivacy: () => PrivacyConfig | undefined = () => undefined;
+let readIsRecording: () => boolean = () => false;
+
+export function bindScreenshotRecordingState(isRecording: () => boolean): void {
+  readIsRecording = isRecording;
+}
+
+function hideScreenshotUiFromCaptureEnabled(): boolean {
+  return readPrivacy()?.hideScreenshotUiFromCapture !== false;
+}
 let captureInFlight = false;
 let delayCancelled = false;
 const pins = new Map<string, BrowserWindow>();
@@ -150,7 +161,9 @@ function showExcludedFromCapture(win: BrowserWindow): void {
   if (win.isDestroyed()) {
     return;
   }
-  win.setContentProtection(true);
+  win.setContentProtection(
+    shouldHideScreenshotUiFromCapture(readIsRecording(), hideScreenshotUiFromCaptureEnabled()),
+  );
   win.show();
 }
 

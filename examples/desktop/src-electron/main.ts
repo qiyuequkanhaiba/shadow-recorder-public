@@ -703,6 +703,7 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
   title: string;
   hasRootShell: boolean;
   bodyTextSample: string;
+  renderer: string;
   serviceWorkerController: string | null;
 } | null> {
   try {
@@ -712,6 +713,7 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
         title: document.title,
         hasRootShell: !!document.querySelector('.workspace-shell'),
         bodyTextSample: (document.body?.innerText || '').slice(0, 240),
+        renderer: document.querySelector('meta[name="reqcase-renderer"]')?.getAttribute('content') ?? '',
         serviceWorkerController: navigator.serviceWorker?.controller?.scriptURL ?? null,
       })`,
       true,
@@ -722,6 +724,7 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
       title: string;
       hasRootShell: boolean;
       bodyTextSample: string;
+      renderer: string;
       serviceWorkerController: string | null;
     };
   } catch (error) {
@@ -731,24 +734,9 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
 }
 
 function isExpectedMainWindowSnapshot(snapshot: {
-  title: string;
-  hasRootShell: boolean;
-  bodyTextSample: string;
+  renderer: string;
 } | null): boolean {
-  if (!snapshot) {
-    return false;
-  }
-
-  const sample = snapshot.bodyTextSample ?? '';
-  return (
-    snapshot.title.includes('影子录制器')
-    && snapshot.hasRootShell
-    && (
-      sample.includes('循环录制与事件回顾')
-      || sample.includes('录制与回放')
-      || sample.includes('基础设置')
-    )
-  );
+  return snapshot?.renderer === 'main';
 }
 
 async function loadMainWindowContents(window: BrowserWindow): Promise<void> {

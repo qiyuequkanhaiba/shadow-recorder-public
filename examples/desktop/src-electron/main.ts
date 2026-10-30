@@ -20,6 +20,10 @@ import {
   type WebContents,
 } from 'electron';
 
+import { allowExactDataUrl, allowExactFile } from './trusted-entries';
+import { fileUrlForPath } from './trusted-sender';
+import { installEntryNavigationGuard } from './window-guards';
+
 import {
   exportDiagnosticsBundle,
   recorderDiagnosticsErrorLog,
@@ -79,6 +83,11 @@ const DEFAULT_SAFE_EXTERNAL_HOSTS = [
 ];
 const SHOW_MAIN_WINDOW_SHORTCUT = 'CommandOrControl+Alt+M';
 const MEDIA_PROTOCOL = 'reqcase-media';
+const MAIN_RENDERER_HTML = path.resolve(__dirname, '../../dist-react/index.html');
+allowExactFile(MAIN_RENDERER_HTML);
+let mainWindowEntryUrl = fileUrlForPath(MAIN_RENDERER_HTML);
+let toolbarEntryUrl = '';
+let releaseToolbarTrust: (() => void) | null = null;
 const ENABLE_MAIN_WINDOW_DEV_SERVER = process.env.REQCASE_MAIN_WINDOW_DEV_SERVER === '1';
 const OPEN_MAIN_WINDOW_ON_START = process.env.REQCASE_OPEN_MAIN_WINDOW === '1';
 
@@ -571,6 +580,15 @@ function setFloatingToolbarDragging(
   return { dragging: toolbarDragging, accepted: routeResult.accepted };
 }
 
+function loadToolbarDocument(window: BrowserWindow, html: string): Promise<void> {
+  const entryUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+  toolbarEntryUrl = entryUrl;
+  const releaseNext = allowExactDataUrl(entryUrl);
+  releaseToolbarTrust?.();
+  releaseToolbarTrust = releaseNext;
+  return window.loadURL(entryUrl);
+}
+
 function applyFloatingToolbarDisplayMetricsRefresh(): void {
   if (!toolbarWindow || toolbarWindow.isDestroyed()) {
     toolbarDisplayMetricsRefreshCoordinator.completeRefresh();
@@ -590,18 +608,14 @@ function applyFloatingToolbarDisplayMetricsRefresh(): void {
     toolbarReloading = true;
     toolbarWindow.setBounds(bounds, false);
     toolbarFittedSize = { width: bounds.width, height: bounds.height };
-    void toolbarWindow.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(
-        createFloatingToolbarHtml({
-          initialCollapsed: toolbarCollapsed,
-          initialState: nextToolbarState,
-          initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
-          initialTheme: uiTheme,
-          uiScale: nextToolbarScale,
-          documentEpoch: nextToolbarDocumentEpoch,
-        }),
-      )}`,
-    ).catch((error) => {
+    void loadToolbarDocument(toolbarWindow, createFloatingToolbarHtml({
+      initialCollapsed: toolbarCollapsed,
+      initialState: nextToolbarState,
+      initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
+      initialTheme: uiTheme,
+      uiScale: nextToolbarScale,
+      documentEpoch: nextToolbarDocumentEpoch,
+    })).catch((error) => {
       console.warn('[floating-toolbar] display metrics reload failed', error);
     }).finally(() => {
       toolbarReloading = false;
@@ -739,7 +753,7 @@ function isExpectedMainWindowSnapshot(snapshot: {
 
 async function loadMainWindowContents(window: BrowserWindow): Promise<void> {
   const devUrl = process.env.VITE_DEV_SERVER_URL;
-  const staticEntry = path.resolve(__dirname, '../../dist-react/index.html');
+  const staticEntry = MAIN_RENDERER_HTML;
 
   if (devUrl && ENABLE_MAIN_WINDOW_DEV_SERVER) {
     try {
@@ -753,6 +767,7 @@ async function loadMainWindowContents(window: BrowserWindow): Promise<void> {
     }
 
     const devTarget = `${devUrl}${devUrl.includes('?') ? '&' : '?'}app=reqcase-shadow-recorder`;
+    mainWindowEntryUrl = devTarget;
     console.log('[main-window] loading dev url', devTarget);
     try {
       void window.loadURL(devTarget);
@@ -783,6 +798,7 @@ async function loadMainWindowContents(window: BrowserWindow): Promise<void> {
   }
 
   console.log('[main-window] loading static file', staticEntry);
+  mainWindowEntryUrl = fileUrlForPath(staticEntry);
   await window.loadFile(staticEntry);
 }
 
@@ -830,6 +846,8 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+
+  installEntryNavigationGuard(window, () => mainWindowEntryUrl);
 
   window.webContents.on('did-finish-load', () => {
     loadedMainWindows.add(window);
@@ -1116,6 +1134,8 @@ function createToolbarWindow(): BrowserWindow {
     },
   });
 
+  installEntryNavigationGuard(window, () => toolbarEntryUrl);
+
   window.webContents.on('before-mouse-event', (_event, mouse) => {
     if (mouse.button !== 'left') {
       return;
@@ -1146,18 +1166,14 @@ function createToolbarWindow(): BrowserWindow {
     protectFloatingToolbarSurface(window.getNativeWindowHandle());
   }
   applyToolbarShape(window);
-  window.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(
-      createFloatingToolbarHtml({
-        initialCollapsed: toolbarCollapsed,
-        initialState: initialToolbarState,
-        initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
-        initialTheme: uiTheme,
-        uiScale: initialToolbarScale,
-        documentEpoch: initialToolbarDocumentEpoch,
-      }),
-    )}`,
-  ).catch((error) => {
+  void loadToolbarDocument(window, createFloatingToolbarHtml({
+    initialCollapsed: toolbarCollapsed,
+    initialState: initialToolbarState,
+    initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
+    initialTheme: uiTheme,
+    uiScale: initialToolbarScale,
+    documentEpoch: initialToolbarDocumentEpoch,
+  })).catch((error) => {
     console.error('[floating-toolbar] failed to load toolbar window', error);
   });
 
@@ -1193,6 +1209,9 @@ function createToolbarWindow(): BrowserWindow {
   });
 
   window.on('closed', () => {
+    releaseToolbarTrust?.();
+    releaseToolbarTrust = null;
+    toolbarEntryUrl = '';
     cancelFloatingToolbarInteraction();
     if (toolbarWindow === window) {
       toolbarWindow = null;

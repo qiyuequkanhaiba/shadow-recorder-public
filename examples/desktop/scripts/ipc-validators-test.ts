@@ -1,6 +1,12 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import path, { join } from 'node:path';
+
+import {
+  assertRendererExportDirAllowed,
+  isRendererExportDirAllowed,
+} from '../src-electron/modules/reqcase-shadow-recorder/export-dir-policy';
+import { isTrustedIpcSender } from '../src-electron/trusted-sender';
 
 import {
   ExportEvidenceInputSchema,
@@ -200,4 +206,69 @@ assertThrowsValidation("export evidence inverted range", () => {
     targetDir: "/valid/dir",
     range: { startMs: 5000, endMs: 1000 },
   }, "export evidence inverted range");
+});
+
+const exactEntry = 'file:///C:/app/dist-react/index.html';
+const trustedFileInput = {
+  isPackaged: true,
+  allowedFileUrls: [exactEntry],
+  allowedDataUrls: ['data:text/html;charset=utf-8,toolbar'],
+};
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'file:///C:/x/evil.html',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'file:///C:/app/dist-react/index.html.evil',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: exactEntry,
+}), true);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'http://127.0.0.1:5173',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  isPackaged: false,
+  senderUrl: 'http://127.0.0.1:5173/?app=reqcase-shadow-recorder',
+}), true);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'data:text/html;charset=utf-8,evil',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'data:text/html;charset=utf-8,toolbar',
+}), true);
+
+const windowsPath = path.win32;
+const documentsDir = 'C:\\Users\\lew\\Documents';
+const exportAllowlist = {
+  documentsDir,
+  desktopDir: 'C:\\Users\\lew\\Desktop',
+  downloadsDir: 'C:\\Users\\lew\\Downloads',
+  savedExportDirs: ['D:\\ShadowExports'],
+};
+assert.equal(isRendererExportDirAllowed('C:\\Windows\\System32', exportAllowlist, windowsPath), false);
+assert.equal(isRendererExportDirAllowed('C:\\Users\\lew\\Documents-evil', exportAllowlist, windowsPath), false);
+assert.equal(isRendererExportDirAllowed(documentsDir, exportAllowlist, windowsPath), true);
+assert.equal(
+  isRendererExportDirAllowed('C:\\Users\\lew\\Documents\\证据包', exportAllowlist, windowsPath),
+  true,
+);
+assert.equal(isRendererExportDirAllowed('D:\\ShadowExports\\out', exportAllowlist, windowsPath), true);
+assert.throws(
+  () => assertRendererExportDirAllowed('C:\\Windows\\System32', exportAllowlist, windowsPath),
+  (error: unknown) => {
+    assert(error instanceof Error);
+    assert.match(error.message, /导出目录不在允许范围内/);
+    assert.match(error.message, /C:\\Windows\\System32/);
+    return true;
+  },
+);
+assert.doesNotThrow(() => {
+  assertRendererExportDirAllowed('C:\\Users\\lew\\Documents\\证据包', exportAllowlist, windowsPath);
 });

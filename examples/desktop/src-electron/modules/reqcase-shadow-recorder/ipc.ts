@@ -1,4 +1,7 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Notification as ElectronNotification } from 'electron';
+import { listAllowedDataUrls, listAllowedFileUrls } from '../../trusted-entries';
+import { fileUrlForPath, isTrustedIpcSender } from '../../trusted-sender';
+import { installEntryNavigationGuard } from '../../window-guards';
 import { syncScreenshotHotkeys, suspendScreenshotHotkeys } from '../../screenshot-hotkeys';
 import {
   beginAreaScreenshot,
@@ -30,6 +33,10 @@ import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 
 import { REQCASE_SHADOW_RECORDER_CHANNELS } from './ipc-channels';
+import {
+  assertRendererExportDirAllowed,
+  collectSavedExportDirs,
+} from './export-dir-policy';
 import {
   ExportEvidenceInputSchema,
   GetBufferPageInputSchema,
@@ -518,7 +525,8 @@ export function registerReqCaseShadowRecorderIpc(
   options: RegisterReqCaseIpcOptions,
 ): ReqCaseShadowRecorderService {
   const service = new ReqCaseShadowRecorderService();
-  const trustedDevOrigins = ['http://127.0.0.1:5173', 'http://localhost:5173'];
+  const loadedSettings = loadRecorderSettings();
+  const savedExportDirs = collectSavedExportDirs(loadedSettings);
 
   const assertTrustedSender = (sender: WebContents): void => {
     if (sender.isDestroyed()) {
@@ -526,11 +534,12 @@ export function registerReqCaseShadowRecorderIpc(
     }
 
     const url = sender.getURL() || '';
-    const trusted =
-      url.startsWith('file://') ||
-      url.startsWith('data:text/html') ||
-      trustedDevOrigins.some((origin) => url.startsWith(origin));
-    if (!trusted) {
+    if (!isTrustedIpcSender({
+      senderUrl: url,
+      isPackaged: app.isPackaged,
+      allowedFileUrls: listAllowedFileUrls(),
+      allowedDataUrls: listAllowedDataUrls(),
+    })) {
       throw new Error(`Blocked IPC from untrusted sender: ${url}`);
     }
   };
@@ -559,7 +568,7 @@ export function registerReqCaseShadowRecorderIpc(
     }
   };
 
-  let runtimeSettings = sanitizeRecorderSettings(loadRecorderSettings());
+  let runtimeSettings = sanitizeRecorderSettings(loadedSettings);
   runtimeSettings = {
     ...runtimeSettings,
     config: {
@@ -1165,7 +1174,8 @@ export function registerReqCaseShadowRecorderIpc(
     };
 
     try {
-      let targetDir = input.targetDir;
+      let targetDir = input.targetDir?.trim() ?? '';
+      let chosenByDialog = false;
       if (!targetDir) {
         const senderWindow = BrowserWindow.fromWebContents(event.sender);
         const isSenderFloating = senderWindow && !senderWindow.isResizable();
@@ -1204,6 +1214,15 @@ export function registerReqCaseShadowRecorderIpc(
           throw new Error('Export canceled by user');
         }
         targetDir = result.filePaths[0];
+        chosenByDialog = true;
+      }
+      if (!chosenByDialog) {
+        assertRendererExportDirAllowed(targetDir, {
+          documentsDir: app.getPath('documents'),
+          desktopDir: app.getPath('desktop'),
+          downloadsDir: app.getPath('downloads'),
+          savedExportDirs,
+        });
       }
       emitProgress({ percent: 8, message: '正在准备导出', status: 'running' });
       return await service.exportSessionEvidence({ ...input, targetDir }, forwardProgress);
@@ -1429,6 +1448,8 @@ export function registerReqCaseShadowRecorderIpc(
 
       const report = await exportReportWithUtilityFallback({ ...input, targetDir });
       const win = new BrowserWindow({ show: false, width: 1200, height: 800 });
+      const reportEntryUrl = fileUrlForPath(report.htmlPath);
+      installEntryNavigationGuard(win, () => reportEntryUrl);
       try {
         await win.loadFile(report.htmlPath);
         const pdfBuffer = await win.webContents.printToPDF({

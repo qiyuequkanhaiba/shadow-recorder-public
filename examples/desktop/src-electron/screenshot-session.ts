@@ -13,6 +13,9 @@ import {
 } from 'electron';
 
 import { captureScreenshot, windowBoundsAtPoint } from './native-binding';
+import { allowExactDataUrl, allowExactFile } from './trusted-entries';
+import { fileUrlForPath } from './trusted-sender';
+import { installEntryNavigationGuard } from './window-guards';
 import {
   normalizeScreenshotDelaySeconds,
   parseSelectionRect,
@@ -98,6 +101,12 @@ function virtualDesktopBounds(): ScreenshotRect {
   );
 }
 
+function bindTrustedDataDocument(window: BrowserWindow, html: string): { entryUrl: string; release: () => void } {
+  const entryUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+  installEntryNavigationGuard(window, () => entryUrl);
+  return { entryUrl, release: allowExactDataUrl(entryUrl) };
+}
+
 function showExcludedFromCapture(win: BrowserWindow): void {
   if (win.isDestroyed()) {
     return;
@@ -138,15 +147,17 @@ function ensureOverlay(): BrowserWindow {
   });
   window.setAlwaysOnTop(true, 'screen-saver');
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  let releaseOverlayTrust = (): void => {};
   window.on('closed', () => {
+    releaseOverlayTrust();
     if (overlay === window) {
       overlay = null;
       frozen = null;
     }
   });
-  void window.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(createScreenshotOverlayHtml())}`,
-  );
+  const trustedOverlay = bindTrustedDataDocument(window, createScreenshotOverlayHtml());
+  releaseOverlayTrust = trustedOverlay.release;
+  void window.loadURL(trustedOverlay.entryUrl);
   overlay = window;
   return window;
 }
@@ -181,10 +192,9 @@ async function runCountdown(seconds: 0 | 3 | 5): Promise<boolean> {
     },
   });
   win.setAlwaysOnTop(true, 'screen-saver');
+  const trustedCountdown = bindTrustedDataDocument(win, createCountdownHtml());
   try {
-    await win.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(createCountdownHtml())}`,
-    );
+    await win.loadURL(trustedCountdown.entryUrl);
     showExcludedFromCapture(win);
     win.focus();
     for (let remaining = seconds; remaining > 0; remaining -= 1) {
@@ -205,6 +215,7 @@ async function runCountdown(seconds: 0 | 3 | 5): Promise<boolean> {
     }
     return !delayCancelled;
   } finally {
+    trustedCountdown.release();
     if (!win.isDestroyed()) {
       win.close();
     }
@@ -333,6 +344,8 @@ function openPin(png: Buffer): void {
   const imageName = `${id}.png`;
   writeFileSync(path.join(directory, imageName), png);
   writeFileSync(path.join(directory, `${id}.html`), createPinHtml(id, imageName));
+  const pinHtmlPath = path.join(directory, `${id}.html`);
+  const releasePinTrust = allowExactFile(pinHtmlPath);
   const win = new BrowserWindow({
     x: home.x,
     y: home.y,
@@ -367,10 +380,12 @@ function openPin(png: Buffer): void {
   win.setBackgroundColor('#111111');
   win.setAlwaysOnTop(true, 'floating');
   win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  installEntryNavigationGuard(win, () => fileUrlForPath(pinHtmlPath));
   pins.set(id, win);
   pinHomes.set(id, home);
   pinPayloads.set(id, png);
   win.on('closed', () => {
+    releasePinTrust();
     forgetPin(id);
   });
   win.once('ready-to-show', () => {
@@ -380,7 +395,7 @@ function openPin(png: Buffer): void {
     win.show();
     win.focus();
   });
-  void win.loadFile(path.join(directory, `${id}.html`));
+  void win.loadFile(pinHtmlPath);
 }
 
 export async function copyPinnedScreenshot(id: string): Promise<{ ok: boolean; message: string }> {

@@ -437,6 +437,8 @@ const DEFAULT_BASELINE_CONFIG: ReqCaseShadowRecorderConfig = {
   transportMode: 'push',
   streamPayload: 'meta_only',
   captureReuseEnabled: true,
+  privacyEnabled: true,
+  semanticPlaintextInputEnabled: false,
 };
 
 function createPresetConfig(

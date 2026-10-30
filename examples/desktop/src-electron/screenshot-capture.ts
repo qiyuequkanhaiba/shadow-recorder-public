@@ -175,6 +175,81 @@ export function physicalRectFromDipCorners(
   };
 }
 
+export type AreaDisplayLayout = {
+  id: number;
+  bounds: ScreenshotRect;
+  scaleFactor: number;
+};
+
+export type AreaOverlayPlan = {
+  displayId: number;
+  bounds: ScreenshotRect;
+  scaleFactor: number;
+};
+
+export function planAreaOverlayWindows(displays: AreaDisplayLayout[]): AreaOverlayPlan[] {
+  if (!Array.isArray(displays)) {
+    return [];
+  }
+  return displays.flatMap((display) => {
+    const bounds = display?.bounds;
+    if (!bounds) {
+      return [];
+    }
+    const { x, y, width, height } = bounds;
+    if (![display.id, x, y, width, height].every((value) => Number.isFinite(value))) {
+      return [];
+    }
+    if (width <= 0 || height <= 0) {
+      return [];
+    }
+    const scaleFactor = Number.isFinite(display.scaleFactor) && display.scaleFactor > 0
+      ? display.scaleFactor
+      : 1;
+    return [{
+      displayId: display.id,
+      bounds: {
+        x: Math.round(x),
+        y: Math.round(y),
+        width: Math.max(1, Math.round(width)),
+        height: Math.max(1, Math.round(height)),
+      },
+      scaleFactor,
+    }];
+  });
+}
+
+export function physicalSelectionOnDisplay(
+  display: {
+    bounds: ScreenshotRect;
+    scaleFactor: number;
+    physicalOrigin: DipPoint;
+  },
+  local: ScreenshotRect,
+): ScreenshotRect | null {
+  const scale = display?.scaleFactor;
+  const origin = display?.physicalOrigin;
+  const bounds = display?.bounds;
+  if (!bounds || !origin || !local) {
+    return null;
+  }
+  if (![scale, origin.x, origin.y, bounds.x, bounds.y, local.x, local.y, local.width, local.height]
+    .every((value) => Number.isFinite(value))) {
+    return null;
+  }
+  if (scale <= 0 || local.width <= 0 || local.height <= 0) {
+    return null;
+  }
+  return physicalRectFromDipCorners(
+    { x: local.x, y: local.y },
+    { x: local.x + local.width, y: local.y + local.height },
+    (point) => ({
+      x: origin.x + point.x * scale,
+      y: origin.y + point.y * scale,
+    }),
+  );
+}
+
 export function unionDisplayBounds(
   displays: ScreenshotRect[],
 ): ScreenshotRect {

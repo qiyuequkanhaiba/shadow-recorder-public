@@ -644,12 +644,14 @@ export function registerReqCaseShadowRecorderIpc(
     updateShortcuts(runtimeSettings.config);
   }
 
-  handleTrusted('reqcase:screenshot:confirm', async (_event, rect: unknown) => confirmAreaSelection(rect));
-  handleTrusted('reqcase:screenshot:window-at', async (_event, x: unknown, y: unknown) => {
+  handleTrusted('reqcase:screenshot:confirm', async (event, rect: unknown) => (
+    confirmAreaSelection(rect, event.sender)
+  ));
+  handleTrusted('reqcase:screenshot:window-at', async (event, x: unknown, y: unknown) => {
     if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
       return null;
     }
-    return windowSelectionAtClientPoint(x, y);
+    return windowSelectionAtClientPoint(x, y, event.sender);
   });
   handleTrusted('reqcase:screenshot:cancel', async () => {
     cancelAreaScreenshot();

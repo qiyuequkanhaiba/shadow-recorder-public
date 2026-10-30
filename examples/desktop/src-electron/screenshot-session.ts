@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
@@ -10,6 +11,7 @@ import {
   nativeImage,
   screen,
   shell,
+  type WebContents,
 } from 'electron';
 
 import { captureScreenshot, windowBoundsAtPoint } from './native-binding';
@@ -19,9 +21,10 @@ import { installEntryNavigationGuard } from './window-guards';
 import {
   normalizeScreenshotDelaySeconds,
   parseSelectionRect,
-  physicalRectFromDipCorners,
+  physicalSelectionOnDisplay,
+  planAreaOverlayWindows,
   trimScreenshotHistory,
-  unionDisplayBounds,
+  type AreaOverlayPlan,
   type ScreenshotRect,
 } from './screenshot-capture';
 import {
@@ -49,7 +52,15 @@ type FrozenShot = {
   dip: ScreenshotRect;
 };
 
-let overlay: BrowserWindow | null = null;
+type AreaOverlay = {
+  window: BrowserWindow;
+  displayId: number;
+  scaleFactor: number;
+  release: () => void;
+};
+
+let overlays: AreaOverlay[] = [];
+let activeOverlay: BrowserWindow | null = null;
 let frozen: FrozenShot | null = null;
 let readPrivacy: () => PrivacyConfig | undefined = () => undefined;
 let captureInFlight = false;
@@ -81,24 +92,52 @@ function privacyPayload(config: PrivacyConfig | undefined): {
   };
 }
 
+function annotationWindow(): BrowserWindow | null {
+  if (activeOverlay && !activeOverlay.isDestroyed()) {
+    return activeOverlay;
+  }
+  const alive = overlays.filter((entry) => !entry.window.isDestroyed());
+  return alive.length === 1 ? alive[0].window : null;
+}
+
 function closeOverlay(): void {
   frozen = null;
-  const current = overlay;
-  overlay = null;
-  if (current && !current.isDestroyed()) {
-    current.close();
+  activeOverlay = null;
+  const current = overlays;
+  overlays = [];
+  for (const entry of current) {
+    if (!entry.window.isDestroyed()) {
+      entry.window.close();
+    }
   }
 }
 
-function virtualDesktopBounds(): ScreenshotRect {
-  return unionDisplayBounds(
-    screen.getAllDisplays().map((display) => ({
-      x: display.bounds.x,
-      y: display.bounds.y,
-      width: display.bounds.width,
-      height: display.bounds.height,
-    })),
-  );
+function overlayForSender(sender?: WebContents): AreaOverlay | null {
+  const alive = overlays.filter((entry) => !entry.window.isDestroyed());
+  if (sender && !sender.isDestroyed()) {
+    return alive.find((entry) => entry.window.webContents.id === sender.id) ?? null;
+  }
+  return alive.length === 1 ? alive[0] : null;
+}
+
+function logAreaOverlayDiagnostics(windows: BrowserWindow[], requested: ScreenshotRect[]): void {
+  const displays = screen.getAllDisplays().map((display) => ({
+    id: display.id,
+    bounds: display.bounds,
+    workArea: display.workArea,
+    scaleFactor: display.scaleFactor,
+  }));
+  const actual = windows
+    .filter((window) => !window.isDestroyed())
+    .map((window) => ({
+      bounds: window.getBounds(),
+      contentBounds: window.getContentBounds(),
+    }));
+  console.log('[screenshot-overlay] diagnostics', JSON.stringify({
+    displays,
+    requested,
+    actual,
+  }));
 }
 
 function bindTrustedDataDocument(window: BrowserWindow, html: string): { entryUrl: string; release: () => void } {
@@ -115,16 +154,12 @@ function showExcludedFromCapture(win: BrowserWindow): void {
   win.show();
 }
 
-function ensureOverlay(): BrowserWindow {
-  if (overlay && !overlay.isDestroyed()) {
-    return overlay;
-  }
-  const bounds = virtualDesktopBounds();
+function createAreaOverlay(plan: AreaOverlayPlan): AreaOverlay {
   const window = new BrowserWindow({
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
+    x: plan.bounds.x,
+    y: plan.bounds.y,
+    width: plan.bounds.width,
+    height: plan.bounds.height,
     show: false,
     frame: false,
     transparent: true,
@@ -145,21 +180,69 @@ function ensureOverlay(): BrowserWindow {
       sandbox: true,
     },
   });
+  window.setBounds(plan.bounds);
   window.setAlwaysOnTop(true, 'screen-saver');
   window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-  let releaseOverlayTrust = (): void => {};
+  const entry: AreaOverlay = {
+    window,
+    displayId: plan.displayId,
+    scaleFactor: plan.scaleFactor,
+    release: () => {},
+  };
   window.on('closed', () => {
-    releaseOverlayTrust();
-    if (overlay === window) {
-      overlay = null;
+    entry.release();
+    overlays = overlays.filter((item) => item.window !== window);
+    if (activeOverlay === window) {
+      activeOverlay = null;
       frozen = null;
     }
   });
-  const trustedOverlay = bindTrustedDataDocument(window, createScreenshotOverlayHtml());
-  releaseOverlayTrust = trustedOverlay.release;
+  const trustedOverlay = bindTrustedDataDocument(
+    window,
+    `${createScreenshotOverlayHtml()}<!--${randomUUID()}-->`,
+  );
+  entry.release = trustedOverlay.release;
   void window.loadURL(trustedOverlay.entryUrl);
-  overlay = window;
-  return window;
+  return entry;
+}
+
+function openAreaOverlays(): { entries: AreaOverlay[]; requested: ScreenshotRect[] } {
+  closeOverlay();
+  const plans = planAreaOverlayWindows(screen.getAllDisplays().map((display) => ({
+    id: display.id,
+    bounds: {
+      x: display.bounds.x,
+      y: display.bounds.y,
+      width: display.bounds.width,
+      height: display.bounds.height,
+    },
+    scaleFactor: display.scaleFactor,
+  })));
+  const entries = plans.map((plan) => createAreaOverlay(plan));
+  overlays = entries;
+  for (const entry of entries) {
+    showExcludedFromCapture(entry.window);
+  }
+  return {
+    entries,
+    requested: plans.map((plan) => plan.bounds),
+  };
+}
+
+function hideAreaOverlays(): void {
+  for (const entry of overlays) {
+    if (!entry.window.isDestroyed()) {
+      entry.window.hide();
+    }
+  }
+}
+
+function closeOtherOverlays(keep: BrowserWindow): void {
+  for (const entry of [...overlays]) {
+    if (entry.window !== keep && !entry.window.isDestroyed()) {
+      entry.window.close();
+    }
+  }
 }
 
 async function runCountdown(seconds: 0 | 3 | 5): Promise<boolean> {
@@ -509,8 +592,9 @@ export function closeAllPinnedScreenshots(): void {
 }
 
 export function pinQuickScreenshot(): void {
-  if (overlay && !overlay.isDestroyed() && overlay.isVisible() && frozen) {
-    overlay.webContents.send('reqcase:screenshot:pin-request');
+  const current = annotationWindow();
+  if (current && current.isVisible() && frozen) {
+    current.webContents.send('reqcase:screenshot:pin-request');
     return;
   }
   const image = clipboard.readImage();
@@ -576,10 +660,17 @@ export async function beginAreaScreenshot(
   readConfig: () => PrivacyConfig | undefined,
 ): Promise<void> {
   readPrivacy = readConfig;
-  closeOverlay();
-  const window = ensureOverlay();
-  showExcludedFromCapture(window);
-  window.focus();
+  const opened = openAreaOverlays();
+  const cursor = screen.getCursorScreenPoint();
+  const nearest = screen.getDisplayNearestPoint(cursor);
+  const focused = opened.entries.find((entry) => entry.displayId === nearest.id) ?? opened.entries[0];
+  if (focused && !focused.window.isDestroyed()) {
+    focused.window.focus();
+  }
+  logAreaOverlayDiagnostics(
+    opened.entries.map((entry) => entry.window),
+    opened.requested,
+  );
 }
 
 export async function captureInstantScreenshot(
@@ -617,8 +708,12 @@ function overlayHwnd(window: BrowserWindow): number {
   return handle.length >= 4 ? handle.readUInt32LE(0) : 0;
 }
 
-export function windowSelectionAtClientPoint(clientX: number, clientY: number): ScreenshotRect | null {
-  const window = overlay;
+export function windowSelectionAtClientPoint(
+  clientX: number,
+  clientY: number,
+  sender?: WebContents,
+): ScreenshotRect | null {
+  const window = overlayForSender(sender)?.window;
   if (!window || window.isDestroyed() || !Number.isFinite(clientX) || !Number.isFinite(clientY)) {
     return null;
   }
@@ -654,7 +749,7 @@ export function windowSelectionAtClientPoint(clientX: number, clientY: number): 
   return local;
 }
 
-export async function confirmAreaSelection(value: unknown): Promise<{
+export async function confirmAreaSelection(value: unknown, sender?: WebContents): Promise<{
   ok: boolean;
   message?: string;
   pngBase64?: string;
@@ -664,23 +759,30 @@ export async function confirmAreaSelection(value: unknown): Promise<{
   dipHeight?: number;
 }> {
   const local = parseSelectionRect(value);
-  const window = overlay;
-  if (!local || !window || window.isDestroyed()) {
+  const entry = overlayForSender(sender);
+  const window = entry?.window;
+  if (!local || !entry || !window || window.isDestroyed()) {
     return { ok: false, message: '选区无效' };
   }
   const bounds = window.getBounds();
-  const physical = physicalRectFromDipCorners(
-    { x: bounds.x + local.x, y: bounds.y + local.y },
-    { x: bounds.x + local.x + local.width, y: bounds.y + local.y + local.height },
-    (point) => screen.dipToScreenPoint(point),
+  const physical = physicalSelectionOnDisplay(
+    {
+      bounds,
+      scaleFactor: entry.scaleFactor,
+      physicalOrigin: screen.dipToScreenPoint({ x: bounds.x, y: bounds.y }),
+    },
+    local,
   );
   if (!physical) {
     return { ok: false, message: '选区太小' };
   }
+  activeOverlay = window;
+  hideAreaOverlays();
   window.hide();
   try {
     const captured = await grab({ mode: 'region', ...physical });
     frozen = { png: captured.png, dip: local };
+    closeOtherOverlays(window);
     if (!window.isDestroyed()) {
       showExcludedFromCapture(window);
       window.focus();
@@ -694,8 +796,12 @@ export async function confirmAreaSelection(value: unknown): Promise<{
       dipHeight: local.height,
     };
   } catch (error: unknown) {
+    for (const item of overlays) {
+      if (!item.window.isDestroyed()) {
+        showExcludedFromCapture(item.window);
+      }
+    }
     if (!window.isDestroyed()) {
-      showExcludedFromCapture(window);
       window.focus();
     }
     return { ok: false, message: error instanceof Error ? error.message : '截图失败' };
@@ -770,8 +876,9 @@ export async function saveFrozenScreenshot(override?: unknown): Promise<{ ok: bo
   if (!png) {
     return { ok: false, message: '没有可保存的截图' };
   }
-  if (overlay && !overlay.isDestroyed()) {
-    overlay.hide();
+  const current = annotationWindow();
+  if (current) {
+    current.hide();
   }
   const stamp = new Date();
   const pad = (value: number) => String(value).padStart(2, '0');
@@ -781,9 +888,9 @@ export async function saveFrozenScreenshot(override?: unknown): Promise<{ ok: bo
     filters: [{ name: 'PNG', extensions: ['png'] }],
   });
   if (result.canceled || !result.filePath) {
-    if (overlay && !overlay.isDestroyed()) {
-      showExcludedFromCapture(overlay);
-      overlay.focus();
+    if (current && !current.isDestroyed()) {
+      showExcludedFromCapture(current);
+      current.focus();
     }
     return { ok: false, message: '已取消保存' };
   }
@@ -791,9 +898,9 @@ export async function saveFrozenScreenshot(override?: unknown): Promise<{ ok: bo
     mkdirSync(path.dirname(result.filePath), { recursive: true });
     writeFileSync(result.filePath, png);
   } catch (error: unknown) {
-    if (overlay && !overlay.isDestroyed()) {
-      showExcludedFromCapture(overlay);
-      overlay.focus();
+    if (current && !current.isDestroyed()) {
+      showExcludedFromCapture(current);
+      current.focus();
     }
     return { ok: false, message: error instanceof Error ? error.message : '保存失败' };
   }

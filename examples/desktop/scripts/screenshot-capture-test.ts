@@ -11,6 +11,8 @@ import {
   chooseAreaSelection,
   parseSelectionRect,
   physicalRectFromDipCorners,
+  physicalSelectionOnDisplay,
+  planAreaOverlayWindows,
   resolveScreenshotShortcuts,
   trimScreenshotHistory,
   unionDisplayBounds,
@@ -117,6 +119,60 @@ function run(): void {
     { x: 0, y: 0, width: 100, height: 80 },
     { x: -40, y: 10, width: 20, height: 30 },
   ]), { x: -40, y: 0, width: 140, height: 80 });
+
+  const sideBySide = planAreaOverlayWindows([
+    { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+    { id: 2, bounds: { x: 1920, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 },
+  ]);
+  assert.deepEqual(sideBySide, [
+    { displayId: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+    { displayId: 2, bounds: { x: 1920, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 },
+  ]);
+  assert.deepEqual(physicalSelectionOnDisplay(
+    {
+      bounds: sideBySide[1].bounds,
+      scaleFactor: sideBySide[1].scaleFactor,
+      physicalOrigin: { x: 1920, y: 0 },
+    },
+    { x: 1180, y: 620, width: 100, height: 100 },
+  ), { x: 3690, y: 930, width: 150, height: 150 });
+
+  const secondaryOnLeft = planAreaOverlayWindows([
+    { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+    { id: 2, bounds: { x: -1280, y: 0, width: 1280, height: 720 }, scaleFactor: 1.5 },
+  ]);
+  assert.equal(secondaryOnLeft[1].bounds.x, -1280);
+  assert.deepEqual(physicalSelectionOnDisplay(
+    {
+      bounds: secondaryOnLeft[1].bounds,
+      scaleFactor: secondaryOnLeft[1].scaleFactor,
+      physicalOrigin: { x: -1920, y: 0 },
+    },
+    { x: 10, y: 20, width: 40, height: 30 },
+  ), { x: -1905, y: 30, width: 60, height: 45 });
+
+  const stacked = planAreaOverlayWindows([
+    { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 }, scaleFactor: 1 },
+    { id: 2, bounds: { x: 0, y: 1080, width: 1536, height: 864 }, scaleFactor: 1.25 },
+  ]);
+  assert.equal(stacked[1].bounds.y, 1080);
+  assert.equal(stacked[1].scaleFactor, 1.25);
+  assert.deepEqual(physicalSelectionOnDisplay(
+    {
+      bounds: stacked[1].bounds,
+      scaleFactor: stacked[1].scaleFactor,
+      physicalOrigin: { x: 0, y: 1080 },
+    },
+    { x: 100, y: 40, width: 80, height: 16 },
+  ), { x: 125, y: 1130, width: 100, height: 20 });
+  assert.equal(physicalSelectionOnDisplay(
+    {
+      bounds: stacked[1].bounds,
+      scaleFactor: stacked[1].scaleFactor,
+      physicalOrigin: { x: 0, y: 1080 },
+    },
+    { x: 1, y: 1, width: 0, height: 4 },
+  ), null);
   assert.equal(parseSelectionRect({ x: 1, y: 2, width: 0, height: 4 }), null);
   assert.deepEqual(parseSelectionRect({ x: 1.2, y: 2.6, width: 3, height: 4 }), {
     x: 1,
@@ -229,6 +285,12 @@ function run(): void {
   assert.doesNotMatch(session, /setShape|SetWindowRgn/);
   assert.match(session, /windowSelectionAtClientPoint/);
   assert.match(session, /windowBoundsAtPoint/);
+  assert.match(session, /planAreaOverlayWindows/);
+  assert.match(session, /physicalSelectionOnDisplay/);
+  assert.match(session, /bindTrustedDataDocument/);
+  const ipc = read('src-electron/modules/reqcase-shadow-recorder/ipc.ts');
+  assert.match(ipc, /confirmAreaSelection\(rect, event\.sender\)/);
+  assert.match(ipc, /windowSelectionAtClientPoint\(x, y, event\.sender\)/);
   assert.match(session, /function showExcludedFromCapture/);
   assert.match(session, /setContentProtection\(true\)/);
   const pinStart = session.indexOf('function openPin');

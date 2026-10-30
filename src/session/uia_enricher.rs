@@ -639,6 +639,7 @@ fn parent_path_from_element(
 }
 
 #[cfg(windows)]
+#[allow(non_upper_case_globals)] // match the windows crate ToggleState_* constants by name
 fn read_toggle_state(
     element: &windows::Win32::UI::Accessibility::IUIAutomationElement,
 ) -> Option<ToggleState> {
@@ -682,6 +683,7 @@ fn read_selection_state(
 }
 
 #[cfg(windows)]
+#[allow(non_upper_case_globals)] // match the windows crate ExpandCollapseState_* constants by name
 fn read_expand_collapse_state(
     element: &windows::Win32::UI::Accessibility::IUIAutomationElement,
 ) -> Option<ExpandCollapseState> {

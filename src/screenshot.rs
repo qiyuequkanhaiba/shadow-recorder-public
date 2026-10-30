@@ -203,6 +203,7 @@ fn capture_rect_gdi(selection: &ScreenshotRect) -> Result<Vec<u8>, String> {
     }
 }
 
+#[allow(dead_code)] // screenshot unit tests call this; the recording path does not
 pub fn clip_rect_to_frame(
     selection: ScreenshotRect,
     frame_width: u32,
@@ -232,6 +233,7 @@ pub fn clip_rect_to_frame(
     })
 }
 
+#[allow(dead_code)] // screenshot unit tests call this; the recording path does not
 pub fn crop_bgra(
     pixels: &[u8],
     frame_width: u32,
@@ -301,6 +303,8 @@ pub fn paint_solid_masks(
     }
 }
 
+#[allow(dead_code)] // screenshot unit tests call this; the recording path does not
+#[allow(clippy::too_many_arguments)] // one crop needs frame size, origin, selection, and privacy masks
 pub fn compose_screenshot_png(
     pixels: &[u8],
     frame_width: u32,
@@ -635,7 +639,7 @@ mod tests {
             10,
             selection,
             true,
-            &[mask.clone()],
+            std::slice::from_ref(&mask),
         )
         .expect("masked png");
         assert_eq!((width, height, origin_x, origin_y), (2, 2, 10, 10));

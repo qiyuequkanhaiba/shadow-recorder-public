@@ -328,10 +328,9 @@ fn live_win32_button_and_checkbox_have_l2_identity() {
     );
     uia_enricher::set_timeout_ms(400);
     let mut direct_save = None;
-    let mut direct_toggle = None;
     for attempt in 1..=5 {
         direct_save = uia_enricher::capture_at_point(save_pt.0, save_pt.1);
-        direct_toggle = uia_enricher::capture_at_point(toggle_pt.0, toggle_pt.1);
+        let direct_toggle = uia_enricher::capture_at_point(toggle_pt.0, toggle_pt.1);
         eprintln!("direct UIA attempt={attempt} save={direct_save:?} toggle={direct_toggle:?}");
         if direct_save.as_ref().is_some_and(|snap| snap.has_identity()) {
             break;
@@ -356,12 +355,14 @@ fn live_win32_button_and_checkbox_have_l2_identity() {
     crate::session::set_defect_evidence_enabled(true);
     crate::session::set_semantic_feature_flags(true, true, true, false, true);
 
-    let mut config = RecorderConfig::default();
-    config.semantic_recording_enabled = true;
-    config.defect_evidence_enabled = true;
-    config.uia_observer_enabled = true;
-    config.operation_builder_enabled = true;
-    config.debounce_ms = 20;
+    let config = RecorderConfig {
+        semantic_recording_enabled: true,
+        defect_evidence_enabled: true,
+        uia_observer_enabled: true,
+        operation_builder_enabled: true,
+        debounce_ms: 20,
+        ..RecorderConfig::default()
+    };
     RECORDER.set_config(config).expect("set recorder config");
 
     let storage = unique_temp_dir();
@@ -610,12 +611,14 @@ fn run_notepad_live_probe() {
 
     crate::session::set_defect_evidence_enabled(true);
     crate::session::set_semantic_feature_flags(true, true, true, false, true);
-    let mut config = RecorderConfig::default();
-    config.semantic_recording_enabled = true;
-    config.defect_evidence_enabled = true;
-    config.uia_observer_enabled = true;
-    config.operation_builder_enabled = true;
-    config.debounce_ms = 20;
+    let config = RecorderConfig {
+        semantic_recording_enabled: true,
+        defect_evidence_enabled: true,
+        uia_observer_enabled: true,
+        operation_builder_enabled: true,
+        debounce_ms: 20,
+        ..RecorderConfig::default()
+    };
     RECORDER.set_config(config).expect("set recorder config");
 
     let storage = unique_temp_dir();
@@ -643,6 +646,7 @@ fn run_notepad_live_probe() {
     let _ = RECORDER.stop();
     let stopped = TEST_SESSION_MANAGER.stop().expect("stop session");
     let _ = child.kill();
+    let _ = child.wait();
 
     let session_dir = PathBuf::from(stopped.session_dir.expect("session dir"));
     let operations = TEST_SESSION_MANAGER

@@ -194,10 +194,10 @@ pub fn protect_floating_toolbar_hwnd(hwnd_val: i64) -> bool {
                 map.insert(key, prev);
             }
             let res = SetWindowLongPtrW(hwnd, GWLP_WNDPROC, current);
-            if res == 0 {
-                if let Ok(mut map) = PREV_WNDPROCS.lock() {
-                    map.remove(&key);
-                }
+            if res == 0
+                && let Ok(mut map) = PREV_WNDPROCS.lock()
+            {
+                map.remove(&key);
             }
             res != 0
         }

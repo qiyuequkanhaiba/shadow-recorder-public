@@ -1117,13 +1117,13 @@ fn collect_stream_segments(
             let absolute_path = stream_dir.join(parsed.file_relative_path.replace('/', "\\"));
             let mut retention_tier = None;
             let mut actual_path = absolute_path.clone();
-            if !actual_path.exists() {
-                if let Some(file_name) = actual_path.file_name() {
-                    let retained_path = session_dir.join("video").join("retained").join(&stream.stream_id).join(file_name);
-                    if retained_path.exists() {
-                        actual_path = retained_path;
-                        retention_tier = Some("retained".to_string());
-                    }
+            if !actual_path.exists()
+                && let Some(file_name) = actual_path.file_name()
+            {
+                let retained_path = session_dir.join("video").join("retained").join(&stream.stream_id).join(file_name);
+                if retained_path.exists() {
+                    actual_path = retained_path;
+                    retention_tier = Some("retained".to_string());
                 }
             }
             if !actual_path.exists() {
@@ -1286,7 +1286,7 @@ fn trim_segments_to_window(
 
     // 2. Prune retained segments according to retention policy
     let now_ms = now_timestamp_ms();
-    let retain_cutoff = now_ms.saturating_sub(retention_hours as u64 * 3600_000);
+    let retain_cutoff = now_ms.saturating_sub(retention_hours as u64 * 3_600_000);
     let mut to_remove = Vec::new();
 
     let is_protected = |seg: &TestSessionVideoSegmentRecord| -> bool {
@@ -1297,10 +1297,11 @@ fn trim_segments_to_window(
 
     if retention_mode == "age" {
         for (idx, seg) in segments.iter().enumerate() {
-            if seg.retention_tier.as_deref() == Some("retained") && seg.ended_at_ms < retain_cutoff {
-                if !is_protected(seg) {
-                    to_remove.push(idx);
-                }
+            if seg.retention_tier.as_deref() == Some("retained")
+                && seg.ended_at_ms < retain_cutoff
+                && !is_protected(seg)
+            {
+                to_remove.push(idx);
             }
         }
     } else {
@@ -1308,10 +1309,8 @@ fn trim_segments_to_window(
         for (idx, seg) in segments.iter().enumerate().rev() {
             if seg.retention_tier.as_deref() == Some("retained") {
                 retained_count += 1;
-                if retained_count > retention_max {
-                    if !is_protected(seg) {
-                        to_remove.push(idx);
-                    }
+                if retained_count > retention_max && !is_protected(seg) {
+                    to_remove.push(idx);
                 }
             }
         }
@@ -2271,16 +2270,16 @@ mod history_retention_tests {
         super::trim_segments_to_window(&session, &session_dir, &mut segments, 2).unwrap();
 
         assert_eq!(segments.len(), 5);
-        for i in 0..3 {
-            assert_eq!(segments[i].retention_tier.as_deref(), Some("retained"));
-            let file_path = segments[i].file_path.as_ref().unwrap();
+        for segment in segments.iter().take(3) {
+            assert_eq!(segment.retention_tier.as_deref(), Some("retained"));
+            let file_path = segment.file_path.as_ref().unwrap();
             assert!(file_path.contains("video/retained/test-stream") || file_path.contains("video\\retained\\test-stream"));
             assert!(Path::new(file_path).exists());
-            let rel_path = segments[i].relative_path.as_ref().unwrap();
+            let rel_path = segment.relative_path.as_ref().unwrap();
             assert!(rel_path.contains("retained"));
         }
-        for i in 3..5 {
-            assert_ne!(segments[i].retention_tier.as_deref(), Some("retained"));
+        for segment in segments.iter().skip(3) {
+            assert_ne!(segment.retention_tier.as_deref(), Some("retained"));
         }
         let _ = fs::remove_dir_all(&temp_dir);
     }
@@ -2329,8 +2328,8 @@ mod history_retention_tests {
         let mut segments = vec![];
         let now = now_timestamp_ms();
 
-        let two_hours_ago = now - 2 * 3600_000;
-        let half_hour_ago = now - 1800_000;
+        let two_hours_ago = now - 2 * 3_600_000;
+        let half_hour_ago = now - 1_800_000;
 
         let file1 = session_dir.join("1.mp4");
         fs::create_dir_all(file1.parent().unwrap()).unwrap();

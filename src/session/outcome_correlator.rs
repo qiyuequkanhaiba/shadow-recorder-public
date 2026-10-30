@@ -55,8 +55,10 @@ pub fn correlate_outcomes_for_actions_with_profile(
     profile: Option<&SemanticProfile>,
     observer_facts_present: bool,
 ) -> Vec<OperationOutcome> {
-    let mut options = OutcomeCorrelationOptions::default();
-    options.observer_facts_present = observer_facts_present;
+    let options = OutcomeCorrelationOptions {
+        observer_facts_present,
+        ..OutcomeCorrelationOptions::default()
+    };
     let mut ordered_actions = actions.to_vec();
     ordered_actions.sort_by_key(|action| (action.occurred_at_ms, action.action_id.clone()));
     ordered_actions
@@ -829,8 +831,10 @@ mod tests {
     #[test]
     fn outcome_correlator_marks_missing_observer_facts_as_degraded() {
         let click = action("action-no-observer", OperationActionKind::Click, 6_800);
-        let mut options = OutcomeCorrelationOptions::default();
-        options.observer_facts_present = false;
+        let options = OutcomeCorrelationOptions {
+            observer_facts_present: false,
+            ..OutcomeCorrelationOptions::default()
+        };
 
         let outcome = correlate_outcome_for_action(&click, &[], None, &options);
 

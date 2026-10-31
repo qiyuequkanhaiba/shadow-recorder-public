@@ -1,5 +1,6 @@
 name: Desktop Windows Installer
 
+# Manual only. Releases are built on the local Windows VM (see docs/release-operations.md).
 # Builds the Windows x64 installer on a clean runner, runs the quality gate first,
 # writes SHA256SUMS and a build provenance attestation, and on a v* tag opens a
 # draft GitHub Release. The installer is not Authenticode-signed.
@@ -11,9 +12,6 @@ on:
         description: Build WiX MSI in addition to the NSIS installer.
         required: false
         default: "false"
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: read

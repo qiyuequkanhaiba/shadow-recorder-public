@@ -9,17 +9,25 @@ This runbook documents release-time operations that are not safe to encode as re
 - Treats auto-update as a release policy and future integration point; the current app does not ship an `electron-updater` runtime path yet.
 - Keeps signing secrets, certificate passwords, private keys, and token values outside the repository.
 
-## Unsigned CI Build (current default)
+## Local Unsigned Release (current policy)
 
-No code-signing certificate is in use yet. Releases are built by `.github/workflows/desktop-installer.yml` on `windows-latest`, not on a local VM:
+Releases are built on the local Windows 11 VM and published with `gh`. GitHub Actions must not run:
 
-1. Push a `v*` tag, or run the workflow by hand (`build_msi=true` adds the MSI).
-2. The job runs `scripts/quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild` first; a failing gate stops the build.
-3. It builds with rustc 1.92.0, checks that the packaged `shadow_recorder.node` is the x64 release build, and writes `SHA256SUMS-<version>.txt`.
-4. It records a build provenance attestation for each installer. Verify a download with `gh attestation verify <file> --repo <owner>/<repo>`.
-5. On a tag it opens a **draft** GitHub Release with the installers and checksums. Review it, then publish by hand. An existing release with the same tag is left unchanged.
+- Every workflow under `.github/workflows/` is `workflow_dispatch` only. Do not add push, tag or pull-request triggers.
+- Pushed HEAD commits carry `[skip ci] [skip actions]`.
+- No code-signing certificate is in use, so installers report `NotSigned` and Windows SmartScreen may warn.
 
-The installers report `NotSigned`, so Windows SmartScreen may warn. The sections below apply once a certificate is bought.
+Steps:
+
+1. Bump only the app version in `examples/desktop/package.json` and the two root entries of `package-lock.json`. Write `release-notes-<version>.md`.
+2. On the VM, copy the source to a local disk (exclude `node_modules`, `target`, `.git`), then run `scripts/quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild`.
+3. Run `npm run dist:msi`, then `npx electron-builder --win nsis --prepackaged release\win-unpacked` (`dist:msi` clears `release/`).
+4. Check that the packaged `shadow_recorder.node` equals `target\x86_64-pc-windows-msvc\release\shadow_recorder.node` and is x64, and that `Get-AuthenticodeSignature` reports `NotSigned`.
+5. Write `SHA256SUMS-public-<version>.txt`, copy the installers to the Mac and re-check the hashes there.
+6. Run a local secret scan (`gitleaks detect`) before pushing, since the Actions scan no longer runs on push.
+7. `gh release create v<version> --target <full SHA>` with the exe, msi and SHA256SUMS. Never use a short SHA.
+
+`.github/workflows/desktop-installer.yml` can still build the same artifacts on a hosted runner when started by hand. The sections below apply once a certificate is bought.
 
 ## Signing Certificate Source
 

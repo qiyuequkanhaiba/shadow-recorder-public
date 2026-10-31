@@ -63,7 +63,6 @@
     "build": "npm run build:react && npm run build:electron",
     "build:react": "npm run typecheck:react && vite build",
     "build:electron": "tsc -p tsconfig.electron.json",
-    "patch:semantic-profile-ipc": "node ../../scripts/patch-semantic-profile-ipc.mjs && node ../../scripts/patch-semantic-profile-ipc-finish.mjs",
     "pack": "npm run build:native:release && npm run prepare:ffmpeg && npm run build && npm run clean:release-output && electron-builder --dir",
     "dist:nsis": "npm run build:native:release && npm run prepare:ffmpeg && npm run build && npm run clean:release-output && electron-builder --win nsis",
     "dist:wix-msi": "npm run pack && powershell -ExecutionPolicy Bypass -File scripts/build-wix-msi.ps1 -SkipPack",

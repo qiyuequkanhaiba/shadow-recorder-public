@@ -9,6 +9,18 @@ This runbook documents release-time operations that are not safe to encode as re
 - Treats auto-update as a release policy and future integration point; the current app does not ship an `electron-updater` runtime path yet.
 - Keeps signing secrets, certificate passwords, private keys, and token values outside the repository.
 
+## Unsigned CI Build (current default)
+
+No code-signing certificate is in use yet. Releases are built by `.github/workflows/desktop-installer.yml` on `windows-latest`, not on a local VM:
+
+1. Push a `v*` tag, or run the workflow by hand (`build_msi=true` adds the MSI).
+2. The job runs `scripts/quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild` first; a failing gate stops the build.
+3. It builds with rustc 1.92.0, checks that the packaged `shadow_recorder.node` is the x64 release build, and writes `SHA256SUMS-<version>.txt`.
+4. It records a build provenance attestation for each installer. Verify a download with `gh attestation verify <file> --repo <owner>/<repo>`.
+5. On a tag it opens a **draft** GitHub Release with the installers and checksums. Review it, then publish by hand. An existing release with the same tag is left unchanged.
+
+The installers report `NotSigned`, so Windows SmartScreen may warn. The sections below apply once a certificate is bought.
+
 ## Signing Certificate Source
 
 - Preferred source: organization-owned OV or EV code-signing certificate issued for the legal publisher name used by the desktop product.

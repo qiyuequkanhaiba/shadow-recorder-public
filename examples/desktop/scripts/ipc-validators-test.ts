@@ -1,9 +1,11 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path, { join } from 'node:path';
 
 import {
   assertRendererExportDirAllowed,
+  canonicalizeDirectory,
   isRendererExportDirAllowed,
 } from '../src-electron/modules/reqcase-shadow-recorder/export-dir-policy';
 import { isTrustedIpcSender } from '../src-electron/trusted-sender';
@@ -272,6 +274,32 @@ assert.throws(
 assert.doesNotThrow(() => {
   assertRendererExportDirAllowed('C:\\Users\\lew\\Documents\\证据包', exportAllowlist, windowsPath);
 });
+
+// A link inside an allowed folder that points outside it must be refused.
+const linkRoot = mkdtempSync(join(tmpdir(), 'export-dir-policy-'));
+try {
+  const allowedDir = join(linkRoot, 'Documents');
+  const outsideDir = join(linkRoot, 'outside');
+  mkdirSync(allowedDir);
+  mkdirSync(outsideDir);
+  symlinkSync(outsideDir, join(allowedDir, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  const linkAllowlist = {
+    documentsDir: allowedDir,
+    desktopDir: '',
+    downloadsDir: '',
+    savedExportDirs: [],
+  };
+  assert.equal(isRendererExportDirAllowed(join(allowedDir, 'escape'), linkAllowlist), false);
+  assert.equal(isRendererExportDirAllowed(join(allowedDir, 'escape', 'not-yet'), linkAllowlist), false);
+  assert.equal(isRendererExportDirAllowed(join(allowedDir, 'plain', 'not-yet'), linkAllowlist), true);
+  assert.equal(isRendererExportDirAllowed(allowedDir, linkAllowlist), true);
+  assert.equal(
+    canonicalizeDirectory(join(allowedDir, 'escape', 'a', 'b')),
+    join(realpathSync.native(outsideDir), 'a', 'b'),
+  );
+} finally {
+  rmSync(linkRoot, { recursive: true, force: true });
+}
 
 const ipcSource = readFileSync(
   join(__dirname, '../src-electron/modules/reqcase-shadow-recorder/ipc.ts'),

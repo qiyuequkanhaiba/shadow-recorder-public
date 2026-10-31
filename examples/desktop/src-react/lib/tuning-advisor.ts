@@ -48,7 +48,7 @@ export const DEFAULT_CONFIG: RecorderConfigPayload = {
   semanticPlaintextInputEnabled: false,
   defectPreWindowSeconds: 60,
   defectPostWindowSeconds: 20,
-  privacyEnabled: false,
+  privacyEnabled: true,
   excludedWindowTitleKeywords: [],
   excludedProcessNames: [],
   maskRegions: [],

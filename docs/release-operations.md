@@ -9,6 +9,26 @@ This runbook documents release-time operations that are not safe to encode as re
 - Treats auto-update as a release policy and future integration point; the current app does not ship an `electron-updater` runtime path yet.
 - Keeps signing secrets, certificate passwords, private keys, and token values outside the repository.
 
+## Local Unsigned Release (current policy)
+
+Releases are built on the local Windows 11 VM and published with `gh`. GitHub Actions must not run:
+
+- Every workflow under `.github/workflows/` is `workflow_dispatch` only. Do not add push, tag or pull-request triggers.
+- Pushed HEAD commits carry `[skip ci] [skip actions]`.
+- No code-signing certificate is in use, so installers report `NotSigned` and Windows SmartScreen may warn.
+
+Steps:
+
+1. Bump only the app version in `examples/desktop/package.json` and the two root entries of `package-lock.json`. Write `release-notes-<version>.md`.
+2. On the VM, copy the source to a local disk (exclude `node_modules`, `target`, `.git`), then run `scripts/quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild`.
+3. Run `npm run dist:msi`, then `npx electron-builder --win nsis --prepackaged release\win-unpacked` (`dist:msi` clears `release/`).
+4. Check that the packaged `shadow_recorder.node` equals `target\x86_64-pc-windows-msvc\release\shadow_recorder.node` and is x64, and that `Get-AuthenticodeSignature` reports `NotSigned`.
+5. Write `SHA256SUMS-public-<version>.txt`, copy the installers to the Mac and re-check the hashes there.
+6. Run a local secret scan (`gitleaks detect`) before pushing, since the Actions scan no longer runs on push.
+7. `gh release create v<version> --target <full SHA>` with the exe, msi and SHA256SUMS. Never use a short SHA.
+
+`.github/workflows/desktop-installer.yml` can still build the same artifacts on a hosted runner when started by hand. The sections below apply once a certificate is bought.
+
 ## Signing Certificate Source
 
 - Preferred source: organization-owned OV or EV code-signing certificate issued for the legal publisher name used by the desktop product.

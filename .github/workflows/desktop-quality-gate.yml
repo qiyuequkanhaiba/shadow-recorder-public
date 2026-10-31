@@ -1,27 +1,7 @@
 name: Desktop Quality Gate
 
+# Manual only: releases are built locally and pushes must not start Actions.
 on:
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - src/**
-      - scripts/**
-      - examples/desktop/**
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
-      - .github/workflows/desktop-quality-gate.yml
-  pull_request:
-    paths:
-      - src/**
-      - scripts/**
-      - examples/desktop/**
-      - Cargo.toml
-      - Cargo.lock
-      - build.rs
-      - .github/workflows/desktop-quality-gate.yml
   workflow_dispatch:
     inputs:
       enable_benchmark_compare:
@@ -65,9 +45,9 @@ jobs:
           cache-dependency-path: examples/desktop/package-lock.json
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.92.0
         with:
-          components: rustfmt
+          components: rustfmt, clippy
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2

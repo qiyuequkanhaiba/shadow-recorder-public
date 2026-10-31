@@ -205,8 +205,10 @@
   left: 12px;
   z-index: 30;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   pointer-events: auto;
 }
 
@@ -330,6 +332,58 @@
   white-space: nowrap;
 }
 
+.hud-backend-btn {
+  cursor: pointer;
+  border-color: rgba(56, 189, 248, 0.5);
+  transition: all 0.15s ease;
+}
+
+.hud-backend-btn:hover {
+  background: rgba(56, 189, 248, 0.28);
+  transform: translateY(-1px);
+}
+
+.hud-telemetry-pill-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 99px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #e2e8f0;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hud-telemetry-pill-toggle:hover {
+  background: rgba(0, 0, 0, 0.88);
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #38bdf8;
+  transform: translateY(-1px);
+}
+
+.telemetry-pill-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.telemetry-pill-text {
+  letter-spacing: 0.02em;
+}
+
+.telemetry-pill-arrow {
+  font-size: 9px;
+  opacity: 0.7;
+}
+
 /* Bottom Center Floating Transport Bar */
 .hud-cinema-transport {
   position: absolute;
@@ -385,6 +439,35 @@
 }
 
 .btn-dock-step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.btn-dock-pill {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #f8fafc;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.btn-dock-pill:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+  color: #ffffff;
+  transform: translateY(-1px);
+}
+
+.btn-dock-pill:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
@@ -553,6 +636,201 @@
 @keyframes pulseRecordTag {
   0%, 100% { opacity: 0.8; }
   50% { opacity: 1; }
+}
+
+.timeline-header-selection-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.32);
+  border-radius: 99px;
+  padding: 1px 8px;
+  animation: fadeInSelectionBar 0.18s ease-out;
+}
+
+@keyframes fadeInSelectionBar {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.selection-range-readout {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #60a5fa;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.selection-range-dur {
+  color: #93c5fd;
+  font-weight: 700;
+}
+
+.btn-timeline-action {
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 99px;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.14s ease;
+}
+
+.btn-timeline-loop {
+  background: rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.btn-timeline-loop:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.btn-timeline-loop.is-active {
+  background: rgba(59, 130, 246, 0.28);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.btn-timeline-export {
+  background: #0284c7;
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.4);
+}
+
+.btn-timeline-export:hover:not(:disabled) {
+  background: #0369a1;
+  transform: translateY(-0.5px);
+}
+
+.btn-timeline-export:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-timeline-clear {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.btn-timeline-clear:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+[data-theme='light'] .timeline-header-selection-bar {
+  background: rgba(2, 132, 199, 0.08);
+  border-color: rgba(2, 132, 199, 0.28);
+}
+
+[data-theme='light'] .selection-range-readout {
+  color: #0369a1;
+}
+
+[data-theme='light'] .selection-range-dur {
+  color: #0284c7;
+}
+
+[data-theme='light'] .btn-timeline-loop {
+  background: rgba(15, 23, 42, 0.06);
+  color: #334155;
+  border-color: rgba(15, 23, 42, 0.14);
+}
+
+[data-theme='light'] .btn-timeline-loop:hover {
+  background: rgba(15, 23, 42, 0.12);
+  color: #0f172a;
+}
+
+[data-theme='light'] .btn-timeline-loop.is-active {
+  background: rgba(2, 132, 199, 0.16);
+  color: #0369a1;
+  border-color: rgba(2, 132, 199, 0.4);
+}
+
+[data-theme='light'] .btn-timeline-clear {
+  color: #64748b;
+}
+
+.timeline-selection-range-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background-color: rgba(59, 130, 246, 0.2);
+  border-left: 2px solid #3b82f6;
+  border-right: 2px solid #3b82f6;
+  z-index: 20;
+  pointer-events: none;
+  box-shadow: inset 0 0 12px rgba(59, 130, 246, 0.15);
+}
+
+.timeline-selection-duration-badge {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: #60a5fa;
+  font-size: 9.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 99px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+
+.selection-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 14px;
+  cursor: ew-resize;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 25;
+}
+
+.selection-handle.handle-in {
+  left: -7px;
+}
+
+.selection-handle.handle-out {
+  right: -7px;
+}
+
+.selection-handle-grip {
+  width: 4px;
+  height: 22px;
+  background: #3b82f6;
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(59, 130, 246, 0.7);
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+
+.selection-handle:hover .selection-handle-grip {
+  transform: scaleY(1.25);
+  background: #60a5fa;
 }
 
 .timeline-dock-controls {

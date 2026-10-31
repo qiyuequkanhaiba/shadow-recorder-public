@@ -257,13 +257,15 @@ mod tests {
 
     #[test]
     fn video_privacy_filter_is_absent_until_privacy_is_enabled() {
-        let filter = build_video_privacy_drawbox_filter(false, &[mask(10, 20, 30, 40)], 0, 0, 100, 100);
+        let filter =
+            build_video_privacy_drawbox_filter(false, &[mask(10, 20, 30, 40)], 0, 0, 100, 100);
         assert_eq!(filter, None);
     }
 
     #[test]
     fn video_privacy_filter_draws_boxes_inside_the_capture() {
-        let filter = build_video_privacy_drawbox_filter(true, &[mask(10, 20, 30, 40)], 0, 0, 200, 200);
+        let filter =
+            build_video_privacy_drawbox_filter(true, &[mask(10, 20, 30, 40)], 0, 0, 200, 200);
         assert_eq!(
             filter.as_deref(),
             Some("drawbox=x=10:y=20:w=30:h=40:color=black:t=fill")

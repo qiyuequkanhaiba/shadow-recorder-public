@@ -13,6 +13,13 @@ import { RecorderPage } from './pages/RecorderPage';
 import './styles.css';
 import { initTheme } from './lib/theme';
 
+window.addEventListener('dragover', (event) => {
+  event.preventDefault();
+});
+window.addEventListener('drop', (event) => {
+  event.preventDefault();
+});
+
 initTheme();
 
 function createFallbackRecorderBridge(): Window['reqcaseShadowRecorder'] {

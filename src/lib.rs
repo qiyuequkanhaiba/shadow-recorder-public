@@ -1,6 +1,7 @@
 mod capture_policy;
 mod config;
 mod context_reset;
+mod disk_space;
 mod dxgi;
 mod error;
 pub mod evidence_manifest;
@@ -12,7 +13,9 @@ mod quality_policy;
 mod raw_input;
 mod recorder;
 mod retry;
+mod screenshot;
 mod session;
+mod sha256;
 mod storage;
 mod telemetry;
 mod types;
@@ -34,6 +37,7 @@ pub mod operation_semantic_test_api {
 }
 
 use napi::Result;
+use napi::bindgen_prelude::{AsyncTask, Task};
 use napi_derive::napi;
 
 use crate::config::{RecorderConfig, StreamPayloadMode};
@@ -576,29 +580,64 @@ pub fn render_test_session_repro_steps(
         .map_err(map_session_error)
 }
 
+pub struct ExportDefectPackTask {
+    session_id: Option<String>,
+    target_dir: String,
+    marked_at_ms: Option<u64>,
+    pre_window_seconds: Option<u32>,
+    post_window_seconds: Option<u32>,
+    note: Option<String>,
+    expected: Option<String>,
+    actual: Option<String>,
+}
+
+impl Task for ExportDefectPackTask {
+    type Output = crate::types::JsTestSessionDefectPackResult;
+    type JsValue = crate::types::JsTestSessionDefectPackResult;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        // Session data is copied under the manager lock inside export_defect_pack.
+        // ffmpeg runs only after that lock is released.
+        TEST_SESSION_MANAGER
+            .export_defect_pack(
+                self.session_id.as_deref(),
+                self.target_dir.clone(),
+                self.marked_at_ms,
+                self.pre_window_seconds,
+                self.post_window_seconds,
+                self.note.clone(),
+                self.expected.clone(),
+                self.actual.clone(),
+            )
+            .map(Into::into)
+            .map_err(map_session_error)
+    }
+
+    fn resolve(&mut self, _env: napi::Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
 #[napi]
 pub fn export_test_defect_pack(
     input: Option<crate::types::JsTestSessionDefectPackExportInput>,
-) -> Result<crate::types::JsTestSessionDefectPackResult> {
+) -> Result<AsyncTask<ExportDefectPackTask>> {
     let input = input.unwrap_or_default();
     let target_dir = input
         .target_dir
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| napi::Error::from_reason("targetDir is required for defect pack export"))?;
-    TEST_SESSION_MANAGER
-        .export_defect_pack(
-            input.session_id.as_deref(),
-            target_dir,
-            parse_optional_js_timestamp(input.marked_at_ms, "markedAtMs")?,
-            input.pre_window_seconds,
-            input.post_window_seconds,
-            input.note,
-            input.expected,
-            input.actual,
-        )
-        .map(Into::into)
-        .map_err(map_session_error)
+    Ok(AsyncTask::new(ExportDefectPackTask {
+        session_id: input.session_id,
+        target_dir,
+        marked_at_ms: parse_optional_js_timestamp(input.marked_at_ms, "markedAtMs")?,
+        pre_window_seconds: input.pre_window_seconds,
+        post_window_seconds: input.post_window_seconds,
+        note: input.note,
+        expected: input.expected,
+        actual: input.actual,
+    }))
 }
 
 #[napi]
@@ -734,4 +773,102 @@ fn map_session_error(err: SessionError) -> napi::Error {
 #[napi]
 pub fn protect_floating_toolbar_surface(hwnd: i64) -> bool {
     window_surface::protect_floating_toolbar_hwnd(hwnd)
+}
+
+#[napi]
+pub fn disk_free_bytes(path: String) -> Result<f64> {
+    let bytes = crate::disk_space::disk_free_bytes(std::path::Path::new(&path))
+        .map_err(|err| napi::Error::from_reason(err.to_string()))?;
+    Ok(bytes as f64)
+}
+
+#[napi(object)]
+pub struct JsScreenshotMask {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[napi(object)]
+pub struct JsScreenshotCaptureRequest {
+    pub mode: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub privacy_enabled: bool,
+    pub masks: Vec<JsScreenshotMask>,
+}
+
+#[napi(object)]
+pub struct JsScreenshotCaptureResult {
+    pub png_base64: String,
+    pub width: u32,
+    pub height: u32,
+    pub origin_x: i32,
+    pub origin_y: i32,
+}
+
+#[napi]
+pub fn capture_screenshot(
+    request: JsScreenshotCaptureRequest,
+) -> Result<JsScreenshotCaptureResult> {
+    let output =
+        crate::screenshot::capture_screenshot(crate::screenshot::ScreenshotCaptureRequest {
+            mode: request.mode,
+            x: request.x,
+            y: request.y,
+            width: request.width,
+            height: request.height,
+            privacy_enabled: request.privacy_enabled,
+            masks: request
+                .masks
+                .into_iter()
+                .map(|mask| crate::privacy::MaskRegion {
+                    x: mask.x,
+                    y: mask.y,
+                    width: mask.width,
+                    height: mask.height,
+                    label: String::new(),
+                })
+                .collect(),
+        })
+        .map_err(napi::Error::from_reason)?;
+    Ok(JsScreenshotCaptureResult {
+        png_base64: output.png_base64,
+        width: output.width,
+        height: output.height,
+        origin_x: output.origin_x,
+        origin_y: output.origin_y,
+    })
+}
+
+#[napi(object)]
+pub struct JsWindowBounds {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[napi]
+pub fn window_bounds_at_point(x: i32, y: i32, ignore_hwnd: f64) -> Option<JsWindowBounds> {
+    let ignore = if ignore_hwnd.is_finite() {
+        ignore_hwnd as isize
+    } else {
+        0
+    };
+    let rect = crate::dxgi::top_level_window_rect_at_point(x, y, ignore)?;
+    let width = rect.right.saturating_sub(rect.left);
+    let height = rect.bottom.saturating_sub(rect.top);
+    if width <= 1 || height <= 1 {
+        return None;
+    }
+    Some(JsWindowBounds {
+        x: rect.left,
+        y: rect.top,
+        width: width as u32,
+        height: height as u32,
+    })
 }

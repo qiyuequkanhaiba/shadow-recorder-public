@@ -61,6 +61,15 @@ pub struct TestSessionStartOptions {
     pub history_retention_mode: Option<String>,
     pub history_retention_hours: Option<u32>,
     pub history_retention_max_segments: Option<u32>,
+    pub min_free_bytes_to_start: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ProtectedTimeRange {
+    pub start_ms: u64,
+    pub end_ms: u64,
+    pub label: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +106,8 @@ pub struct TestSessionRecord {
     pub target_display_id: Option<String>,
     pub target_display_ids: Option<Vec<String>>,
     pub target_capture_mode: String,
+    #[serde(default)]
+    pub protected_ranges: Vec<ProtectedTimeRange>,
 }
 
 impl TestSessionRecord {
@@ -154,10 +165,17 @@ impl TestSessionRecord {
             video_privacy_enabled: false,
             video_privacy_masks: Vec::new(),
             notes: normalized_notes,
-            history_retention_mode: Some(normalize_history_retention_mode(options.history_retention_mode)),
-            history_retention_hours: Some(options.history_retention_hours.unwrap_or(24).clamp(1, 168)),
+            history_retention_mode: Some(normalize_history_retention_mode(
+                options.history_retention_mode,
+            )),
+            history_retention_hours: Some(
+                options.history_retention_hours.unwrap_or(24).clamp(1, 168),
+            ),
             history_retention_max_segments: Some(
-                options.history_retention_max_segments.unwrap_or(200).clamp(10, 2000),
+                options
+                    .history_retention_max_segments
+                    .unwrap_or(200)
+                    .clamp(10, 2000),
             ),
             target_process_name: normalized_target_process_name,
             target_pid: options.target_pid,
@@ -165,6 +183,7 @@ impl TestSessionRecord {
             target_display_id: normalized_target_display_id,
             target_display_ids: normalized_target_display_ids,
             target_capture_mode: normalized_capture_mode,
+            protected_ranges: Vec::new(),
         }
     }
 }

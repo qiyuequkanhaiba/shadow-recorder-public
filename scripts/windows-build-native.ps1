@@ -203,6 +203,9 @@ try {
 
   Write-Host ("- running: cargo {0}" -f ($buildArgs -join ' '))
   & cargo @buildArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw ("cargo build failed with exit code {0}" -f $LASTEXITCODE)
+  }
 
   $nodeBinary = Try-FindNodeBinary -RepoRoot $repoRoot -TargetTriple $targetTriple -Profile $profile
   if (-not $nodeBinary) {

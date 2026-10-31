@@ -2,8 +2,8 @@ export type FloatingToolbarVisualState = 'idle' | 'recording' | 'paused';
 
 export const FLOATING_TOOLBAR_LAYOUT = {
   collapsedWidth: 58,
-  idleExpandedWidth: 128,
-  activeExpandedWidth: 178,
+  idleExpandedWidth: 157,
+  activeExpandedWidth: 207,
   height: 34,
 } as const;
 

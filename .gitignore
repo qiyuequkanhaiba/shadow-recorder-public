@@ -25,6 +25,8 @@
 /examples/desktop/dist
 /examples/desktop/dist-electron
 /examples/desktop/dist-react
+release/
+dist-*/
 /examples/desktop/build-resources
 /examples/desktop/release
 /examples/desktop/reports

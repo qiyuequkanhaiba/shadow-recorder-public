@@ -58,6 +58,14 @@ export const RecorderConfigSchema = z.object({
   defectPostWindowSeconds: optionalFiniteNumber,
   shortcutStartRecording: z.string().optional(),
   shortcutStopRecording: z.string().optional(),
+  shortcutCaptureArea: z.string().optional(),
+  shortcutCaptureMonitor: z.string().optional(),
+  shortcutCaptureWindow: z.string().optional(),
+  shortcutCapturePin: z.string().optional(),
+  screenshotDelaySeconds: z.number().finite().optional(),
+  hideScreenshotUiFromCapture: z.boolean().optional(),
+  minFreeBytesToStart: z.number().finite().nonnegative().optional(),
+  minFreeBytesWhileRecording: z.number().finite().nonnegative().optional(),
 }).passthrough() satisfies z.ZodType<ReqCaseShadowRecorderConfig>;
 
 export const RecorderSettingsSchema = z.object({
@@ -69,6 +77,13 @@ export const RecorderSettingsSchema = z.object({
   floatingToolbarCollapsed: z.boolean().optional(),
 }).passthrough() satisfies z.ZodType<ReqCaseShadowRecorderPersistedSettings>;
 
+export const ExportEvidenceRangeSchema = z.object({
+  startMs: z.number().nonnegative(),
+  endMs: z.number().nonnegative(),
+}).refine((data) => data.startMs <= data.endMs, {
+  message: "range.startMs must be less than or equal to range.endMs",
+});
+
 export const ExportEvidenceInputSchema = z.preprocess(
   (value) => (value === undefined || value === null ? {} : value),
   z.object({
@@ -78,6 +93,10 @@ export const ExportEvidenceInputSchema = z.preprocess(
     zipFileName: z.string().optional(),
     outputMode: z.enum(['directory', 'zip']).optional(),
     privacyAcknowledgedAt: z.string().optional(),
+    range: ExportEvidenceRangeSchema.optional(),
+    lookbackSeconds: z.number().positive().max(86400).optional(),
+    clipMode: z.enum(['precise', 'fast']).optional(),
+    paddingMs: z.number().nonnegative().optional(),
   }).passthrough(),
 ) satisfies z.ZodType<ReqCaseShadowRecorderTestSessionEvidenceExportInput>;
 
@@ -133,6 +152,16 @@ export const GetBufferPageInputSchema = z.preprocess(
     ),
     includeImage: z.boolean().default(false),
   }).passthrough(),
+);
+
+export const ScreenshotDragStartSchema = z.object({
+  clientX: z.number().finite(),
+  clientY: z.number().finite(),
+});
+
+export const ScreenshotDragCursorSchema = z.preprocess(
+  (value) => (value == null ? {} : value),
+  z.object({}).strip(),
 );
 
 export function parseIpcInput<T>(schema: z.ZodType<T>, value: unknown, label: string): T {

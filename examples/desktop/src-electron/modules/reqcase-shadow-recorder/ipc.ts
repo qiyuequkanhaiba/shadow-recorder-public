@@ -1,15 +1,54 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Notification as ElectronNotification } from 'electron';
-import type { IpcMainInvokeEvent, WebContents } from 'electron';
+import { listAllowedDataUrls, listAllowedFileUrls } from '../../trusted-entries';
+import { fileUrlForPath, isTrustedIpcSender } from '../../trusted-sender';
+import { installEntryNavigationGuard } from '../../window-guards';
+import { syncScreenshotHotkeys, suspendScreenshotHotkeys } from '../../screenshot-hotkeys';
+import {
+  beginAreaScreenshot,
+  bindScreenshotRecordingState,
+  cancelAreaScreenshot,
+  cancelScreenshotDelay,
+  captureInstantScreenshot,
+  beginPinnedDrag,
+  closeAllPinnedScreenshots,
+  closePinnedScreenshot,
+  endPinnedDrag,
+  movePinnedScreenshot,
+  beginScreenshotDrag,
+  confirmAreaSelection,
+  confirmCrossDisplaySelection,
+  previewScreenshotDrag,
+  windowSelectionAtClientPoint,
+  copyFrozenScreenshot,
+  copyPinnedScreenshot,
+  listScreenshotHistory,
+  pinFrozenScreenshot,
+  pinQuickScreenshot,
+  resetPinnedScreenshot,
+  scalePinnedScreenshot,
+  setPinnedClickThrough,
+  pinScreenshotHistory,
+  revealScreenshotHistory,
+  saveFrozenScreenshot,
+  savePinnedScreenshot,
+} from '../../screenshot-session';
+import type { IpcMainEvent, IpcMainInvokeEvent, WebContents } from 'electron';
 import path from 'node:path';
 import { writeFile } from 'node:fs/promises';
 
 import { REQCASE_SHADOW_RECORDER_CHANNELS } from './ipc-channels';
+import {
+  assertRendererExportDirAllowed,
+  collectSavedExportDirs,
+} from './export-dir-policy';
 import {
   ExportEvidenceInputSchema,
   GetBufferPageInputSchema,
   RecorderConfigSchema,
   RecorderSettingsSchema,
   ReplayStepGenerateInputSchema,
+  ScreenshotDragCursorSchema,
+  ScreenshotDragStartSchema,
   parseIpcInput,
 } from './ipc-validators';
 import {
@@ -356,9 +395,13 @@ function withOperationIpcErrors<T>(label: string, action: () => T): T {
 function resolveEvidenceZipSaveDialogFileName(
   input: ReqCaseShadowRecorderTestSessionEvidenceExportInput,
 ): string {
+  const lookbackSuffix =
+    input.lookbackSeconds != null && Number.isFinite(input.lookbackSeconds) && input.lookbackSeconds > 0
+      ? `-last-${Math.round(input.lookbackSeconds)}s`
+      : '';
   const fallbackName = input.sessionId?.trim()
-    ? `evidence-${input.sessionId.trim()}`
-    : 'evidence.zip';
+    ? `evidence-${input.sessionId.trim()}${lookbackSuffix}`
+    : `evidence${lookbackSuffix}.zip`;
   const preferredName = input.zipFileName?.trim() || input.bundleName?.trim() || fallbackName;
   const safeName = path.basename(preferredName).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim();
   const fileName = safeName || 'evidence.zip';
@@ -400,6 +443,9 @@ const DEFAULT_BASELINE_CONFIG: ReqCaseShadowRecorderConfig = {
   transportMode: 'push',
   streamPayload: 'meta_only',
   captureReuseEnabled: true,
+  privacyEnabled: true,
+  semanticPlaintextInputEnabled: false,
+  hideScreenshotUiFromCapture: true,
 };
 
 function createPresetConfig(
@@ -488,7 +534,9 @@ export function registerReqCaseShadowRecorderIpc(
   options: RegisterReqCaseIpcOptions,
 ): ReqCaseShadowRecorderService {
   const service = new ReqCaseShadowRecorderService();
-  const trustedDevOrigins = ['http://127.0.0.1:5173', 'http://localhost:5173'];
+  bindScreenshotRecordingState(() => service.isRecording());
+  const loadedSettings = loadRecorderSettings();
+  const savedExportDirs = collectSavedExportDirs(loadedSettings);
 
   const assertTrustedSender = (sender: WebContents): void => {
     if (sender.isDestroyed()) {
@@ -496,11 +544,12 @@ export function registerReqCaseShadowRecorderIpc(
     }
 
     const url = sender.getURL() || '';
-    const trusted =
-      url.startsWith('file://') ||
-      url.startsWith('data:text/html') ||
-      trustedDevOrigins.some((origin) => url.startsWith(origin));
-    if (!trusted) {
+    if (!isTrustedIpcSender({
+      senderUrl: url,
+      isPackaged: app.isPackaged,
+      allowedFileUrls: listAllowedFileUrls(),
+      allowedDataUrls: listAllowedDataUrls(),
+    })) {
       throw new Error(`Blocked IPC from untrusted sender: ${url}`);
     }
   };
@@ -529,6 +578,14 @@ export function registerReqCaseShadowRecorderIpc(
     }
   };
 
+  let runtimeSettings = sanitizeRecorderSettings(loadedSettings);
+  runtimeSettings = {
+    ...runtimeSettings,
+    config: {
+      ...DEFAULT_BASELINE_CONFIG,
+      ...(runtimeSettings.config ?? {}),
+    },
+  };
   const updateShortcuts = (config: ReqCaseShadowRecorderConfig): void => {
     const nextStartShortcut = config.shortcutStartRecording?.trim() || null;
     const nextStopShortcut = config.shortcutStopRecording?.trim() || null;
@@ -569,19 +626,149 @@ export function registerReqCaseShadowRecorderIpc(
         console.error('Failed to register stop shortcut', error);
       }
     }
+
+    const rejected = syncScreenshotHotkeys(config, {
+      area: () => {
+        void beginAreaScreenshot(() => runtimeSettings.config).catch((error: unknown) => {
+          console.error('area screenshot failed', error);
+        });
+      },
+      monitor: () => {
+        void captureInstantScreenshot('monitor', () => runtimeSettings.config);
+      },
+      window: () => {
+        void captureInstantScreenshot('window', () => runtimeSettings.config);
+      },
+      pin: () => {
+        pinQuickScreenshot();
+      },
+    });
+    if (rejected.length > 0) {
+      console.warn('Skipped conflicting screenshot shortcuts', rejected);
+    }
   };
 
-  let runtimeSettings = sanitizeRecorderSettings(loadRecorderSettings());
-  runtimeSettings = {
-    ...runtimeSettings,
-    config: {
-      ...DEFAULT_BASELINE_CONFIG,
-      ...(runtimeSettings.config ?? {}),
-    },
-  };
   if (runtimeSettings.config) {
     updateShortcuts(runtimeSettings.config);
   }
+
+  handleTrusted('reqcase:screenshot:confirm', async (event, rect: unknown) => (
+    confirmAreaSelection(rect, event.sender)
+  ));
+  handleTrusted('reqcase:screenshot:drag-start', async (event, raw: unknown) => {
+    const parsed = ScreenshotDragStartSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false };
+    }
+    return beginScreenshotDrag(parsed.data.clientX, parsed.data.clientY, event.sender);
+  });
+  handleTrusted('reqcase:screenshot:drag-move', async (event, raw: unknown) => {
+    const parsed = ScreenshotDragCursorSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { cross: false, local: null };
+    }
+    return previewScreenshotDrag(event.sender);
+  });
+  handleTrusted('reqcase:screenshot:confirm-cross', async (event, raw: unknown) => {
+    const parsed = ScreenshotDragCursorSchema.safeParse(raw);
+    if (!parsed.success) {
+      return { ok: false, message: '选区无效' };
+    }
+    return confirmCrossDisplaySelection(event.sender);
+  });
+  handleTrusted('reqcase:screenshot:window-at', async (event, x: unknown, y: unknown) => {
+    if (typeof x !== 'number' || typeof y !== 'number' || !Number.isFinite(x) || !Number.isFinite(y)) {
+      return null;
+    }
+    return windowSelectionAtClientPoint(x, y, event.sender);
+  });
+  handleTrusted('reqcase:screenshot:cancel', async () => {
+    cancelAreaScreenshot();
+  });
+  handleTrusted('reqcase:screenshot:cancel-delay', async () => {
+    cancelScreenshotDelay();
+  });
+  handleTrusted('reqcase:screenshot:copy', async (_event, pngBase64: unknown) => copyFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:save', async (_event, pngBase64: unknown) => saveFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:pin', async (_event, pngBase64: unknown) => pinFrozenScreenshot(pngBase64));
+  handleTrusted('reqcase:screenshot:copy-pin', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '没有可复制的截图' };
+    }
+    return copyPinnedScreenshot(id);
+  });
+  handleTrusted('reqcase:screenshot:save-pin', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '没有可保存的截图' };
+    }
+    return savePinnedScreenshot(id);
+  });
+  handleTrusted('reqcase:screenshot:close-pin', async (_event, id: unknown) => {
+    if (typeof id === 'string') {
+      closePinnedScreenshot(id);
+    }
+  });
+  const onTrusted = (channel: string, handler: (event: IpcMainEvent, ...args: unknown[]) => void): void => {
+    ipcMain.on(channel, (event, ...args) => {
+      try {
+        assertTrustedSender(event.sender);
+      } catch {
+        return;
+      }
+      handler(event, ...args);
+    });
+  };
+  const pinPoint = (screenX: unknown, screenY: unknown): [number, number] | null => {
+    if (typeof screenX !== 'number' || typeof screenY !== 'number') {
+      return null;
+    }
+    return [screenX, screenY];
+  };
+  onTrusted('reqcase:screenshot:pin-drag-start', (_event, id, screenX, screenY) => {
+    const point = typeof id === 'string' ? pinPoint(screenX, screenY) : null;
+    if (point) beginPinnedDrag(id as string, point[0], point[1]);
+  });
+  onTrusted('reqcase:screenshot:pin-drag', (_event, id, screenX, screenY) => {
+    const point = typeof id === 'string' ? pinPoint(screenX, screenY) : null;
+    if (point) movePinnedScreenshot(id as string, point[0], point[1]);
+  });
+  onTrusted('reqcase:screenshot:pin-drag-end', (_event, id) => {
+    if (typeof id === 'string') endPinnedDrag(id);
+  });
+  onTrusted('reqcase:screenshot:pin-scale', (_event, id, deltaY, screenX, screenY) => {
+    const point = typeof id === 'string' ? pinPoint(screenX, screenY) : null;
+    if (point && typeof deltaY === 'number') scalePinnedScreenshot(id as string, deltaY, point[0], point[1]);
+  });
+  onTrusted('reqcase:screenshot:pin-reset', (_event, id) => {
+    if (typeof id === 'string') resetPinnedScreenshot(id);
+  });
+  onTrusted('reqcase:screenshot:pin-click-through', (_event, id, enabled) => {
+    if (typeof id === 'string') setPinnedClickThrough(id, enabled === true);
+  });
+  onTrusted('reqcase:screenshot:pin-close-all', () => {
+    closeAllPinnedScreenshots();
+  });
+  handleTrusted('reqcase:screenshot:list-history', async () => listScreenshotHistory());
+  handleTrusted('reqcase:screenshot:pin-history', async (_event, id: unknown) => {
+    if (typeof id !== 'string') {
+      return { ok: false, message: '找不到这张截图' };
+    }
+    return pinScreenshotHistory(id);
+  });
+  handleTrusted('reqcase:screenshot:reveal-history', async () => {
+    revealScreenshotHistory();
+  });
+  handleTrusted('reqcase:screenshot:suspend-hotkeys', async () => {
+    suspendScreenshotHotkeys();
+  });
+  handleTrusted('reqcase:screenshot:resume-hotkeys', async () => {
+    if (runtimeSettings.config) {
+      updateShortcuts(runtimeSettings.config);
+    }
+  });
+  handleTrusted('reqcase:screenshot:begin-area', async () => {
+    await beginAreaScreenshot(() => runtimeSettings.config);
+  });
 
   const metricsSubscribers = new Set<WebContents>();
   let metricsTimer: NodeJS.Timeout | null = null;
@@ -1020,7 +1207,8 @@ export function registerReqCaseShadowRecorderIpc(
     };
 
     try {
-      let targetDir = input.targetDir;
+      let targetDir = input.targetDir?.trim() ?? '';
+      let chosenByDialog = false;
       if (!targetDir) {
         const senderWindow = BrowserWindow.fromWebContents(event.sender);
         const isSenderFloating = senderWindow && !senderWindow.isResizable();
@@ -1059,6 +1247,15 @@ export function registerReqCaseShadowRecorderIpc(
           throw new Error('Export canceled by user');
         }
         targetDir = result.filePaths[0];
+        chosenByDialog = true;
+      }
+      if (!chosenByDialog) {
+        assertRendererExportDirAllowed(targetDir, {
+          documentsDir: app.getPath('documents'),
+          desktopDir: app.getPath('desktop'),
+          downloadsDir: app.getPath('downloads'),
+          savedExportDirs,
+        });
       }
       emitProgress({ percent: 8, message: '正在准备导出', status: 'running' });
       return await service.exportSessionEvidence({ ...input, targetDir }, forwardProgress);
@@ -1284,6 +1481,8 @@ export function registerReqCaseShadowRecorderIpc(
 
       const report = await exportReportWithUtilityFallback({ ...input, targetDir });
       const win = new BrowserWindow({ show: false, width: 1200, height: 800 });
+      const reportEntryUrl = fileUrlForPath(report.htmlPath);
+      installEntryNavigationGuard(win, () => reportEntryUrl);
       try {
         await win.loadFile(report.htmlPath);
         const pdfBuffer = await win.webContents.printToPDF({
@@ -1304,7 +1503,8 @@ export function registerReqCaseShadowRecorderIpc(
     REQCASE_SHADOW_RECORDER_CHANNELS.exportDiagnostics,
     async (_event, rawInput: unknown) => {
       const input = parseDiagnosticsInput(rawInput);
-      let targetDir = input.targetDir;
+      let targetDir = input.targetDir.trim();
+      let chosenByDialog = false;
       if (!targetDir) {
         const result = await dialog.showOpenDialog({
           title: 'Select diagnostics export directory',
@@ -1314,6 +1514,15 @@ export function registerReqCaseShadowRecorderIpc(
           throw new Error('Export canceled by user');
         }
         targetDir = result.filePaths[0];
+        chosenByDialog = true;
+      }
+      if (!chosenByDialog) {
+        assertRendererExportDirAllowed(targetDir, {
+          documentsDir: app.getPath('documents'),
+          desktopDir: app.getPath('desktop'),
+          downloadsDir: app.getPath('downloads'),
+          savedExportDirs,
+        });
       }
       return exportDiagnostics(targetDir);
     },
@@ -1427,7 +1636,8 @@ export function registerReqCaseShadowRecorderIpc(
 
   ipcMain.handle('reqcase:shadow-recorder:export-test-defect-pack', async (event, input) => {
     const record = requireRecord(input, 'exportTestDefectPack');
-    let targetDir = optionalString(record, 'targetDir');
+    let targetDir = optionalString(record, 'targetDir')?.trim() ?? '';
+    let chosenByDialog = false;
     if (!targetDir) {
       const result = await dialog.showOpenDialog({
         title: '选择缺陷证据包导出目录',
@@ -1437,8 +1647,17 @@ export function registerReqCaseShadowRecorderIpc(
         throw new Error('export canceled');
       }
       targetDir = result.filePaths[0];
+      chosenByDialog = true;
     }
-    return service.exportTestDefectPack({
+    if (!chosenByDialog) {
+      assertRendererExportDirAllowed(targetDir, {
+        documentsDir: app.getPath('documents'),
+        desktopDir: app.getPath('desktop'),
+        downloadsDir: app.getPath('downloads'),
+        savedExportDirs,
+      });
+    }
+    return await service.exportTestDefectPack({
       sessionId: optionalString(record, 'sessionId'),
       targetDir,
       markedAtMs: optionalNumber(record, 'markedAtMs'),

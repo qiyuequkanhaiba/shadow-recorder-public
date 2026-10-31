@@ -1,7 +1,14 @@
 import { existsSync, mkdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-import { app } from 'electron';
+import { app, Notification } from 'electron';
+
+import {
+  DISK_CHECK_INTERVAL_MS,
+  DISK_RECORDING_STOPPED_MESSAGE,
+  MIN_FREE_BYTES_WHILE_RECORDING,
+  shouldStopForDisk,
+} from './disk-space';
 
 import {
   resolveRecordingWindowSeconds,
@@ -22,6 +29,7 @@ import {
   rebuildTestSessionSteps as nativeRebuildTestSessionSteps,
   renderTestSessionReproSteps as nativeRenderTestSessionReproSteps,
   exportTestDefectPack as nativeExportTestDefectPack,
+  diskFreeBytes,
   updateTestSessionStep as nativeUpdateTestSessionStep,
   setSemanticAliasProfile as nativeSetSemanticAliasProfile,
   getSemanticAliasProfile as nativeGetSemanticAliasProfile,
@@ -71,6 +79,7 @@ import {
   findHistoricalTestSession,
   findHistoricalVideoSegmentsForTimestamp,
   listHistoricalTestSessions,
+  sealAbandonedRecordingSessions,
   readHistoricalSessionEvents,
   readHistoricalSessionEventsTail,
   readHistoricalSessionOperationsTail,
@@ -233,6 +242,7 @@ export class ReqCaseShadowRecorderService {
     historyRetentionHours: 24,
     historyRetentionMaxSegments: 200,
   };
+  private diskWatchTimer: ReturnType<typeof setInterval> | null = null;
   private pushPublisher: ((step: ReqCaseShadowRecorderStep) => void) | null = null;
   private pushBound = false;
   private readonly resourceUsageMonitor = new RecorderResourceUsageMonitor();
@@ -365,7 +375,73 @@ export class ReqCaseShadowRecorderService {
       historyRetentionMaxSegments: clampHistoryRetentionMaxSegments(
         input.historyRetentionMaxSegments ?? this.currentConfig.historyRetentionMaxSegments,
       ),
+      minFreeBytesToStart: input.minFreeBytesToStart ?? this.currentConfig.minFreeBytesToStart,
     };
+  }
+
+  private clearDiskWatch(): void {
+    if (this.diskWatchTimer) {
+      clearInterval(this.diskWatchTimer);
+      this.diskWatchTimer = null;
+    }
+  }
+
+  private armDiskWatch(): void {
+    this.clearDiskWatch();
+    this.diskWatchTimer = setInterval(() => {
+      this.checkDiskWhileRecording();
+    }, DISK_CHECK_INTERVAL_MS);
+  }
+
+  private recordingStorageDir(): string | null {
+    const active = this.getActiveSession();
+    if (active?.sessionDir) {
+      return active.sessionDir;
+    }
+    try {
+      return this.resolveSafeSessionDir();
+    } catch {
+      return null;
+    }
+  }
+
+  private checkDiskWhileRecording(): void {
+    if (!this.isRecording()) {
+      this.clearDiskWatch();
+      return;
+    }
+    const storageDir = this.recordingStorageDir();
+    if (!storageDir) {
+      return;
+    }
+    const free = diskFreeBytes(storageDir);
+    if (free == null) {
+      return;
+    }
+    const minimum = this.currentConfig.minFreeBytesWhileRecording ?? MIN_FREE_BYTES_WHILE_RECORDING;
+    if (!shouldStopForDisk(free, minimum)) {
+      return;
+    }
+    try {
+      this.stop();
+    } catch (error) {
+      console.error('[disk-space] stop failed', error);
+    }
+    new Notification({
+      title: 'ReqCaseIntelligence',
+      body: DISK_RECORDING_STOPPED_MESSAGE,
+    }).show();
+  }
+
+  private notifyDiskSpace(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!message.includes('磁盘剩余空间不足') && !message.includes('无法读取磁盘剩余空间')) {
+      return;
+    }
+    new Notification({
+      title: 'ReqCaseIntelligence',
+      body: message,
+    }).show();
   }
 
   private resolveConfiguredDisplayIds(
@@ -384,11 +460,15 @@ export class ReqCaseShadowRecorderService {
 
   public start(): void {
     if (this.recording) {
+      if (!this.diskWatchTimer) {
+        this.armDiskWatch();
+      }
       return;
     }
 
     if (this.getActiveSession()) {
       this.recording = true;
+      this.armDiskWatch();
       return;
     }
 
@@ -399,11 +479,18 @@ export class ReqCaseShadowRecorderService {
       };
     }
     setRecorderConfig(this.currentConfig);
-    startTestSession(this.buildSessionStartInput());
+    try {
+      startTestSession(this.buildSessionStartInput());
+    } catch (error) {
+      this.notifyDiskSpace(error);
+      throw error;
+    }
     this.recording = true;
+    this.armDiskWatch();
   }
 
   public stop(): void {
+    this.clearDiskWatch();
     this.unsubscribePush();
     if (this.getActiveSession()) {
       stopTestSession();
@@ -450,7 +537,26 @@ export class ReqCaseShadowRecorderService {
   }
 
   public listSessions(): ReqCaseShadowRecorderTestSessionState[] {
-    const nativeSessions = this.getNativeSessionsSafe();
+    let nativeSessions: ReqCaseShadowRecorderTestSessionState[] = [];
+    let nativeListReady = false;
+    try {
+      nativeSessions = listTestSessions();
+      nativeListReady = true;
+    } catch {
+      nativeSessions = [];
+    }
+    if (nativeListReady) {
+      const liveSessionIds = new Set(
+        nativeSessions
+          .filter((session) => session.status === 'active' || session.status === 'paused')
+          .map((session) => session.sessionId),
+      );
+      try {
+        sealAbandonedRecordingSessions(this.resolveTestSessionsRoot(), liveSessionIds);
+      } catch (error) {
+        console.warn('[shadow-recorder] failed to seal abandoned sessions', error);
+      }
+    }
     const merged = [
       ...nativeSessions,
       ...listHistoricalTestSessions(this.resolveTestSessionsRoot(), nativeSessions),
@@ -1214,7 +1320,7 @@ export class ReqCaseShadowRecorderService {
     }
   }
 
-  public exportTestDefectPack(input: {
+  public async exportTestDefectPack(input: {
     sessionId?: string;
     targetDir?: string;
     markedAtMs?: number;
@@ -1224,7 +1330,7 @@ export class ReqCaseShadowRecorderService {
     expected?: string;
     actual?: string;
   }) {
-    return nativeExportTestDefectPack(input);
+    return await nativeExportTestDefectPack(input);
   }
 
   private listExportOperations(sessionId: string): unknown[] {

@@ -41,12 +41,13 @@ pub use defect_config::{
 };
 pub use defect_pack::DefectPackResult;
 pub use manager::{SessionError, TEST_SESSION_MANAGER};
+#[allow(unused_imports)]
 pub use models::{
-    TEST_SESSION_EVENT_KIND, TEST_SESSION_SCHEMA_VERSION, TestSessionDefectMarkInput,
-    TestSessionDefectMarkRecord, TestSessionEventRecord, TestSessionEventType, TestSessionLogInput,
-    TestSessionNoteInput, TestSessionRecord, TestSessionStartOptions, TestSessionStatus,
-    TestSessionStepEditInput, TestSessionStepRecord, TestSessionSystemEventInput,
-    TestSessionVideoSegmentRecord, TestSessionVideoStreamRecord,
+    ProtectedTimeRange, TEST_SESSION_EVENT_KIND, TEST_SESSION_SCHEMA_VERSION,
+    TestSessionDefectMarkInput, TestSessionDefectMarkRecord, TestSessionEventRecord,
+    TestSessionEventType, TestSessionLogInput, TestSessionNoteInput, TestSessionRecord,
+    TestSessionStartOptions, TestSessionStatus, TestSessionStepEditInput, TestSessionStepRecord,
+    TestSessionSystemEventInput, TestSessionVideoSegmentRecord, TestSessionVideoStreamRecord,
 };
 #[cfg(test)]
 pub use models::{TestSessionVideoSegmentStatus, TestSessionVideoStreamStatus};

@@ -1,6 +1,14 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path, { join } from 'node:path';
+
+import {
+  assertRendererExportDirAllowed,
+  canonicalizeDirectory,
+  isRendererExportDirAllowed,
+} from '../src-electron/modules/reqcase-shadow-recorder/export-dir-policy';
+import { isTrustedIpcSender } from '../src-electron/trusted-sender';
 
 import {
   ExportEvidenceInputSchema,
@@ -185,3 +193,130 @@ function run(): void {
 }
 
 run();
+
+// Test range & clipMode validation
+const validRangeInput = parseIpcInput(ExportEvidenceInputSchema, {
+  targetDir: "/valid/dir",
+  range: { startMs: 1000, endMs: 5000 },
+  clipMode: "precise",
+}, "export evidence with range");
+assert.equal(validRangeInput.clipMode, "precise");
+assert.equal(validRangeInput.range?.startMs, 1000);
+
+assertThrowsValidation("export evidence inverted range", () => {
+  parseIpcInput(ExportEvidenceInputSchema, {
+    targetDir: "/valid/dir",
+    range: { startMs: 5000, endMs: 1000 },
+  }, "export evidence inverted range");
+});
+
+const exactEntry = 'file:///C:/app/dist-react/index.html';
+const trustedFileInput = {
+  isPackaged: true,
+  allowedFileUrls: [exactEntry],
+  allowedDataUrls: ['data:text/html;charset=utf-8,toolbar'],
+};
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'file:///C:/x/evil.html',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'file:///C:/app/dist-react/index.html.evil',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: exactEntry,
+}), true);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'http://127.0.0.1:5173',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  isPackaged: false,
+  senderUrl: 'http://127.0.0.1:5173/?app=reqcase-shadow-recorder',
+}), true);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'data:text/html;charset=utf-8,evil',
+}), false);
+assert.equal(isTrustedIpcSender({
+  ...trustedFileInput,
+  senderUrl: 'data:text/html;charset=utf-8,toolbar',
+}), true);
+
+const windowsPath = path.win32;
+const documentsDir = 'C:\\Users\\lew\\Documents';
+const exportAllowlist = {
+  documentsDir,
+  desktopDir: 'C:\\Users\\lew\\Desktop',
+  downloadsDir: 'C:\\Users\\lew\\Downloads',
+  savedExportDirs: ['D:\\ShadowExports'],
+};
+assert.equal(isRendererExportDirAllowed('C:\\Windows\\System32', exportAllowlist, windowsPath), false);
+assert.equal(isRendererExportDirAllowed('C:\\Users\\lew\\Documents-evil', exportAllowlist, windowsPath), false);
+assert.equal(isRendererExportDirAllowed(documentsDir, exportAllowlist, windowsPath), true);
+assert.equal(
+  isRendererExportDirAllowed('C:\\Users\\lew\\Documents\\证据包', exportAllowlist, windowsPath),
+  true,
+);
+assert.equal(isRendererExportDirAllowed('D:\\ShadowExports\\out', exportAllowlist, windowsPath), true);
+assert.throws(
+  () => assertRendererExportDirAllowed('C:\\Windows\\System32', exportAllowlist, windowsPath),
+  (error: unknown) => {
+    assert(error instanceof Error);
+    assert.match(error.message, /导出目录不在允许范围内/);
+    assert.match(error.message, /C:\\Windows\\System32/);
+    return true;
+  },
+);
+assert.doesNotThrow(() => {
+  assertRendererExportDirAllowed('C:\\Users\\lew\\Documents\\证据包', exportAllowlist, windowsPath);
+});
+
+// A link inside an allowed folder that points outside it must be refused.
+const linkRoot = mkdtempSync(join(tmpdir(), 'export-dir-policy-'));
+try {
+  const allowedDir = join(linkRoot, 'Documents');
+  const outsideDir = join(linkRoot, 'outside');
+  mkdirSync(allowedDir);
+  mkdirSync(outsideDir);
+  symlinkSync(outsideDir, join(allowedDir, 'escape'), process.platform === 'win32' ? 'junction' : 'dir');
+  const linkAllowlist = {
+    documentsDir: allowedDir,
+    desktopDir: '',
+    downloadsDir: '',
+    savedExportDirs: [],
+  };
+  assert.equal(isRendererExportDirAllowed(join(allowedDir, 'escape'), linkAllowlist), false);
+  assert.equal(isRendererExportDirAllowed(join(allowedDir, 'escape', 'not-yet'), linkAllowlist), false);
+  assert.equal(isRendererExportDirAllowed(join(allowedDir, 'plain', 'not-yet'), linkAllowlist), true);
+  assert.equal(isRendererExportDirAllowed(allowedDir, linkAllowlist), true);
+  assert.equal(
+    canonicalizeDirectory(join(allowedDir, 'escape', 'a', 'b')),
+    join(realpathSync.native(outsideDir), 'a', 'b'),
+  );
+} finally {
+  rmSync(linkRoot, { recursive: true, force: true });
+}
+
+const ipcSource = readFileSync(
+  join(__dirname, '../src-electron/modules/reqcase-shadow-recorder/ipc.ts'),
+  'utf8',
+);
+
+function assertRendererDirIsCheckedUnlessDialogChoseIt(marker: string): void {
+  const start = ipcSource.indexOf(marker);
+  assert.ok(start >= 0, marker);
+  const window = ipcSource.slice(start, start + 1600);
+  const dialogAt = window.indexOf('chosenByDialog = true');
+  const guardAt = window.indexOf('if (!chosenByDialog)');
+  const checkAt = window.indexOf('assertRendererExportDirAllowed(targetDir');
+  assert.ok(dialogAt > 0, `${marker} dialog choice`);
+  assert.ok(guardAt > dialogAt, `${marker} guard`);
+  assert.ok(checkAt > guardAt, `${marker} allowlist`);
+}
+
+assertRendererDirIsCheckedUnlessDialogChoseIt('REQCASE_SHADOW_RECORDER_CHANNELS.exportDiagnostics');
+assertRendererDirIsCheckedUnlessDialogChoseIt("'reqcase:shadow-recorder:export-test-defect-pack'");

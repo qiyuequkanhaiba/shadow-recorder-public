@@ -503,6 +503,20 @@ export function stopRecording(): void {
   (getBinding() as any).stopRecording();
 }
 
+export function diskFreeBytes(targetPath: string): number | null {
+  try {
+    const binding = getBinding() as any;
+    if (typeof binding.diskFreeBytes !== 'function') {
+      return null;
+    }
+    const value = binding.diskFreeBytes(targetPath);
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  } catch (error) {
+    console.warn('[disk-space] failed to read free bytes', error);
+    return null;
+  }
+}
+
 export function protectFloatingToolbarSurface(nativeWindowHandle: Buffer): boolean {
   try {
     const binding = getBinding() as any;
@@ -1094,6 +1108,60 @@ export function isRecordingPaused(): boolean {
   return false;
 }
 
+export type ScreenshotCaptureRequest = {
+  mode: 'region' | 'monitor' | 'window';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  privacyEnabled: boolean;
+  masks: Array<{ x: number; y: number; width: number; height: number }>;
+};
+
+export function captureScreenshot(request: ScreenshotCaptureRequest): {
+  pngBase64: string;
+  width: number;
+  height: number;
+  originX: number;
+  originY: number;
+} {
+  const binding = getBinding() as {
+    captureScreenshot?: (input: ScreenshotCaptureRequest) => {
+      pngBase64: string;
+      width: number;
+      height: number;
+      originX: number;
+      originY: number;
+    };
+  };
+  if (typeof binding.captureScreenshot !== 'function') {
+    throw new Error('当前原生模块没有截图接口');
+  }
+  return binding.captureScreenshot(request);
+}
+
+export function windowBoundsAtPoint(
+  x: number,
+  y: number,
+  ignoreHwnd: number,
+): { x: number; y: number; width: number; height: number } | null {
+  const binding = getBinding() as {
+    windowBoundsAtPoint?: (
+      x: number,
+      y: number,
+      ignoreHwnd: number,
+    ) => { x: number; y: number; width: number; height: number } | null | undefined;
+  };
+  if (typeof binding.windowBoundsAtPoint !== 'function') {
+    return null;
+  }
+  const found = binding.windowBoundsAtPoint(Math.round(x), Math.round(y), ignoreHwnd);
+  if (!found || found.width < 2 || found.height < 2) {
+    return null;
+  }
+  return found;
+}
+
 export function setRecorderConfig(config: ReqCaseShadowRecorderConfig): void {
   const semanticRecordingEnabled =
     !!(config.semanticRecordingEnabled ?? config.defectEvidenceEnabled);
@@ -1385,7 +1453,7 @@ export function renderTestSessionReproSteps(
   return binding.renderTestSessionReproSteps(sessionId, windowStartMs, windowEndMs, defectNote) ?? '';
 }
 
-export function exportTestDefectPack(input?: {
+export async function exportTestDefectPack(input?: {
   sessionId?: string;
   targetDir?: string;
   markedAtMs?: number;
@@ -1394,12 +1462,12 @@ export function exportTestDefectPack(input?: {
   note?: string;
   expected?: string;
   actual?: string;
-}): any {
+}): Promise<any> {
   const binding = getBinding() as any;
   if (typeof binding.exportTestDefectPack !== 'function') {
     throw new Error('exportTestDefectPack is unavailable in native binding');
   }
-  return binding.exportTestDefectPack(input);
+  return await binding.exportTestDefectPack(input);
 }
 
 

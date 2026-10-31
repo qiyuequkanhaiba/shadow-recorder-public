@@ -54,6 +54,16 @@ function run(): void {
   assertIncludes(operationContracts, 'TEST_SESSION_OPERATION_SCHEMA_VERSION', 'TypeScript operation schema constant');
   assertIncludes(operationContracts, 'TEST_SESSION_OPERATION_BUILDER_VERSION', 'TypeScript operation builder constant');
 
+  assertIncludes(rustLib, 'pub fn export_test_defect_pack', 'Rust export export_test_defect_pack');
+  assertIncludes(rustLib, 'AsyncTask<ExportDefectPackTask>', 'async defect pack export');
+  assertIncludes(declaration, 'exportTestDefectPack?', 'manual native declaration exportTestDefectPack');
+  assertIncludes(declaration, '}): Promise<{', 'exportTestDefectPack returns a Promise');
+  assertIncludes(nativeBinding, 'await binding.exportTestDefectPack(input)', 'desktop native binding awaits export');
+  const service = readDesktop('src-electron/modules/reqcase-shadow-recorder/service.ts');
+  const ipc = readDesktop('src-electron/modules/reqcase-shadow-recorder/ipc.ts');
+  assertIncludes(service, 'return await nativeExportTestDefectPack(input)', 'service awaits defect pack export');
+  assertIncludes(ipc, 'return await service.exportTestDefectPack({', 'ipc awaits defect pack export');
+
   console.log('[native-declaration-contract-test] PASS');
 }
 

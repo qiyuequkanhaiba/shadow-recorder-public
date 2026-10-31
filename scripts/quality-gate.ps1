@@ -232,7 +232,8 @@ Invoke-Step "cargo clippy --all-targets -- -D warnings" {
 
 Push-Location $desktopRoot
 try {
-  $packageJson = Get-Content -Path (Join-Path $desktopRoot "package.json") -Raw | ConvertFrom-Json
+  # package.json has a Chinese productName and no BOM; Windows PowerShell 5 would read it as the ANSI code page.
+  $packageJson = Get-Content -Path (Join-Path $desktopRoot "package.json") -Raw -Encoding UTF8 | ConvertFrom-Json
   $availableScripts = @{}
   $packageJson.scripts.PSObject.Properties | ForEach-Object {
     $availableScripts[$_.Name] = $true
@@ -267,7 +268,10 @@ try {
   Invoke-NpmScript "test:ipc-validators"
   Invoke-NpmScript "test:report-export"
   Invoke-NpmScript "test:evidence-export"
+  Invoke-NpmScript "test:concat-list"
+  Invoke-NpmScript "test:disk-space"
   Invoke-NpmScript "test:evidence-manifest-v2"
+  Invoke-NpmScript "test:screenshot-capture"
 
   # Operation semantic Release A contract/compatibility suite (M8-T1 skeleton)
   Invoke-NpmScript "test:operation-golden-contract"

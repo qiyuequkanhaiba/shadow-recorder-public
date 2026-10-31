@@ -217,6 +217,17 @@ export interface RecorderConfigPayload {
   maskRegions?: RecorderMaskRegionPayload[];
   shortcutStartRecording?: string;
   shortcutStopRecording?: string;
+  shortcutCaptureArea?: string;
+  shortcutCaptureMonitor?: string;
+  shortcutCaptureWindow?: string;
+  shortcutCapturePin?: string;
+  screenshotDelaySeconds?: number;
+  /** When true, screenshot selection UI is excluded from screen capture while this app is recording. Default true. */
+  hideScreenshotUiFromCapture?: boolean;
+  /** Free bytes required before a recording may start. Default 2 GiB. */
+  minFreeBytesToStart?: number;
+  /** Free bytes that stop an active recording. Default 1 GiB. */
+  minFreeBytesWhileRecording?: number;
   [key: string]: unknown;
 }
 
@@ -265,6 +276,7 @@ export interface TestSessionStartInput {
   targetDisplayIds?: string[];
   recordingProfile?: 'efficiency' | 'balanced' | 'smooth';
   encoderPreference?: 'auto' | 'hardware' | 'software';
+  minFreeBytesToStart?: number;
   [key: string]: unknown;
 }
 
@@ -444,6 +456,11 @@ export interface TestSessionLogInput {
   [key: string]: unknown;
 }
 
+export interface TestSessionEvidenceExportRange {
+  startMs: number;
+  endMs: number;
+}
+
 export interface TestSessionEvidenceExportInput {
   sessionId?: string;
   targetDir: string;
@@ -451,6 +468,10 @@ export interface TestSessionEvidenceExportInput {
   zipFileName?: string;
   outputMode?: 'directory' | 'zip';
   privacyAcknowledgedAt?: string;
+  range?: TestSessionEvidenceExportRange;
+  lookbackSeconds?: number;
+  clipMode?: 'precise' | 'fast';
+  paddingMs?: number;
   [key: string]: unknown;
 }
 
@@ -461,6 +482,14 @@ export interface TestSessionEvidenceExportResult {
   artifactPath: string;
   generatedAtMs?: number;
   privacyAcknowledgedAt?: string;
+  range?: {
+    requestedStartMs: number;
+    requestedEndMs: number;
+    actualStartMs: number;
+    actualEndMs: number;
+  };
+  clipMode?: 'precise' | 'fast';
+  exportedDurationMs?: number;
   exportDir?: string;
   zipPath?: string;
   videoDirPath?: string;

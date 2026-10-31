@@ -20,6 +20,10 @@ import {
   type WebContents,
 } from 'electron';
 
+import { allowExactDataUrl, allowExactFile } from './trusted-entries';
+import { fileUrlForPath } from './trusted-sender';
+import { installEntryNavigationGuard } from './window-guards';
+
 import {
   exportDiagnosticsBundle,
   recorderDiagnosticsErrorLog,
@@ -79,6 +83,11 @@ const DEFAULT_SAFE_EXTERNAL_HOSTS = [
 ];
 const SHOW_MAIN_WINDOW_SHORTCUT = 'CommandOrControl+Alt+M';
 const MEDIA_PROTOCOL = 'reqcase-media';
+const MAIN_RENDERER_HTML = path.resolve(__dirname, '../../dist-react/index.html');
+allowExactFile(MAIN_RENDERER_HTML);
+let mainWindowEntryUrl = fileUrlForPath(MAIN_RENDERER_HTML);
+let toolbarEntryUrl = '';
+let releaseToolbarTrust: (() => void) | null = null;
 const ENABLE_MAIN_WINDOW_DEV_SERVER = process.env.REQCASE_MAIN_WINDOW_DEV_SERVER === '1';
 const OPEN_MAIN_WINDOW_ON_START = process.env.REQCASE_OPEN_MAIN_WINDOW === '1';
 
@@ -133,16 +142,19 @@ function removeRendererTarget(target: WebContents): void {
 }
 
 function getIconPath(): string | undefined {
+  const names = process.platform === 'win32' ? ['ico.ico', 'ico.png'] : ['ico.png', 'ico.ico'];
+  const roots: string[] = [];
   if (app.isPackaged && (process as any).resourcesPath) {
-    const packagedIco = path.join((process as any).resourcesPath, 'ico.ico');
-    if (existsSync(packagedIco)) {
-      return packagedIco;
-    }
+    roots.push((process as any).resourcesPath);
   }
-  const repoRoot = path.resolve(__dirname, '../../../../');
-  const icoPath = path.join(repoRoot, 'ico.ico');
-  if (existsSync(icoPath)) {
-    return icoPath;
+  roots.push(path.resolve(__dirname, '../../../../'));
+  for (const root of roots) {
+    for (const name of names) {
+      const candidate = path.join(root, name);
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
   }
   return undefined;
 }
@@ -568,6 +580,15 @@ function setFloatingToolbarDragging(
   return { dragging: toolbarDragging, accepted: routeResult.accepted };
 }
 
+function loadToolbarDocument(window: BrowserWindow, html: string): Promise<void> {
+  const entryUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+  toolbarEntryUrl = entryUrl;
+  const releaseNext = allowExactDataUrl(entryUrl);
+  releaseToolbarTrust?.();
+  releaseToolbarTrust = releaseNext;
+  return window.loadURL(entryUrl);
+}
+
 function applyFloatingToolbarDisplayMetricsRefresh(): void {
   if (!toolbarWindow || toolbarWindow.isDestroyed()) {
     toolbarDisplayMetricsRefreshCoordinator.completeRefresh();
@@ -587,18 +608,14 @@ function applyFloatingToolbarDisplayMetricsRefresh(): void {
     toolbarReloading = true;
     toolbarWindow.setBounds(bounds, false);
     toolbarFittedSize = { width: bounds.width, height: bounds.height };
-    void toolbarWindow.loadURL(
-      `data:text/html;charset=utf-8,${encodeURIComponent(
-        createFloatingToolbarHtml({
-          initialCollapsed: toolbarCollapsed,
-          initialState: nextToolbarState,
-          initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
-          initialTheme: uiTheme,
-          uiScale: nextToolbarScale,
-          documentEpoch: nextToolbarDocumentEpoch,
-        }),
-      )}`,
-    ).catch((error) => {
+    void loadToolbarDocument(toolbarWindow, createFloatingToolbarHtml({
+      initialCollapsed: toolbarCollapsed,
+      initialState: nextToolbarState,
+      initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
+      initialTheme: uiTheme,
+      uiScale: nextToolbarScale,
+      documentEpoch: nextToolbarDocumentEpoch,
+    })).catch((error) => {
       console.warn('[floating-toolbar] display metrics reload failed', error);
     }).finally(() => {
       toolbarReloading = false;
@@ -686,6 +703,7 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
   title: string;
   hasRootShell: boolean;
   bodyTextSample: string;
+  renderer: string;
   serviceWorkerController: string | null;
 } | null> {
   try {
@@ -695,6 +713,7 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
         title: document.title,
         hasRootShell: !!document.querySelector('.workspace-shell'),
         bodyTextSample: (document.body?.innerText || '').slice(0, 240),
+        renderer: document.querySelector('meta[name="reqcase-renderer"]')?.getAttribute('content') ?? '',
         serviceWorkerController: navigator.serviceWorker?.controller?.scriptURL ?? null,
       })`,
       true,
@@ -705,6 +724,7 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
       title: string;
       hasRootShell: boolean;
       bodyTextSample: string;
+      renderer: string;
       serviceWorkerController: string | null;
     };
   } catch (error) {
@@ -714,29 +734,14 @@ async function captureMainWindowRendererSnapshot(window: BrowserWindow): Promise
 }
 
 function isExpectedMainWindowSnapshot(snapshot: {
-  title: string;
-  hasRootShell: boolean;
-  bodyTextSample: string;
+  renderer: string;
 } | null): boolean {
-  if (!snapshot) {
-    return false;
-  }
-
-  const sample = snapshot.bodyTextSample ?? '';
-  return (
-    snapshot.title.includes('影子录制器')
-    && snapshot.hasRootShell
-    && (
-      sample.includes('循环录制与事件回顾')
-      || sample.includes('录制与回放')
-      || sample.includes('基础设置')
-    )
-  );
+  return snapshot?.renderer === 'main';
 }
 
 async function loadMainWindowContents(window: BrowserWindow): Promise<void> {
   const devUrl = process.env.VITE_DEV_SERVER_URL;
-  const staticEntry = path.resolve(__dirname, '../../dist-react/index.html');
+  const staticEntry = MAIN_RENDERER_HTML;
 
   if (devUrl && ENABLE_MAIN_WINDOW_DEV_SERVER) {
     try {
@@ -750,6 +755,7 @@ async function loadMainWindowContents(window: BrowserWindow): Promise<void> {
     }
 
     const devTarget = `${devUrl}${devUrl.includes('?') ? '&' : '?'}app=reqcase-shadow-recorder`;
+    mainWindowEntryUrl = devTarget;
     console.log('[main-window] loading dev url', devTarget);
     try {
       void window.loadURL(devTarget);
@@ -780,6 +786,7 @@ async function loadMainWindowContents(window: BrowserWindow): Promise<void> {
   }
 
   console.log('[main-window] loading static file', staticEntry);
+  mainWindowEntryUrl = fileUrlForPath(staticEntry);
   await window.loadFile(staticEntry);
 }
 
@@ -827,6 +834,8 @@ function createMainWindow(): BrowserWindow {
       sandbox: true,
     },
   });
+
+  installEntryNavigationGuard(window, () => mainWindowEntryUrl);
 
   window.webContents.on('did-finish-load', () => {
     loadedMainWindows.add(window);
@@ -1113,6 +1122,8 @@ function createToolbarWindow(): BrowserWindow {
     },
   });
 
+  installEntryNavigationGuard(window, () => toolbarEntryUrl);
+
   window.webContents.on('before-mouse-event', (_event, mouse) => {
     if (mouse.button !== 'left') {
       return;
@@ -1143,18 +1154,14 @@ function createToolbarWindow(): BrowserWindow {
     protectFloatingToolbarSurface(window.getNativeWindowHandle());
   }
   applyToolbarShape(window);
-  window.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(
-      createFloatingToolbarHtml({
-        initialCollapsed: toolbarCollapsed,
-        initialState: initialToolbarState,
-        initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
-        initialTheme: uiTheme,
-        uiScale: initialToolbarScale,
-        documentEpoch: initialToolbarDocumentEpoch,
-      }),
-    )}`,
-  ).catch((error) => {
+  void loadToolbarDocument(window, createFloatingToolbarHtml({
+    initialCollapsed: toolbarCollapsed,
+    initialState: initialToolbarState,
+    initialStartedAtMs: recorderService?.getActiveSession()?.startedAtMs,
+    initialTheme: uiTheme,
+    uiScale: initialToolbarScale,
+    documentEpoch: initialToolbarDocumentEpoch,
+  })).catch((error) => {
     console.error('[floating-toolbar] failed to load toolbar window', error);
   });
 
@@ -1190,6 +1197,9 @@ function createToolbarWindow(): BrowserWindow {
   });
 
   window.on('closed', () => {
+    releaseToolbarTrust?.();
+    releaseToolbarTrust = null;
+    toolbarEntryUrl = '';
     cancelFloatingToolbarInteraction();
     if (toolbarWindow === window) {
       toolbarWindow = null;
@@ -1360,4 +1370,11 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   appQuitting = true;
   globalShortcut.unregisterAll();
+  if (recorderService?.isRecording()) {
+    try {
+      recorderService.stop();
+    } catch (error) {
+      console.error('[quit] failed to stop recording', error);
+    }
+  }
 });

@@ -1,8 +1,12 @@
+import { existsSync } from 'node:fs';
 import { copyFile, mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
 import { resolveBundledFfmpegPath } from '../../ffmpeg-resource';
+import { planSessionClips, mapWallClockToVideoOffsetMs, type SessionClipPlan, type StreamClipPlan } from './clip-planner';
+import { ffmpegConcatFileLine } from './ffmpeg-concat-list';
+import { renderStreamClipVideo } from './ffmpeg-clip';
 import { buildChecksumEntries as buildArchiveChecksumEntries, createZipArchive as createArchiveZip } from './evidence-archive';
 import {
   renderEvidenceHtml,
@@ -102,7 +106,11 @@ export async function exportTestSessionEvidence(
 
   const generatedAtMs = Date.now();
   const sourceSessionDir = await resolveSessionDir(context.session);
-  const bundleName = buildBundleName(input.bundleName, context.session, generatedAtMs);
+  const defaultBundleName = input.bundleName
+    ?? (typeof input.lookbackSeconds === "number" && input.lookbackSeconds > 0
+      ? `${context.session.name?.trim() || context.session.sessionId}-last-${input.lookbackSeconds}s`
+      : undefined);
+  const bundleName = buildBundleName(defaultBundleName, context.session, generatedAtMs);
   const outputMode = input.outputMode ?? 'directory';
   const workingRoot =
     outputMode === 'zip'
@@ -121,6 +129,89 @@ export async function exportTestSessionEvidence(
   const playableSegments = filteredVideoArtifacts.segments.filter(
     (segment) => segment.isPlayable && !!resolveCopiedSegmentRelativePath(segment, sourceSessionDir),
   );
+
+  let requestedRange = input.range;
+  if (!requestedRange && typeof input.lookbackSeconds === "number" && input.lookbackSeconds > 0) {
+    const maxSegmentEndMs = playableSegments.length > 0
+      ? Math.max(...playableSegments.map((s) => s.endedAtMs || (s.startedAtMs + (s.durationMs ?? 0))))
+      : (context.session.endedAtMs ?? context.session.updatedAtMs ?? Date.now());
+    const effectiveEndMs = context.session.endedAtMs ?? maxSegmentEndMs;
+    const effectiveStartMs = Math.max(context.session.startedAtMs, effectiveEndMs - Math.round(input.lookbackSeconds * 1000));
+    if (effectiveEndMs > effectiveStartMs) {
+      requestedRange = {
+        startMs: effectiveStartMs,
+        endMs: effectiveEndMs,
+      };
+    }
+  }
+  let effectiveRange = requestedRange;
+  let clipMode = input.clipMode ?? 'precise';
+  if (requestedRange) {
+    const requestedDuration = Math.max(0, requestedRange.endMs - requestedRange.startMs);
+    // If > 20 minutes (1,200,000 ms) and not explicitly set, fallback to fast mode for performance
+    if (!input.clipMode && requestedDuration > 1_200_000) {
+      clipMode = 'fast';
+    }
+    const padding = typeof input.paddingMs === 'number' && Number.isFinite(input.paddingMs)
+      ? Math.max(0, input.paddingMs)
+      : 0;
+    if (padding > 0) {
+      effectiveRange = {
+        startMs: Math.max(0, requestedRange.startMs - padding),
+        endMs: requestedRange.endMs + padding,
+      };
+    }
+  }
+
+  const rawSessionClipPlan = effectiveRange
+    ? planSessionClips(
+        filteredVideoArtifacts.streams,
+        playableSegments,
+        effectiveRange,
+        clipMode,
+        (seg) => {
+          const directFilePath = seg.filePath ? path.resolve(seg.filePath) : undefined;
+          const rel = resolveCopiedSegmentRelativePath(seg, sourceSessionDir);
+          const fallbackFilePath = rel ? path.resolve(sourceSessionDir, rel) : undefined;
+          const candidate = directFilePath && existsSync(directFilePath)
+            ? directFilePath
+            : (fallbackFilePath && existsSync(fallbackFilePath) ? fallbackFilePath : undefined);
+          if (!candidate || path.extname(candidate).toLowerCase() !== '.mp4') {
+            return undefined;
+          }
+          return candidate;
+        },
+      )
+    : undefined;
+
+  const sessionClipPlan = rawSessionClipPlan && requestedRange
+    ? {
+        ...rawSessionClipPlan,
+        requestedStartMs: requestedRange.startMs,
+        requestedEndMs: requestedRange.endMs,
+      }
+    : rawSessionClipPlan;
+
+  const filterWindowStartMs = sessionClipPlan?.actualStartMs ?? effectiveRange?.startMs;
+  const filterWindowEndMs = sessionClipPlan?.actualEndMs ?? effectiveRange?.endMs;
+
+  // Filter events and operations if clipRange is active
+  const exportEvents = effectiveRange && filterWindowStartMs !== undefined && filterWindowEndMs !== undefined
+    ? orderedEvents.filter((e) => e.occurredAtMs >= filterWindowStartMs && e.occurredAtMs <= filterWindowEndMs)
+    : orderedEvents;
+
+  const rawOperations = (context.operations ?? []) as Array<Record<string, unknown>>;
+  const exportOperations = effectiveRange && filterWindowStartMs !== undefined && filterWindowEndMs !== undefined
+    ? rawOperations.filter((op) => {
+        const start = typeof op.startedAtMs === 'number' ? op.startedAtMs : 0;
+        return start >= filterWindowStartMs && start <= filterWindowEndMs;
+      })
+    : rawOperations;
+
+  const exportedPlayableSegmentCount = sessionClipPlan
+    ? sessionClipPlan.streamPlans.reduce((sum, plan) => sum + plan.pieces.length, 0)
+    : playableSegments.length;
+
   const videoDirRelativePath = 'video';
   const videoDirPath = path.resolve(exportDir, videoDirRelativePath);
   onProgress?.({ percent: 12, message: '正在准备录像' });
@@ -129,10 +220,12 @@ export async function exportTestSessionEvidence(
     videoDirPath,
     filteredVideoArtifacts.streams,
     playableSegments,
-    (index, total) => {
-      const percent = 12 + Math.round(58 * ((index + 1) / Math.max(total, 1)));
+    (index, total, streamRatio = 1) => {
+      const clampedRatio = Math.min(1, Math.max(0, streamRatio));
+      const percent = 12 + Math.round(58 * ((index + clampedRatio) / Math.max(total, 1)));
       onProgress?.({ percent, message: total > 1 ? `正在合成录像 ${index + 1}/${total}` : '正在合成录像' });
     },
+    sessionClipPlan,
   );
   onProgress?.({ percent: 74, message: '正在写入操作记录' });
   const eventsLogRelativePath = 'events.json';
@@ -140,21 +233,28 @@ export async function exportTestSessionEvidence(
   onProgress?.({ percent: 84, message: '正在写入事件记录' });
   const eventsCopyStats = await exportEventsJson(
     eventsLogPath,
-    orderedEvents,
+    exportEvents,
     filteredVideoArtifacts.streams,
     playableSegments,
     context.session,
     generatedAtMs,
+    sessionClipPlan,
   );
   const operationsJsonRelativePath = 'operations.json';
   const operationsJsonPath = path.resolve(exportDir, operationsJsonRelativePath);
-  const operationRecords = context.operations ?? [];
   const operationsPayload = JSON.stringify({
     schemaVersion: OPERATION_RECORDS_SCHEMA_VERSION,
     kind: OPERATION_RECORDS_KIND,
     generatedAtMs,
     sessionId: context.session.sessionId,
-    records: operationRecords,
+    range: sessionClipPlan ? {
+      requestedStartMs: sessionClipPlan.requestedStartMs,
+      requestedEndMs: sessionClipPlan.requestedEndMs,
+      actualStartMs: sessionClipPlan.actualStartMs,
+      actualEndMs: sessionClipPlan.actualEndMs,
+      isPrecise: sessionClipPlan.isPrecise,
+    } : undefined,
+    records: exportOperations,
   }, null, 2);
   await writeFile(operationsJsonPath, operationsPayload, 'utf-8');
   const copyStats = {
@@ -180,14 +280,23 @@ export async function exportTestSessionEvidence(
       eventsLogRelativePath,
       operationsJsonRelativePath,
       generatedAtMs,
-      eventCount,
-      stepEventCount,
+      eventCount: exportEvents.length, stepEventCount: exportEvents.filter((event) => event.eventType === 'step_captured').length,
       videoStreamCount: filteredVideoArtifacts.streams.length,
       videoSegmentCount: filteredVideoArtifacts.segments.length,
-      playableVideoSegmentCount: playableSegments.length,
+      playableVideoSegmentCount: exportedPlayableSegmentCount,
       copiedFileCount: finalCopyStats.fileCount,
       copiedBytes: finalCopyStats.byteCount,
       privacyAcknowledgedAt,
+      range: sessionClipPlan ? {
+        requestedStartMs: sessionClipPlan.requestedStartMs!,
+        requestedEndMs: sessionClipPlan.requestedEndMs!,
+        actualStartMs: sessionClipPlan.actualStartMs!,
+        actualEndMs: sessionClipPlan.actualEndMs!,
+      } : undefined,
+      clipMode: sessionClipPlan ? clipMode : undefined,
+      exportedDurationMs: sessionClipPlan
+        ? Math.max(...sessionClipPlan.streamPlans.map((p) => p.totalDurationMs), 0)
+        : undefined,
     };
   }
 
@@ -205,14 +314,23 @@ export async function exportTestSessionEvidence(
     operationsJsonPath,
     operationsJsonRelativePath,
     generatedAtMs,
-    eventCount,
-    stepEventCount,
+    eventCount: exportEvents.length, stepEventCount: exportEvents.filter((event) => event.eventType === 'step_captured').length,
     videoStreamCount: filteredVideoArtifacts.streams.length,
     videoSegmentCount: filteredVideoArtifacts.segments.length,
-    playableVideoSegmentCount: playableSegments.length,
+    playableVideoSegmentCount: exportedPlayableSegmentCount,
     copiedFileCount: finalCopyStats.fileCount,
     copiedBytes: finalCopyStats.byteCount,
     privacyAcknowledgedAt,
+    range: sessionClipPlan ? {
+      requestedStartMs: sessionClipPlan.requestedStartMs!,
+      requestedEndMs: sessionClipPlan.requestedEndMs!,
+      actualStartMs: sessionClipPlan.actualStartMs!,
+      actualEndMs: sessionClipPlan.actualEndMs!,
+    } : undefined,
+    clipMode: sessionClipPlan ? clipMode : undefined,
+    exportedDurationMs: sessionClipPlan
+      ? Math.max(...sessionClipPlan.streamPlans.map((p) => p.totalDurationMs), 0)
+      : undefined,
   };
 }
 
@@ -427,6 +545,7 @@ async function exportEventsJson(
   playableSegments: ReqCaseShadowRecorderTestSessionVideoSegment[],
   session: ReqCaseShadowRecorderTestSessionState,
   generatedAtMs: number,
+  sessionClipPlan?: SessionClipPlan,
 ): Promise<CopyStats> {
   const displayLabelById = new Map(
     videoStreams
@@ -480,6 +599,12 @@ async function exportEventsJson(
         streamId: matchedVideo?.streamId ?? '',
         segmentId: matchedVideo?.segmentId ?? '',
         videoFile: videoFile ? `video/${videoFile}` : '',
+        videoOffsetMs: (() => {
+          const streamPlan = matchedVideo?.streamId && sessionClipPlan
+            ? sessionClipPlan.streamPlans.find((p) => p.streamId === matchedVideo.streamId)
+            : undefined;
+          return streamPlan ? mapWallClockToVideoOffsetMs(event.occurredAtMs, streamPlan) : undefined;
+        })(),
       };
     });
 
@@ -488,6 +613,13 @@ async function exportEventsJson(
     kind: 'reqcase.test-session-events',
     generatedAtMs,
     sessionId: session.sessionId,
+    range: sessionClipPlan ? {
+      requestedStartMs: sessionClipPlan.requestedStartMs,
+      requestedEndMs: sessionClipPlan.requestedEndMs,
+      actualStartMs: sessionClipPlan.actualStartMs,
+      actualEndMs: sessionClipPlan.actualEndMs,
+      isPrecise: sessionClipPlan.isPrecise,
+    } : undefined,
     records,
   }, null, 2);
   await mkdir(path.dirname(targetPath), { recursive: true });
@@ -605,7 +737,8 @@ async function exportMergedPlaybackVideos(
   targetVideoDir: string,
   videoStreams: ReqCaseShadowRecorderTestSessionVideoStream[],
   playableSegments: ReqCaseShadowRecorderTestSessionVideoSegment[],
-  onStream?: (index: number, total: number) => void,
+  onStream?: (index: number, total: number, streamRatio?: number) => void,
+  sessionClipPlan?: SessionClipPlan,
 ): Promise<CopyStats> {
   const segmentsByStream = new Map<string, ReqCaseShadowRecorderTestSessionVideoSegment[]>();
   for (const segment of playableSegments) {
@@ -627,11 +760,25 @@ async function exportMergedPlaybackVideos(
   const multipleStreams = streamEntries.length > 1;
 
   for (const [index, entry] of streamEntries.entries()) {
-    onStream?.(index, streamEntries.length);
     const outputFileName = buildMergedVideoFileName(entry.stream, index, multipleStreams);
     const outputPath = path.resolve(targetVideoDir, outputFileName);
     await mkdir(path.dirname(outputPath), { recursive: true });
-    const stats = await exportMergedStreamVideo(sourceSessionDir, entry.segments, outputPath);
+    const streamPlan = sessionClipPlan?.streamPlans.find((p) => p.streamId === entry.streamId);
+    let stats: CopyStats;
+    if (streamPlan) {
+      onStream?.(index, streamEntries.length, 0);
+      stats = await renderStreamClipVideo({
+        plan: streamPlan,
+        outputPath,
+        onProgress: (progress) => {
+          onStream?.(index, streamEntries.length, progress.percent / 100);
+        },
+      });
+      onStream?.(index, streamEntries.length, 1);
+    } else {
+      onStream?.(index, streamEntries.length, 1);
+      stats = await exportMergedStreamVideo(sourceSessionDir, entry.segments, outputPath);
+    }
     fileCount += stats.fileCount;
     byteCount += stats.byteCount;
   }
@@ -703,9 +850,7 @@ async function exportMergedStreamVideo(
   }
 
   const concatListPath = path.resolve(path.dirname(outputPath), `${path.basename(outputPath, '.mp4')}.concat.txt`);
-  const concatPayload = resolvedSegments
-    .map((segmentPath) => `file '${segmentPath.replaceAll("'", "'\\''").replaceAll('\\', '/')}'`)
-    .join('\n');
+  const concatPayload = resolvedSegments.map((segmentPath) => ffmpegConcatFileLine(segmentPath)).join('\n');
   await writeFile(concatListPath, concatPayload, 'utf-8');
 
   await runFfmpegConcat(ffmpegPath, concatListPath, outputPath);

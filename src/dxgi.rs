@@ -3,28 +3,31 @@ use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::time::Instant;
 
 use once_cell::sync::Lazy;
-use windows::Win32::Foundation::{CloseHandle, HWND, RECT};
+use windows::Win32::Foundation::{BOOL, CloseHandle, HWND, LPARAM, POINT, RECT};
 use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_DRIVER_TYPE_UNKNOWN};
 use windows::Win32::Graphics::Direct3D11::{
     D3D11_CPU_ACCESS_READ, D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAP_READ,
     D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
 };
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
     DXGI_ERROR_MORE_DATA, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, IDXGIAdapter1,
     IDXGIDevice, IDXGIFactory1, IDXGIOutput1, IDXGIOutputDuplication,
 };
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+    EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    MonitorFromPoint, MonitorFromWindow,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowRect, GetWindowTextLengthW, GetWindowTextW,
-    GetWindowThreadProcessId,
+    GA_ROOT, GW_HWNDNEXT, GetAncestor, GetClassNameW, GetForegroundWindow, GetTopWindow, GetWindow,
+    GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
+    IsWindowVisible, WindowFromPoint,
 };
 use windows::core::{Interface, PWSTR};
 
@@ -331,6 +334,131 @@ pub(crate) fn get_active_window_context() -> Result<WindowContext, RecorderError
         },
         monitor_rect,
     })
+}
+
+fn monitor_rect_from_handle(monitor: HMONITOR) -> Result<Rect, RecorderError> {
+    let mut monitor_info = MONITORINFO {
+        cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    let found = unsafe { GetMonitorInfoW(monitor, &mut monitor_info) }.as_bool();
+    if !found {
+        return Err(RecorderError::WindowApiFailed(
+            "GetMonitorInfoW failed".to_string(),
+        ));
+    }
+    Ok(Rect {
+        left: monitor_info.rcMonitor.left,
+        top: monitor_info.rcMonitor.top,
+        right: monitor_info.rcMonitor.right,
+        bottom: monitor_info.rcMonitor.bottom,
+    })
+}
+
+pub fn monitor_rect_at_point(x: i32, y: i32) -> Result<Rect, RecorderError> {
+    let monitor = unsafe { MonitorFromPoint(POINT { x, y }, MONITOR_DEFAULTTONEAREST) };
+    monitor_rect_from_handle(monitor)
+}
+
+pub fn window_rect_at_point(x: i32, y: i32) -> Result<(Rect, Rect), RecorderError> {
+    let mut hwnd = unsafe { WindowFromPoint(POINT { x, y }) };
+    if hwnd.0.is_null() {
+        return Err(RecorderError::WindowApiFailed(
+            "WindowFromPoint returned null".to_string(),
+        ));
+    }
+    let root = unsafe { GetAncestor(hwnd, GA_ROOT) };
+    if !root.0.is_null() {
+        hwnd = root;
+    }
+    let mut rect = RECT::default();
+    unsafe {
+        GetWindowRect(hwnd, &mut rect)
+            .map_err(|err| RecorderError::WindowApiFailed(format!("GetWindowRect: {err:?}")))?;
+    }
+    if rect.right <= rect.left || rect.bottom <= rect.top {
+        return Err(RecorderError::WindowApiFailed(
+            "window bounds are empty".to_string(),
+        ));
+    }
+    let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
+    Ok((
+        Rect {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+        },
+        monitor_rect_from_handle(monitor)?,
+    ))
+}
+
+pub fn top_level_window_rect_at_point(x: i32, y: i32, ignore_hwnd: isize) -> Option<Rect> {
+    let mut hwnd = unsafe { GetTopWindow(HWND(std::ptr::null_mut())) }.ok()?;
+    let mut seen = 0u32;
+    while !hwnd.0.is_null() && seen < 512 {
+        seen += 1;
+        let current = hwnd.0 as isize;
+        let next = unsafe { GetWindow(hwnd, GW_HWNDNEXT) }.unwrap_or(HWND(std::ptr::null_mut()));
+        if current != ignore_hwnd && window_frame_contains_point(hwnd, x, y) {
+            let mut rect = RECT::default();
+            if unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok() {
+                return Some(Rect {
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                });
+            }
+        }
+        hwnd = next;
+    }
+    None
+}
+
+fn window_frame_contains_point(hwnd: HWND, x: i32, y: i32) -> bool {
+    if hwnd.0.is_null()
+        || unsafe { !IsWindowVisible(hwnd).as_bool() }
+        || unsafe { IsIconic(hwnd).as_bool() }
+    {
+        return false;
+    }
+    if window_is_cloaked(hwnd) || is_desktop_window(hwnd) {
+        return false;
+    }
+    let mut rect = RECT::default();
+    if unsafe { GetWindowRect(hwnd, &mut rect) }.is_err() {
+        return false;
+    }
+    x >= rect.left
+        && x < rect.right
+        && y >= rect.top
+        && y < rect.bottom
+        && rect.right - rect.left > 1
+        && rect.bottom - rect.top > 1
+}
+
+fn window_is_cloaked(hwnd: HWND) -> bool {
+    let mut cloaked = 0u32;
+    let ok = unsafe {
+        DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED,
+            &mut cloaked as *mut u32 as *mut _,
+            std::mem::size_of::<u32>() as u32,
+        )
+    };
+    ok.is_ok() && cloaked != 0
+}
+
+fn is_desktop_window(hwnd: HWND) -> bool {
+    let mut buffer = [0u16; 64];
+    let len = unsafe { GetClassNameW(hwnd, &mut buffer) };
+    if len <= 0 {
+        return false;
+    }
+    let class = String::from_utf16_lossy(&buffer[..len as usize]);
+    class == "Progman" || class == "WorkerW"
 }
 
 fn query_process_name(pid: u32) -> Result<String, RecorderError> {
@@ -881,6 +1009,58 @@ fn capture_desktop_bgra(
     };
 
     resolve_dxgi_retry_result(result)
+}
+
+pub struct ScreenshotMonitorFrame {
+    pub origin_x: i32,
+    pub origin_y: i32,
+    pub width: u32,
+    pub height: u32,
+    pub bgra: Vec<u8>,
+}
+
+pub fn list_monitor_rects() -> Vec<Rect> {
+    let mut monitors = Vec::new();
+    let monitors_ptr: *mut Vec<Rect> = &mut monitors;
+    unsafe extern "system" fn enum_monitor(
+        monitor: HMONITOR,
+        _: HDC,
+        _: *mut RECT,
+        data: LPARAM,
+    ) -> BOOL {
+        let monitors = unsafe { &mut *(data.0 as *mut Vec<Rect>) };
+        if let Ok(rect) = monitor_rect_from_handle(monitor) {
+            monitors.push(rect);
+        }
+        true.into()
+    }
+    let _ = unsafe {
+        EnumDisplayMonitors(
+            HDC(std::ptr::null_mut()),
+            None,
+            Some(enum_monitor),
+            LPARAM(monitors_ptr as isize),
+        )
+    };
+    monitors
+}
+
+pub fn capture_monitor_bgra_for_screenshot(
+    monitor: Rect,
+) -> Result<ScreenshotMonitorFrame, RecorderError> {
+    let frame = capture_desktop_bgra(true, Some(&monitor), false)?;
+    if frame.width == 0 || frame.height == 0 || frame.data.is_empty() {
+        return Err(RecorderError::DxgiCaptureFailed(
+            "received empty frame".to_string(),
+        ));
+    }
+    Ok(ScreenshotMonitorFrame {
+        origin_x: monitor.left,
+        origin_y: monitor.top,
+        width: frame.width,
+        height: frame.height,
+        bgra: frame.data,
+    })
 }
 
 #[cfg(test)]

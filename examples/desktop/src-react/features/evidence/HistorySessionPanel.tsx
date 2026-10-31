@@ -45,6 +45,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
   // Video playback position state
   const [currentTimeMs, setCurrentTimeMs] = useState(0);
   const [segmentDurationMs, setSegmentDurationMs] = useState(0);
+  const [segmentRangeEndIndex, setSegmentRangeEndIndex] = useState<number | null>(null);
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -53,6 +54,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
     setName(props.session?.name ?? '');
     setNotes(props.session?.notes ?? '');
     setSegmentIndex(0);
+    setSegmentRangeEndIndex(null);
     setPlaying(false);
     setCurrentTimeMs(0);
     setSegmentDurationMs(0);
@@ -77,6 +79,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
         .sort((left, right) => left.startedAtMs - right.startedAtMs);
       setSegments(playable);
       setSegmentIndex(0);
+      setSegmentRangeEndIndex(null);
     }).catch((error) => {
       if (!cancelled) {
         props.onError(error instanceof Error ? error.message : String(error));
@@ -243,13 +246,14 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
     }
   }
 
-  async function exportSession(): Promise<void> {
+  async function exportSession(options?: { range?: { startMs: number; endMs: number }; clipMode?: 'precise' | 'fast' }): Promise<void> {
     const api = window.reqcaseShadowRecorder;
     if (!props.session || !api.exportTestSessionEvidence) {
       props.onError('当前环境不能导出会话');
       return;
     }
-    const bundleName = props.session.name?.trim() || props.session.sessionId;
+    const baseName = props.session.name?.trim() || props.session.sessionId;
+    const bundleName = options?.range ? `${baseName}-clip` : baseName;
     setBusy(true);
     setIsExporting(true);
     try {
@@ -260,6 +264,8 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
         targetDir: '',
         zipFileName: `${bundleName}.zip`,
         privacyAcknowledgedAt: new Date().toISOString(),
+        range: options?.range,
+        clipMode: options?.clipMode,
       });
     } catch {
       // 完成、取消和失败只由主窗口的导出进度通知显示一次。
@@ -339,13 +345,40 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
               语义步骤
             </button>
           ) : null}
+          {activeSegment ? (() => {
+            const rangeMinIdx = segmentRangeEndIndex !== null ? Math.min(segmentIndex, segmentRangeEndIndex) : segmentIndex;
+            const rangeMaxIdx = segmentRangeEndIndex !== null ? Math.max(segmentIndex, segmentRangeEndIndex) : segmentIndex;
+            const hasMultiple = rangeMinIdx !== rangeMaxIdx && segments.length > 0;
+            const startSeg = segments[rangeMinIdx] || activeSegment;
+            const endSeg = segments[rangeMaxIdx] || activeSegment;
+            return (
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                disabled={busy || isLive || isExporting}
+                onClick={() => {
+                  void exportSession({
+                    range: {
+                      startMs: startSeg.startedAtMs,
+                      endMs: endSeg.endedAtMs,
+                    },
+                    clipMode: "precise",
+                  });
+                }}
+                title={hasMultiple ? `导出切片 #${rangeMinIdx + 1} 至 #${rangeMaxIdx + 1} 对应的时间片段` : "导出当前选中切片对应的时间片段"}
+              >
+                {hasMultiple ? `导出切片 (#${rangeMinIdx + 1}-#${rangeMaxIdx + 1})` : "导出当前切片"}
+              </button>
+            );
+          })() : null}
           <button
             type="button"
             className="btn btn-primary btn-sm history-export-btn"
             disabled={busy || isLive || isExporting}
             onClick={() => { void exportSession(); }}
+            title="导出整场会话全部切片"
           >
-            {isExporting ? '正在导出…' : '导出'}
+            {isExporting ? '正在导出…' : '导出全部'}
           </button>
         </div>
       </header>
@@ -443,7 +476,8 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
               onPause={() => setPlaying(false)}
               onEnded={() => {
                 setSegmentIndex((current) => {
-                  if (current + 1 < segments.length) {
+                  const rangeMax = segmentRangeEndIndex !== null ? Math.max(segmentIndex, segmentRangeEndIndex) : segments.length - 1;
+                  if (current + 1 <= rangeMax && current + 1 < segments.length) {
                     return current + 1;
                   }
                   setPlaying(false);
@@ -502,7 +536,10 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
               type="button"
               className="transport-btn transport-btn-segment"
               disabled={segmentIndex <= 0}
-              onClick={() => setSegmentIndex((current) => Math.max(0, current - 1))}
+              onClick={() => {
+                setSegmentRangeEndIndex(null);
+                setSegmentIndex((current) => Math.max(0, current - 1));
+              }}
               title="切换至上一段"
               aria-label="上一段"
             >
@@ -512,7 +549,10 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
               type="button"
               className="transport-btn transport-btn-segment"
               disabled={segmentIndex >= segments.length - 1}
-              onClick={() => setSegmentIndex((current) => Math.min(segments.length - 1, current + 1))}
+              onClick={() => {
+                setSegmentRangeEndIndex(null);
+                setSegmentIndex((current) => Math.min(segments.length - 1, current + 1));
+              }}
               title="切换至下一段"
               aria-label="下一段"
             >
@@ -562,31 +602,89 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
       </div>
 
       {/* 5. Segment Playlist Strip (切片切换导航条) */}
-      {segments.length > 1 ? (
-        <div className="history-segments-strip" aria-label="切片列表">
-          <span className="strip-title">录像切片 ({segments.length})：</span>
-          <div className="strip-items-scroll">
-            {segments.map((seg, idx) => {
-              const isSelected = idx === segmentIndex;
-              return (
-                <button
-                  key={seg.segmentId || idx}
-                  type="button"
-                  className={`segment-strip-chip ${isSelected ? 'is-active' : ''}`}
-                  onClick={() => {
-                    setSegmentIndex(idx);
-                    setPlaying(true);
-                  }}
-                  title={`点击播放切片 ${idx + 1}`}
-                >
-                  <span className="chip-idx">#{idx + 1}</span>
-                  <span className="chip-duration">{formatClock(seg.durationMs || 0)}</span>
-                </button>
-              );
-            })}
+      {segments.length > 1 ? (() => {
+        const rangeMinIdx = segmentRangeEndIndex !== null ? Math.min(segmentIndex, segmentRangeEndIndex) : segmentIndex;
+        const rangeMaxIdx = segmentRangeEndIndex !== null ? Math.max(segmentIndex, segmentRangeEndIndex) : segmentIndex;
+        const isMultiSelect = segmentRangeEndIndex !== null && rangeMinIdx !== rangeMaxIdx;
+        const startSeg = segments[rangeMinIdx] || activeSegment;
+        const endSeg = segments[rangeMaxIdx] || activeSegment;
+
+        return (
+          <div className="history-segments-strip" aria-label="切片列表">
+            <div className="strip-header-row">
+              <span className="strip-title">录像切片 ({segments.length})</span>
+              {isMultiSelect ? (
+                <div className="strip-inline-action-bar">
+                  <span className="strip-selection-summary">
+                    ✂️ 已选 #{rangeMinIdx + 1} - #{rangeMaxIdx + 1} ({rangeMaxIdx - rangeMinIdx + 1} 段 · {formatClock(Math.max(0, endSeg.endedAtMs - startSeg.startedAtMs))})
+                  </span>
+                  <button
+                    type="button"
+                    className="btn-strip-action btn-strip-export"
+                    disabled={busy || isLive || isExporting}
+                    onClick={() => {
+                      void exportSession({
+                        range: {
+                          startMs: startSeg.startedAtMs,
+                          endMs: endSeg.endedAtMs,
+                        },
+                        clipMode: 'precise',
+                      });
+                    }}
+                    title={`导出切片 #${rangeMinIdx + 1} 至 #${rangeMaxIdx + 1} 对应的时间片段`}
+                  >
+                    {isExporting ? '导出中…' : `导出切片 (#${rangeMinIdx + 1}-#${rangeMaxIdx + 1})`}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-strip-action btn-strip-reset"
+                    onClick={() => setSegmentRangeEndIndex(null)}
+                    title="取消多选"
+                  >
+                    重置
+                  </button>
+                </div>
+              ) : (
+                <span className="strip-hint">
+                  💡 按住 Shift 点击切片可连续多选导出
+                </span>
+              )}
+            </div>
+            <div className="strip-items-scroll">
+              {segments.map((seg, idx) => {
+                const isSelected = idx === segmentIndex;
+                const isInRange = isMultiSelect && idx >= rangeMinIdx && idx <= rangeMaxIdx;
+                return (
+                  <button
+                    key={seg.segmentId || idx}
+                    type="button"
+                    className={`segment-strip-chip ${isSelected ? 'is-active' : ''} ${isInRange ? 'is-in-range' : ''}`}
+                    onClick={(e) => {
+                      if (e.shiftKey) {
+                        const minIdx = Math.min(segmentIndex, idx);
+                        const maxIdx = Math.max(segmentIndex, idx);
+                        setSegmentIndex(minIdx);
+                        setSegmentRangeEndIndex(minIdx === maxIdx ? null : maxIdx);
+                        if (minIdx !== maxIdx) {
+                          props.onNotice?.(`已选取切片 #${minIdx + 1} 至 #${maxIdx + 1}`);
+                        }
+                      } else {
+                        setSegmentIndex(idx);
+                        setSegmentRangeEndIndex(null);
+                        setPlaying(true);
+                      }
+                    }}
+                    title={`切片 #${idx + 1} (${formatClock(seg.durationMs || 0)}) · 按住 Shift 连续多选`}
+                  >
+                    <span className="chip-idx">#{idx + 1}</span>
+                    <span className="chip-duration">{formatClock(seg.durationMs || 0)}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ) : null}
+        );
+      })() : null}
     </section>
   );
 }

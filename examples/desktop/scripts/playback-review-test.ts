@@ -4,7 +4,7 @@ import {
   frameStepMs,
   nextPlaybackRate,
   playbackFrameRate,
-} from '../src-react/lib/playback-review.ts';
+} from '../src-react/lib/playback-review';
 
 assert.equal(nextPlaybackRate(1), 1.5);
 assert.equal(nextPlaybackRate(1.5), 2);

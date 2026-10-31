@@ -1,5 +1,10 @@
 name: Desktop Windows Installer
 
+# Manual only. Releases are built on the local Windows VM (see docs/release-operations.md).
+# Builds the Windows x64 installer on a clean runner, runs the quality gate first,
+# writes SHA256SUMS and a build provenance attestation, and on a v* tag opens a
+# draft GitHub Release. The installer is not Authenticode-signed.
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,17 +12,24 @@ on:
         description: Build WiX MSI in addition to the NSIS installer.
         required: false
         default: "false"
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: read
 
+concurrency:
+  group: desktop-installer-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   windows-installer:
     runs-on: windows-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -29,8 +41,12 @@ jobs:
           cache: npm
           cache-dependency-path: examples/desktop/package-lock.json
 
+      # Same rustc as the local Windows build VM, so clippy sees the same lints.
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          components: rustfmt, clippy
+          targets: x86_64-pc-windows-msvc
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
@@ -39,65 +55,106 @@ jobs:
         run: npm ci
         working-directory: examples/desktop
 
-      - name: Ensure Windows Rust target
+      - name: Quality gate
         shell: pwsh
-        run: rustup target add x86_64-pc-windows-msvc
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild
 
       - name: Prepare FFmpeg
         run: npm run prepare:ffmpeg
         working-directory: examples/desktop
 
+      - name: Build MSI and NSIS installers
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
+        shell: pwsh
+        working-directory: examples/desktop
+        run: |
+          # dist:msi clears release/, so build MSI first and add NSIS from the unpacked app.
+          npm run dist:msi
+          if ($LASTEXITCODE -ne 0) { throw "dist:msi failed" }
+          npx electron-builder --win nsis --prepackaged release\win-unpacked
+          if ($LASTEXITCODE -ne 0) { throw "NSIS from prepackaged app failed" }
+
       - name: Build NSIS installer
+        if: github.event_name != 'workflow_dispatch' || github.event.inputs.build_msi != 'true'
         shell: pwsh
         working-directory: examples/desktop
-        run: npm run dist:nsis
+        run: |
+          npm run dist:nsis
+          if ($LASTEXITCODE -ne 0) { throw "dist:nsis failed" }
 
-      - name: Verify NSIS installer artifact
+      - name: Verify installer contents and write SHA256SUMS
+        id: verify
         shell: pwsh
         run: |
-          $artifacts = @(Get-ChildItem -Path "examples/desktop/release" -Filter "*.exe" -File)
-          if ($artifacts.Count -eq 0) {
-            throw "No NSIS .exe installer was produced under examples/desktop/release."
-          }
+          $ErrorActionPreference = 'Stop'
+          $release = "examples/desktop/release"
+          $installers = @(Get-ChildItem -Path $release -File | Where-Object { $_.Extension -in '.exe', '.msi' })
+          if ($installers.Count -eq 0) { throw "No installer was produced under $release." }
 
-          "## NSIS Installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          foreach ($artifact in $artifacts) {
-            "- $($artifact.Name) ($([Math]::Round($artifact.Length / 1MB, 2)) MB)" |
-              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
+          # The packaged native addon must be the x64 release build, not a debug copy.
+          $packaged = Get-ChildItem -Path "$release/win-unpacked/resources" -Filter 'shadow_recorder.node' -File
+          $built = "target/x86_64-pc-windows-msvc/release/shadow_recorder.node"
+          if (-not (Test-Path $built)) { throw "Release native addon not found at $built." }
+          $packagedHash = (Get-FileHash -Algorithm SHA256 $packaged.FullName).Hash
+          $builtHash = (Get-FileHash -Algorithm SHA256 $built).Hash
+          if ($packagedHash -ne $builtHash) { throw "Packaged shadow_recorder.node does not match the release build." }
+          $bytes = [System.IO.File]::ReadAllBytes($packaged.FullName)
+          $peOffset = [BitConverter]::ToInt32($bytes, 0x3C)
+          $machine = [BitConverter]::ToUInt16($bytes, $peOffset + 4)
+          if ($machine -ne 0x8664) { throw ("Packaged native addon machine is 0x{0:X4}, expected x64 (0x8664)." -f $machine) }
 
-      - name: Upload NSIS installer
+          $version = (Get-Content examples/desktop/package.json -Raw -Encoding UTF8 | ConvertFrom-Json).version
+          $sums = Join-Path $release "SHA256SUMS-$version.txt"
+          $lines = foreach ($file in $installers) {
+            "{0}  {1}" -f (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant(), $file.Name
+          }
+          $lines | Set-Content -Path $sums -Encoding ascii
+          "sums=$sums" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $summary = @("## Windows installer $version", "", "Commit: ``$env:GITHUB_SHA``", "")
+          foreach ($file in $installers) {
+            $sig = (Get-AuthenticodeSignature $file.FullName).Status
+            $summary += "- $($file.Name): $([Math]::Round($file.Length / 1MB, 2)) MB, signature $sig"
+          }
+          $summary += ""
+          $summary += '```'
+          $summary += $lines
+          $summary += '```'
+          $summary -join "`n" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            examples/desktop/release/*.exe
+            examples/desktop/release/*.msi
+
+      - name: Upload installers
         uses: actions/upload-artifact@v4
         with:
-          name: shadow-recorder-nsis-windows-x64
-          path: examples/desktop/release/*.exe
+          name: shadow-recorder-windows-x64-${{ steps.verify.outputs.version }}
+          path: |
+            examples/desktop/release/*.exe
+            examples/desktop/release/*.msi
+            examples/desktop/release/SHA256SUMS-*.txt
           if-no-files-found: error
 
-      - name: Build WiX MSI
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
+      - name: Create draft GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
-        working-directory: examples/desktop
-        run: npm run dist:msi
-
-      - name: Verify MSI artifact
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
-        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          $artifacts = @(Get-ChildItem -Path "examples/desktop/release" -Filter "*.msi" -File)
-          if ($artifacts.Count -eq 0) {
-            throw "No MSI installer was produced under examples/desktop/release."
+          gh release view $env:TAG *> $null
+          if ($LASTEXITCODE -eq 0) {
+            Write-Host "Release $env:TAG already exists; leaving it unchanged."
+            exit 0
           }
-
-          "## MSI Installer" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          foreach ($artifact in $artifacts) {
-            "- $($artifact.Name) ($([Math]::Round($artifact.Length / 1MB, 2)) MB)" |
-              Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          }
-
-      - name: Upload MSI installer
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.build_msi == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: shadow-recorder-msi-windows-x64
-          path: examples/desktop/release/*.msi
-          if-no-files-found: error
+          $files = @(Get-ChildItem examples/desktop/release -File |
+            Where-Object { $_.Extension -in '.exe', '.msi' -or $_.Name -like 'SHA256SUMS-*.txt' } |
+            ForEach-Object { $_.FullName })
+          $notes = "Built by GitHub Actions from $env:GITHUB_SHA. The installer is not code-signed; Windows SmartScreen may warn. Verify with SHA256SUMS or ``gh attestation verify <file> --repo $env:GITHUB_REPOSITORY``."
+          gh release create $env:TAG --draft --target $env:GITHUB_SHA --title $env:TAG --notes $notes @files
+          if ($LASTEXITCODE -ne 0) { throw "gh release create failed" }

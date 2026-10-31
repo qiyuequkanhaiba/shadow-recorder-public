@@ -405,260 +405,260 @@ pub fn export_defect_pack_with_operations(
     let pack_dir = PathBuf::from(&request.target_dir).join(pack_name);
     let created_new = !pack_dir.exists();
     let export_result = (|| -> Result<DefectPackResult, DefectPackError> {
-    fs::create_dir_all(&pack_dir)?;
-    fs::create_dir_all(pack_dir.join("video").join("segments"))?;
-    fs::create_dir_all(pack_dir.join("screenshots"))?;
+        fs::create_dir_all(&pack_dir)?;
+        fs::create_dir_all(pack_dir.join("video").join("segments"))?;
+        fs::create_dir_all(pack_dir.join("screenshots"))?;
 
-    let window_steps = steps
-        .iter()
-        .filter(|step| {
-            step.started_at_ms >= request.window_start_ms
-                && step.started_at_ms <= request.window_end_ms
-        })
-        .cloned()
-        .collect::<Vec<_>>();
+        let window_steps = steps
+            .iter()
+            .filter(|step| {
+                step.started_at_ms >= request.window_start_ms
+                    && step.started_at_ms <= request.window_end_ms
+            })
+            .cloned()
+            .collect::<Vec<_>>();
 
-    let mut window_operations = operations
-        .iter()
-        .filter(|operation| {
-            !operation.ignored
-                && operation.started_at_ms >= request.window_start_ms
-                && operation.started_at_ms <= request.window_end_ms
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-    // Steps-only sessions: still emit honest legacyUnknown operations for export consumers.
-    if window_operations.is_empty() && !window_steps.is_empty() {
-        window_operations = legacy_operations_from_steps(&session.session_id, &window_steps);
-    }
+        let mut window_operations = operations
+            .iter()
+            .filter(|operation| {
+                !operation.ignored
+                    && operation.started_at_ms >= request.window_start_ms
+                    && operation.started_at_ms <= request.window_end_ms
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        // Steps-only sessions: still emit honest legacyUnknown operations for export consumers.
+        if window_operations.is_empty() && !window_steps.is_empty() {
+            window_operations = legacy_operations_from_steps(&session.session_id, &window_steps);
+        }
 
-    let target_stream_id = segments
-        .iter()
-        .find(|s| {
-            if let Some(target_d) = session.target_display_id.as_deref() {
-                s.display_id.as_deref() == Some(target_d)
-            } else {
-                false
-            }
-        })
-        .map(|s| s.stream_id.clone())
-        .or_else(|| segments.first().map(|s| s.stream_id.clone()));
-
-    let window_segments = segments
-        .iter()
-        .filter(|segment| {
-            let stream_matches = target_stream_id
-                .as_ref()
-                .map(|t| t == &segment.stream_id)
-                .unwrap_or(true);
-            stream_matches
-                && segment.ended_at_ms >= request.window_start_ms
-                && segment.started_at_ms <= request.window_end_ms
-                && (segment.is_playable
-                    || segment.file_path.is_some()
-                    || segment.relative_path.is_some())
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-
-    let defect_note = request.note.as_deref().or(request.actual.as_deref());
-    let repro_text = if !window_operations.is_empty() {
-        render_repro_operations_text(
-            &session.session_id,
-            Some(request.marked_at_ms),
-            Some(request.window_start_ms),
-            Some(request.window_end_ms),
-            defect_note,
-            &window_operations,
-        )
-    } else {
-        render_repro_steps_text(
-            &session.session_id,
-            Some(request.marked_at_ms),
-            Some(request.window_start_ms),
-            Some(request.window_end_ms),
-            defect_note,
-            &window_steps,
-        )
-    };
-    let repro_steps_path = pack_dir.join("repro_steps.txt");
-    fs::write(&repro_steps_path, repro_text.as_bytes())?;
-
-    let steps_path = pack_dir.join("steps.json");
-    write_json(&steps_path, &window_steps)?;
-
-    let operations_path = pack_dir.join("operations.json");
-    let operations_payload = serde_json::json!({
-        "schemaVersion": operation_schema_version(),
-        "builderVersion": OPERATION_BUILDER_VERSION,
-        "kind": "reqcase.test-session-operations-export",
-        "sessionId": session.session_id,
-        "windowStartMs": request.window_start_ms,
-        "windowEndMs": request.window_end_ms,
-        "items": window_operations,
-        "legacyAdapted": operations.is_empty() && !window_steps.is_empty(),
-    });
-    write_json(&operations_path, &operations_payload)?;
-
-    let mut screenshot_count = 0u32;
-    for (index, step) in window_steps.iter().enumerate() {
-        if let Some(source) = step
-            .full_image_path
-            .as_deref()
-            .or(step.thumb_image_path.as_deref())
-        {
-            let source_path = Path::new(source);
-            if !source_path.exists() {
-                // Try relative to session dir.
-                let alt = session_dir.join(source);
-                if alt.exists() {
-                    let dest = pack_dir.join("screenshots").join(format!(
-                        "{:02}-{}.webp",
-                        index + 1,
-                        sanitize_file_stem(&step.step_id)
-                    ));
-                    fs::copy(&alt, &dest)?;
-                    screenshot_count = screenshot_count.saturating_add(1);
+        let target_stream_id = segments
+            .iter()
+            .find(|s| {
+                if let Some(target_d) = session.target_display_id.as_deref() {
+                    s.display_id.as_deref() == Some(target_d)
+                } else {
+                    false
                 }
+            })
+            .map(|s| s.stream_id.clone())
+            .or_else(|| segments.first().map(|s| s.stream_id.clone()));
+
+        let window_segments = segments
+            .iter()
+            .filter(|segment| {
+                let stream_matches = target_stream_id
+                    .as_ref()
+                    .map(|t| t == &segment.stream_id)
+                    .unwrap_or(true);
+                stream_matches
+                    && segment.ended_at_ms >= request.window_start_ms
+                    && segment.started_at_ms <= request.window_end_ms
+                    && (segment.is_playable
+                        || segment.file_path.is_some()
+                        || segment.relative_path.is_some())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let defect_note = request.note.as_deref().or(request.actual.as_deref());
+        let repro_text = if !window_operations.is_empty() {
+            render_repro_operations_text(
+                &session.session_id,
+                Some(request.marked_at_ms),
+                Some(request.window_start_ms),
+                Some(request.window_end_ms),
+                defect_note,
+                &window_operations,
+            )
+        } else {
+            render_repro_steps_text(
+                &session.session_id,
+                Some(request.marked_at_ms),
+                Some(request.window_start_ms),
+                Some(request.window_end_ms),
+                defect_note,
+                &window_steps,
+            )
+        };
+        let repro_steps_path = pack_dir.join("repro_steps.txt");
+        fs::write(&repro_steps_path, repro_text.as_bytes())?;
+
+        let steps_path = pack_dir.join("steps.json");
+        write_json(&steps_path, &window_steps)?;
+
+        let operations_path = pack_dir.join("operations.json");
+        let operations_payload = serde_json::json!({
+            "schemaVersion": operation_schema_version(),
+            "builderVersion": OPERATION_BUILDER_VERSION,
+            "kind": "reqcase.test-session-operations-export",
+            "sessionId": session.session_id,
+            "windowStartMs": request.window_start_ms,
+            "windowEndMs": request.window_end_ms,
+            "items": window_operations,
+            "legacyAdapted": operations.is_empty() && !window_steps.is_empty(),
+        });
+        write_json(&operations_path, &operations_payload)?;
+
+        let mut screenshot_count = 0u32;
+        for (index, step) in window_steps.iter().enumerate() {
+            if let Some(source) = step
+                .full_image_path
+                .as_deref()
+                .or(step.thumb_image_path.as_deref())
+            {
+                let source_path = Path::new(source);
+                if !source_path.exists() {
+                    // Try relative to session dir.
+                    let alt = session_dir.join(source);
+                    if alt.exists() {
+                        let dest = pack_dir.join("screenshots").join(format!(
+                            "{:02}-{}.webp",
+                            index + 1,
+                            sanitize_file_stem(&step.step_id)
+                        ));
+                        fs::copy(&alt, &dest)?;
+                        screenshot_count = screenshot_count.saturating_add(1);
+                    }
+                    continue;
+                }
+                let dest = pack_dir.join("screenshots").join(format!(
+                    "{:02}-{}.webp",
+                    index + 1,
+                    sanitize_file_stem(&step.step_id)
+                ));
+                fs::copy(source_path, &dest)?;
+                screenshot_count = screenshot_count.saturating_add(1);
+            }
+        }
+
+        let source_bytes = segment_source_bytes(session_dir, &window_segments);
+        ensure_export_space(Path::new(&request.target_dir), source_bytes)?;
+
+        let mut video_segment_count = 0u32;
+        let mut segment_index_lines = Vec::new();
+        for (index, segment) in window_segments.iter().enumerate() {
+            let Some(source_path) = segment_source_path(session_dir, segment) else {
+                continue;
+            };
+            if !source_path.exists() {
                 continue;
             }
-            let dest = pack_dir.join("screenshots").join(format!(
-                "{:02}-{}.webp",
+            let ext = source_path
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or("mp4");
+            let dest_name = format!(
+                "{:02}-{}.{}",
                 index + 1,
-                sanitize_file_stem(&step.step_id)
+                sanitize_file_stem(&segment.segment_id),
+                ext
+            );
+            let dest = pack_dir.join("video").join("segments").join(&dest_name);
+            fs::copy(&source_path, &dest)?;
+            segment_index_lines.push(format!(
+                "{}\t{}\t{}\t{}",
+                segment.segment_id, segment.started_at_ms, segment.ended_at_ms, dest_name
             ));
-            fs::copy(source_path, &dest)?;
-            screenshot_count = screenshot_count.saturating_add(1);
+            video_segment_count = video_segment_count.saturating_add(1);
         }
-    }
+        let playlist_path = pack_dir.join("video").join("segments.txt");
+        fs::write(
+            &playlist_path,
+            if segment_index_lines.is_empty() {
+                "no playable segments in window\n".to_string()
+            } else {
+                segment_index_lines.join("\n") + "\n"
+            },
+        )?;
 
-    let source_bytes = segment_source_bytes(session_dir, &window_segments);
-    ensure_export_space(Path::new(&request.target_dir), source_bytes)?;
-
-    let mut video_segment_count = 0u32;
-    let mut segment_index_lines = Vec::new();
-    for (index, segment) in window_segments.iter().enumerate() {
-        let Some(source_path) = segment_source_path(session_dir, segment) else {
-            continue;
-        };
-        if !source_path.exists() {
-            continue;
-        }
-        let ext = source_path
-            .extension()
-            .and_then(|value| value.to_str())
-            .unwrap_or("mp4");
-        let dest_name = format!(
-            "{:02}-{}.{}",
-            index + 1,
-            sanitize_file_stem(&segment.segment_id),
-            ext
-        );
-        let dest = pack_dir.join("video").join("segments").join(&dest_name);
-        fs::copy(&source_path, &dest)?;
-        segment_index_lines.push(format!(
-            "{}\t{}\t{}\t{}",
-            segment.segment_id, segment.started_at_ms, segment.ended_at_ms, dest_name
-        ));
-        video_segment_count = video_segment_count.saturating_add(1);
-    }
-    let playlist_path = pack_dir.join("video").join("segments.txt");
-    fs::write(
-        &playlist_path,
-        if segment_index_lines.is_empty() {
-            "no playable segments in window\n".to_string()
+        let segment_files = collect_segment_files(&pack_dir.join("video").join("segments"))?;
+        let clip_path = pack_dir.join("video").join("clip.mp4");
+        let clip_built = try_build_clip_mp4(&segment_files, &clip_path)?;
+        let clip_path_str = if clip_built && clip_path.exists() {
+            Some(path_to_string(&clip_path))
         } else {
-            segment_index_lines.join("\n") + "\n"
-        },
-    )?;
+            None
+        };
 
-    let segment_files = collect_segment_files(&pack_dir.join("video").join("segments"))?;
-    let clip_path = pack_dir.join("video").join("clip.mp4");
-    let clip_built = try_build_clip_mp4(&segment_files, &clip_path)?;
-    let clip_path_str = if clip_built && clip_path.exists() {
-        Some(path_to_string(&clip_path))
-    } else {
-        None
-    };
+        let pre_window_seconds =
+            ((request.marked_at_ms.saturating_sub(request.window_start_ms)) / 1000) as u32;
+        let post_window_seconds =
+            ((request.window_end_ms.saturating_sub(request.marked_at_ms)) / 1000) as u32;
 
-    let pre_window_seconds =
-        ((request.marked_at_ms.saturating_sub(request.window_start_ms)) / 1000) as u32;
-    let post_window_seconds =
-        ((request.window_end_ms.saturating_sub(request.marked_at_ms)) / 1000) as u32;
+        let summary = DefectPackSummary {
+            session_id: session.session_id.clone(),
+            marked_at_ms: request.marked_at_ms,
+            window_start_ms: request.window_start_ms,
+            window_end_ms: request.window_end_ms,
+            pre_window_seconds,
+            post_window_seconds,
+            note: request.note.clone(),
+            expected: request.expected.clone(),
+            actual: request.actual.clone(),
+            step_count: u32::try_from(window_steps.len()).unwrap_or(u32::MAX),
+            screenshot_count,
+            video_segment_count,
+            clip_built,
+            clip_path: clip_path_str.clone(),
+            target_process_name: session.target_process_name.clone(),
+            target_capture_mode: session.target_capture_mode.clone(),
+            recording_profile: session.recording_profile.clone(),
+            privacy: DefectPackPrivacyFlags {
+                includes_screenshots: screenshot_count > 0,
+                includes_video: video_segment_count > 0 || clip_built,
+                keyboard_mode: "summary".to_string(),
+                stores_click_snapshot: true,
+            },
+        };
+        let summary_path = pack_dir.join("summary.json");
+        write_json(&summary_path, &summary)?;
 
-    let summary = DefectPackSummary {
-        session_id: session.session_id.clone(),
-        marked_at_ms: request.marked_at_ms,
-        window_start_ms: request.window_start_ms,
-        window_end_ms: request.window_end_ms,
-        pre_window_seconds,
-        post_window_seconds,
-        note: request.note.clone(),
-        expected: request.expected.clone(),
-        actual: request.actual.clone(),
-        step_count: u32::try_from(window_steps.len()).unwrap_or(u32::MAX),
-        screenshot_count,
-        video_segment_count,
-        clip_built,
-        clip_path: clip_path_str.clone(),
-        target_process_name: session.target_process_name.clone(),
-        target_capture_mode: session.target_capture_mode.clone(),
-        recording_profile: session.recording_profile.clone(),
-        privacy: DefectPackPrivacyFlags {
-            includes_screenshots: screenshot_count > 0,
-            includes_video: video_segment_count > 0 || clip_built,
-            keyboard_mode: "summary".to_string(),
-            stores_click_snapshot: true,
-        },
-    };
-    let summary_path = pack_dir.join("summary.json");
-    write_json(&summary_path, &summary)?;
+        let mut files = vec![
+            file_entry(&pack_dir, "repro_steps.txt")?,
+            file_entry(&pack_dir, "steps.json")?,
+            file_entry(&pack_dir, "operations.json")?,
+            file_entry(&pack_dir, "summary.json")?,
+            file_entry(&pack_dir, "video/segments.txt")?,
+        ];
+        if clip_built {
+            files.push(file_entry(&pack_dir, "video/clip.mp4")?);
+        }
+        append_dir_entries(
+            &pack_dir,
+            pack_dir.join("screenshots"),
+            "screenshots",
+            &mut files,
+        )?;
+        append_dir_entries(
+            &pack_dir,
+            pack_dir.join("video").join("segments"),
+            "video/segments",
+            &mut files,
+        )?;
 
-    let mut files = vec![
-        file_entry(&pack_dir, "repro_steps.txt")?,
-        file_entry(&pack_dir, "steps.json")?,
-        file_entry(&pack_dir, "operations.json")?,
-        file_entry(&pack_dir, "summary.json")?,
-        file_entry(&pack_dir, "video/segments.txt")?,
-    ];
-    if clip_built {
-        files.push(file_entry(&pack_dir, "video/clip.mp4")?);
-    }
-    append_dir_entries(
-        &pack_dir,
-        pack_dir.join("screenshots"),
-        "screenshots",
-        &mut files,
-    )?;
-    append_dir_entries(
-        &pack_dir,
-        pack_dir.join("video").join("segments"),
-        "video/segments",
-        &mut files,
-    )?;
+        let manifest = DefectPackManifest {
+            schema_version: 1,
+            kind: "reqcase.defect-pack".to_string(),
+            session_id: session.session_id.clone(),
+            created_at_ms: request.marked_at_ms,
+            files,
+        };
+        let manifest_path = pack_dir.join("manifest.json");
+        write_json(&manifest_path, &manifest)?;
 
-    let manifest = DefectPackManifest {
-        schema_version: 1,
-        kind: "reqcase.defect-pack".to_string(),
-        session_id: session.session_id.clone(),
-        created_at_ms: request.marked_at_ms,
-        files,
-    };
-    let manifest_path = pack_dir.join("manifest.json");
-    write_json(&manifest_path, &manifest)?;
-
-    Ok(DefectPackResult {
-        pack_dir: path_to_string(&pack_dir),
-        repro_steps_path: path_to_string(&repro_steps_path),
-        summary_path: path_to_string(&summary_path),
-        steps_path: path_to_string(&steps_path),
-        manifest_path: path_to_string(&manifest_path),
-        step_count: summary.step_count,
-        screenshot_count,
-        clip_path: clip_path_str,
-        clip_built,
-        video_segment_count,
-    })
+        Ok(DefectPackResult {
+            pack_dir: path_to_string(&pack_dir),
+            repro_steps_path: path_to_string(&repro_steps_path),
+            summary_path: path_to_string(&summary_path),
+            steps_path: path_to_string(&steps_path),
+            manifest_path: path_to_string(&manifest_path),
+            step_count: summary.step_count,
+            screenshot_count,
+            clip_path: clip_path_str,
+            clip_built,
+            video_segment_count,
+        })
     })();
     if export_result.is_err() && created_new {
         let _ = fs::remove_dir_all(&pack_dir);
@@ -1214,9 +1214,7 @@ fn append_line(path: &Path, line: &str) -> Result<(), DefectPackError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::session::models::{
-        TestSessionVideoSegmentStatus, TEST_SESSION_SCHEMA_VERSION,
-    };
+    use crate::session::models::{TEST_SESSION_SCHEMA_VERSION, TestSessionVideoSegmentStatus};
 
     fn sample_step(started_at_ms: u64, title: &str) -> TestSessionStepRecord {
         TestSessionStepRecord {
@@ -1480,7 +1478,10 @@ mod tests {
                 continue;
             };
             let _guard = ReapGuard(pid);
-            assert!(!process_is_running(pid), "spawned fake {pid} is still running");
+            assert!(
+                !process_is_running(pid),
+                "spawned fake {pid} is still running"
+            );
         }
     }
 
@@ -1564,7 +1565,8 @@ mod tests {
         assert_eq!((params.width, params.height), (1198, 770));
         assert_eq!(params.fps_millis, 14_000);
 
-        let mpeg4 = "Stream #0:0: Video: mpeg4 (Simple Profile), yuv420p, 640x360, 25 fps, 25 tbr\n";
+        let mpeg4 =
+            "Stream #0:0: Video: mpeg4 (Simple Profile), yuv420p, 640x360, 25 fps, 25 tbr\n";
         let other = parse_video_params(mpeg4).expect("mpeg4");
         assert_eq!(other.codec, "mpeg4");
         assert_ne!(params.codec, other.codec);
@@ -1633,7 +1635,11 @@ mod tests {
         assert_eq!(manifest.schema_version, 1);
         assert!(!manifest.files.is_empty());
         for entry in &manifest.files {
-            assert!(!entry.sha256.is_empty(), "missing sha256 for {}", entry.relative_path);
+            assert!(
+                !entry.sha256.is_empty(),
+                "missing sha256 for {}",
+                entry.relative_path
+            );
             let hashed = crate::sha256::sha256_file_hex(&pack.join(&entry.relative_path)).unwrap();
             assert_eq!(entry.sha256, hashed, "{}", entry.relative_path);
         }
@@ -1849,9 +1855,14 @@ mod tests {
         for (path, codec_args) in [
             (
                 &h264,
-                vec!["-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast"],
+                vec![
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-preset", "veryfast",
+                ],
             ),
-            (&mpeg4, vec!["-c:v", "mpeg4", "-q:v", "8", "-pix_fmt", "yuv420p"]),
+            (
+                &mpeg4,
+                vec!["-c:v", "mpeg4", "-q:v", "8", "-pix_fmt", "yuv420p"],
+            ),
         ] {
             let mut args = vec![
                 "-y",

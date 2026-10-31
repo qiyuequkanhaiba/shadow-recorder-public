@@ -805,7 +805,8 @@ impl From<TestSessionVideoSegmentRecord> for JsTestSessionVideoSegmentRecord {
             container: value.container,
             mime_type: value.mime_type,
             encoder_name: value.encoder_name,
-            is_playable: value.is_playable, retention_tier: value.retention_tier.clone(),
+            is_playable: value.is_playable,
+            retention_tier: value.retention_tier.clone(),
         }
     }
 }

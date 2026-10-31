@@ -20,10 +20,10 @@ use crate::session::ffmpeg_loop_runtime::{
 use crate::session::keyboard_summary::{KeyboardSummaryError, KeyboardSummaryRuntime};
 use crate::session::models::TestSessionStepEditInput;
 use crate::session::models::{
-    DEFAULT_DEFECT_POST_WINDOW_SECONDS, DEFAULT_DEFECT_PRE_WINDOW_SECONDS,
+    DEFAULT_DEFECT_POST_WINDOW_SECONDS, DEFAULT_DEFECT_PRE_WINDOW_SECONDS, ProtectedTimeRange,
     TEST_SESSION_SCHEMA_VERSION, TestSessionDefectMarkInput, TestSessionDefectMarkRecord,
     TestSessionEventRecord, TestSessionEventType, TestSessionLogInput, TestSessionNoteInput,
-    ProtectedTimeRange, TestSessionRecord, TestSessionStartOptions, TestSessionStatus, TestSessionStepRecord,
+    TestSessionRecord, TestSessionStartOptions, TestSessionStatus, TestSessionStepRecord,
     TestSessionSystemEventInput, TestSessionVideoSegmentRecord, TestSessionVideoStreamRecord,
     normalize_encoder_preference, normalize_optional_string, normalize_recording_profile,
 };
@@ -56,12 +56,12 @@ use crate::session::step_builder::{
     build_steps_from_events_with_aliases, build_steps_from_operations_with_aliases,
     render_repro_steps_text,
 };
+#[cfg(not(test))]
+use crate::session::system_events::find_foreground_process;
 use crate::session::system_events::{
     SystemEventListenerError, SystemEventRuntime, find_visible_process_pid_by_name,
     process_names_match,
 };
-#[cfg(not(test))]
-use crate::session::system_events::find_foreground_process;
 use crate::session::uia_enricher;
 use crate::session::uia_observer::{UiaObserverError, UiaObserverRuntime};
 use crate::session::video_ring::{build_video_stream_plan, enumerate_display_targets};
@@ -79,7 +79,6 @@ mod tests;
 
 pub use error::SessionError;
 use storage::*;
-
 
 pub struct SessionManager {
     state: Mutex<SessionState>,
@@ -883,7 +882,10 @@ impl SessionManager {
         history_retention_max_segments: Option<u32>,
     ) -> Result<TestSessionRecord, SessionError> {
         let mut guard = self.state.lock().map_err(|_| SessionError::LockPoisoned)?;
-        let session = guard.active.as_mut().filter(|s| s.session_id == session_id)
+        let session = guard
+            .active
+            .as_mut()
+            .filter(|s| s.session_id == session_id)
             .ok_or_else(|| SessionError::SessionNotFound(session_id.to_string()))?;
         if let Some(n) = name {
             let trimmed = n.trim().to_string();
@@ -897,19 +899,27 @@ impl SessionManager {
             || history_retention_max_segments.is_some();
         if let Some(n) = notes {
             if n.chars().count() > 2000 {
-                return Err(SessionError::InvalidLookup("Session notes exceed 2000 characters".into()));
+                return Err(SessionError::InvalidLookup(
+                    "Session notes exceed 2000 characters".into(),
+                ));
             }
             session.notes = Some(n);
         }
         if let Some(m) = history_retention_mode {
             let mode = m.trim();
             if mode != "age" && mode != "count" {
-                return Err(SessionError::InvalidLookup("Invalid history retention mode".into()));
+                return Err(SessionError::InvalidLookup(
+                    "Invalid history retention mode".into(),
+                ));
             }
             session.history_retention_mode = Some(mode.to_string());
         }
-        if let Some(h) = history_retention_hours { session.history_retention_hours = Some(h.clamp(1, 168)); }
-        if let Some(m) = history_retention_max_segments { session.history_retention_max_segments = Some(m.clamp(10, 2000)); }
+        if let Some(h) = history_retention_hours {
+            session.history_retention_hours = Some(h.clamp(1, 168));
+        }
+        if let Some(m) = history_retention_max_segments {
+            session.history_retention_max_segments = Some(m.clamp(10, 2000));
+        }
         session.updated_at_ms = now_timestamp_ms();
         persist_manifest(session)?;
         let updated = session.clone();
@@ -2213,7 +2223,6 @@ fn is_mouse_button_down_action(action: &str) -> bool {
         || action.eq_ignore_ascii_case("WM_MBUTTONDOWN")
         || action.eq_ignore_ascii_case("WM_LBUTTONDBLCLK")
 }
-
 
 fn path_to_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()

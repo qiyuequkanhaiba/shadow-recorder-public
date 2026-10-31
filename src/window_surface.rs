@@ -6,16 +6,17 @@ use std::sync::{LazyLock, Mutex};
 use windows::Win32::Foundation::{FreeLibrary, HWND, LPARAM, LRESULT, WPARAM};
 #[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallWindowProcW, DefWindowProcW, GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos,
-    GWL_EXSTYLE, GWL_STYLE, GWLP_WNDPROC, SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
-    WNDPROC, WS_CAPTION, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_THICKFRAME,
-    WM_ACTIVATE, WM_ACTIVATEAPP, WM_ERASEBKGND, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT,
+    CallWindowProcW, DefWindowProcW, GWL_EXSTYLE, GWL_STYLE, GWLP_WNDPROC, GetWindowLongPtrW,
+    SWP_FRAMECHANGED, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowLongPtrW, SetWindowPos,
+    WM_ACTIVATE, WM_ACTIVATEAPP, WM_ERASEBKGND, WM_NCACTIVATE, WM_NCCALCSIZE, WM_NCPAINT, WNDPROC,
+    WS_CAPTION, WS_EX_TOOLWINDOW, WS_MAXIMIZEBOX, WS_MINIMIZEBOX, WS_POPUP, WS_THICKFRAME,
 };
 #[cfg(windows)]
 use windows_core::HRESULT;
 
 #[cfg(windows)]
-static PREV_WNDPROCS: LazyLock<Mutex<HashMap<isize, isize>>> = LazyLock::new(|| Mutex::new(HashMap::new()));
+static PREV_WNDPROCS: LazyLock<Mutex<HashMap<isize, isize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(windows)]
 #[inline]
@@ -81,14 +82,12 @@ unsafe extern "system" fn toolbar_wndproc(
 
 #[cfg(windows)]
 unsafe fn apply_dwm_safeguards(hwnd: HWND) {
-    type DwmSetWindowAttributeFn = unsafe extern "system" fn(
-        HWND,
-        u32,
-        *const std::ffi::c_void,
-        u32,
-    ) -> HRESULT;
+    type DwmSetWindowAttributeFn =
+        unsafe extern "system" fn(HWND, u32, *const std::ffi::c_void, u32) -> HRESULT;
 
-    let module = unsafe { windows::Win32::System::LibraryLoader::LoadLibraryW(windows::core::w!("dwmapi.dll")) };
+    let module = unsafe {
+        windows::Win32::System::LibraryLoader::LoadLibraryW(windows::core::w!("dwmapi.dll"))
+    };
     if let Ok(hmod) = module {
         if let Some(proc) = unsafe {
             windows::Win32::System::LibraryLoader::GetProcAddress(
@@ -96,7 +95,8 @@ unsafe fn apply_dwm_safeguards(hwnd: HWND) {
                 windows::core::s!("DwmSetWindowAttribute"),
             )
         } {
-            let dwm_set_window_attribute: DwmSetWindowAttributeFn = unsafe { std::mem::transmute(proc) };
+            let dwm_set_window_attribute: DwmSetWindowAttributeFn =
+                unsafe { std::mem::transmute(proc) };
 
             // DWMWA_NCRENDERING_POLICY = 2 (DWMNCRP_DISABLED = 1)
             let nc_policy: u32 = 1;

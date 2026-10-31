@@ -1120,7 +1120,11 @@ fn collect_stream_segments(
             if !actual_path.exists()
                 && let Some(file_name) = actual_path.file_name()
             {
-                let retained_path = session_dir.join("video").join("retained").join(&stream.stream_id).join(file_name);
+                let retained_path = session_dir
+                    .join("video")
+                    .join("retained")
+                    .join(&stream.stream_id)
+                    .join(file_name);
                 if retained_path.exists() {
                     actual_path = retained_path;
                     retention_tier = Some("retained".to_string());
@@ -1189,7 +1193,8 @@ fn collect_stream_segments(
                 container: Some(container),
                 mime_type: Some(mime_type),
                 encoder_name: Some(encoder_name),
-                is_playable: true, retention_tier,
+                is_playable: true,
+                retention_tier,
             });
         }
     }
@@ -1234,7 +1239,10 @@ fn trim_segments_to_window(
     let retention_max = if cfg!(test) {
         session.history_retention_max_segments.unwrap_or(200) as usize
     } else {
-        session.history_retention_max_segments.unwrap_or(200).clamp(10, 2000) as usize
+        session
+            .history_retention_max_segments
+            .unwrap_or(200)
+            .clamp(10, 2000) as usize
     };
 
     // 1. Move overflow live segments out of the ring window into retained tier
@@ -1249,7 +1257,10 @@ fn trim_segments_to_window(
         let overflow_count = live_indices.len() - max_segments;
         for &idx in &live_indices[..overflow_count] {
             let seg = &mut segments[idx];
-            let retained_dir = session_dir.join("video").join("retained").join(&seg.stream_id);
+            let retained_dir = session_dir
+                .join("video")
+                .join("retained")
+                .join(&seg.stream_id);
             if std::fs::create_dir_all(&retained_dir).is_err() {
                 continue;
             }
@@ -1290,9 +1301,10 @@ fn trim_segments_to_window(
     let mut to_remove = Vec::new();
 
     let is_protected = |seg: &TestSessionVideoSegmentRecord| -> bool {
-        session.protected_ranges.iter().any(|range| {
-            seg.ended_at_ms >= range.start_ms && seg.started_at_ms <= range.end_ms
-        })
+        session
+            .protected_ranges
+            .iter()
+            .any(|range| seg.ended_at_ms >= range.start_ms && seg.started_at_ms <= range.end_ms)
     };
 
     if retention_mode == "age" {
@@ -1662,11 +1674,10 @@ mod tests {
 
     use super::{
         CaptureTarget, FfmpegCaptureRunManifest, StreamRuntimeState,
-        apply_recording_profile_to_stream, build_gdigrab_input_args,
-        build_last_known_window_target, compute_max_segments, is_ignored_foreground_process,
-        normalize_even_capture_size, normalize_foreground_capture_rect,
-        recover_ffmpeg_loop_segments, should_use_ffmpeg_loop,
-        age_segment_file_for_retention_test,
+        age_segment_file_for_retention_test, apply_recording_profile_to_stream,
+        build_gdigrab_input_args, build_last_known_window_target, compute_max_segments,
+        is_ignored_foreground_process, normalize_even_capture_size,
+        normalize_foreground_capture_rect, recover_ffmpeg_loop_segments, should_use_ffmpeg_loop,
     };
     use crate::session::models::{
         TEST_SESSION_VIDEO_STREAM_KIND, TestSessionRecord, TestSessionStatus,
@@ -1727,7 +1738,11 @@ mod tests {
         let segments = recover_ffmpeg_loop_segments(&session, &mut streams).expect("recover");
 
         assert_eq!(segments.len(), 2);
-        assert!(segments.iter().all(|segment| segment.retention_tier.is_none()));
+        assert!(
+            segments
+                .iter()
+                .all(|segment| segment.retention_tier.is_none())
+        );
         assert!(segments.iter().all(|segment| segment.is_playable));
         assert_eq!(segments[0].started_at_ms, 1_000);
         assert_eq!(segments[1].started_at_ms, 6_000);
@@ -1836,7 +1851,11 @@ mod tests {
         assert_eq!(segments.len(), 3);
         assert_eq!(segments[0].retention_tier.as_deref(), Some("retained"));
         assert!(!segments_dir.join("run-0001-00000.mp4").exists());
-        let retained_path = session_dir.join("video").join("retained").join(stream_id).join("run-0001-00000.mp4");
+        let retained_path = session_dir
+            .join("video")
+            .join("retained")
+            .join(stream_id)
+            .join("run-0001-00000.mp4");
         assert!(retained_path.exists());
         assert!(segments_dir.join("run-0001-00001.mp4").exists());
         assert!(segments_dir.join("run-0001-00002.mp4").exists());
@@ -2162,15 +2181,15 @@ mod tests {
 #[cfg(test)]
 mod history_retention_tests {
     use super::*;
+    use crate::session::models::{
+        DEFAULT_ENCODER_PREFERENCE, DEFAULT_RECORDING_PROFILE, DEFAULT_TARGET_CAPTURE_MODE,
+        TEST_SESSION_KIND, TEST_SESSION_SCHEMA_VERSION, TEST_SESSION_VIDEO_SEGMENT_KIND,
+        TEST_SESSION_VIDEO_STREAM_KIND, TestSessionRecord, TestSessionStatus,
+        TestSessionVideoSegmentRecord, TestSessionVideoSegmentStatus, TestSessionVideoStreamRecord,
+        TestSessionVideoStreamStatus,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
-    use crate::session::models::{
-        TEST_SESSION_KIND, TEST_SESSION_SCHEMA_VERSION, TEST_SESSION_VIDEO_SEGMENT_KIND,
-        TEST_SESSION_VIDEO_STREAM_KIND, DEFAULT_RECORDING_PROFILE, DEFAULT_ENCODER_PREFERENCE,
-        DEFAULT_TARGET_CAPTURE_MODE, TestSessionRecord, TestSessionStatus,
-        TestSessionVideoSegmentRecord, TestSessionVideoSegmentStatus,
-        TestSessionVideoStreamRecord, TestSessionVideoStreamStatus,
-    };
 
     fn unique_temp_dir(prefix: &str) -> PathBuf {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -2219,7 +2238,12 @@ mod history_retention_tests {
         }
     }
 
-    fn mock_segment(id: &str, stream_id: &str, end_time: u64, file_path: Option<String>) -> TestSessionVideoSegmentRecord {
+    fn mock_segment(
+        id: &str,
+        stream_id: &str,
+        end_time: u64,
+        file_path: Option<String>,
+    ) -> TestSessionVideoSegmentRecord {
         let relative_path = file_path.clone();
         TestSessionVideoSegmentRecord {
             schema_version: TEST_SESSION_SCHEMA_VERSION,
@@ -2263,7 +2287,12 @@ mod history_retention_tests {
             fs::create_dir_all(file_path.parent().unwrap()).unwrap();
             fs::write(&file_path, "dummy").unwrap();
             super::age_segment_file_for_retention_test(&file_path);
-            segments.push(mock_segment(&format!("seg-{}", i), stream_id, (i + 1) * 5000, Some(file_path.to_string_lossy().into())));
+            segments.push(mock_segment(
+                &format!("seg-{}", i),
+                stream_id,
+                (i + 1) * 5000,
+                Some(file_path.to_string_lossy().into()),
+            ));
         }
 
         // Window allows 2 segments, 3 should overflow
@@ -2273,7 +2302,10 @@ mod history_retention_tests {
         for segment in segments.iter().take(3) {
             assert_eq!(segment.retention_tier.as_deref(), Some("retained"));
             let file_path = segment.file_path.as_ref().unwrap();
-            assert!(file_path.contains("video/retained/test-stream") || file_path.contains("video\\retained\\test-stream"));
+            assert!(
+                file_path.contains("video/retained/test-stream")
+                    || file_path.contains("video\\retained\\test-stream")
+            );
             assert!(Path::new(file_path).exists());
             let rel_path = segment.relative_path.as_ref().unwrap();
             assert!(rel_path.contains("retained"));
@@ -2301,7 +2333,12 @@ mod history_retention_tests {
             fs::create_dir_all(file_path.parent().unwrap()).unwrap();
             fs::write(&file_path, "dummy").unwrap();
             super::age_segment_file_for_retention_test(&file_path);
-            segments.push(mock_segment(&format!("seg-{}", i), stream_id, (i + 1) * 5000, Some(file_path.to_string_lossy().into())));
+            segments.push(mock_segment(
+                &format!("seg-{}", i),
+                stream_id,
+                (i + 1) * 5000,
+                Some(file_path.to_string_lossy().into()),
+            ));
         }
 
         // Window allows 2 segments. Overflow is 3. Max retained is 2. So 1 oldest segment is deleted.
@@ -2335,12 +2372,22 @@ mod history_retention_tests {
         fs::create_dir_all(file1.parent().unwrap()).unwrap();
         fs::write(&file1, "dummy").unwrap();
         super::age_segment_file_for_retention_test(&file1);
-        segments.push(mock_segment("seg-1", stream_id, two_hours_ago, Some(file1.to_string_lossy().into())));
+        segments.push(mock_segment(
+            "seg-1",
+            stream_id,
+            two_hours_ago,
+            Some(file1.to_string_lossy().into()),
+        ));
 
         let file2 = session_dir.join("2.mp4");
         fs::write(&file2, "dummy").unwrap();
         super::age_segment_file_for_retention_test(&file2);
-        segments.push(mock_segment("seg-2", stream_id, half_hour_ago, Some(file2.to_string_lossy().into())));
+        segments.push(mock_segment(
+            "seg-2",
+            stream_id,
+            half_hour_ago,
+            Some(file2.to_string_lossy().into()),
+        ));
 
         // Window allows 1 segment (seg-2). seg-1 is overflow. seg-1 is > 1 hour old, so it's deleted.
         super::trim_segments_to_window(&session, &session_dir, &mut segments, 1).unwrap();
@@ -2414,11 +2461,13 @@ mod history_retention_tests {
         session.session_dir = Some(session_dir.to_string_lossy().to_string());
         session.history_retention_mode = Some("count".to_string());
         session.history_retention_max_segments = Some(1);
-        session.protected_ranges.push(crate::session::models::ProtectedTimeRange {
-            start_ms: 900,
-            end_ms: 5100,
-            label: Some("defect-1".to_string()),
-        });
+        session
+            .protected_ranges
+            .push(crate::session::models::ProtectedTimeRange {
+                start_ms: 900,
+                end_ms: 5100,
+                label: Some("defect-1".to_string()),
+            });
 
         let mut segments = Vec::new();
         for i in 1..=3 {
@@ -2496,7 +2545,8 @@ mod history_retention_tests {
         fs::write(
             runs_dir.join("run-0001.json"),
             serde_json::to_vec_pretty(&run_manifest).unwrap(),
-        ).unwrap();
+        )
+        .unwrap();
         fs::write(
             runs_dir.join("run-0001.csv"),
             format!(
@@ -2514,7 +2564,10 @@ mod history_retention_tests {
         session.history_retention_max_segments = Some(200);
 
         let stream_dir_str = stream_dir.to_string_lossy().into_owned();
-        let manifest_path_str = stream_dir.join("stream.json").to_string_lossy().into_owned();
+        let manifest_path_str = stream_dir
+            .join("stream.json")
+            .to_string_lossy()
+            .into_owned();
         let stream = TestSessionVideoStreamRecord {
             schema_version: 1,
             kind: TEST_SESSION_VIDEO_STREAM_KIND.to_string(),
@@ -2555,15 +2608,21 @@ mod history_retention_tests {
         };
 
         let mut streams = vec![stream];
-        let recovered = super::recover_ffmpeg_loop_segments(&session, &mut streams).expect("recover");
+        let recovered =
+            super::recover_ffmpeg_loop_segments(&session, &mut streams).expect("recover");
 
         // The retained file in video/retained/ MUST still exist after recover!
-        assert!(retained_file.exists(), "Retained file must not be deleted by recover_ffmpeg_loop_segments");
+        assert!(
+            retained_file.exists(),
+            "Retained file must not be deleted by recover_ffmpeg_loop_segments"
+        );
         assert_eq!(recovered.len(), 3);
         assert_eq!(recovered[0].retention_tier.as_deref(), Some("retained"));
-        assert_eq!(recovered[0].file_path.as_deref(), Some(retained_file.to_string_lossy().as_ref()));
+        assert_eq!(
+            recovered[0].file_path.as_deref(),
+            Some(retained_file.to_string_lossy().as_ref())
+        );
 
         let _ = fs::remove_dir_all(&temp_dir);
     }
 }
-

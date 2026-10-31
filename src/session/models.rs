@@ -165,10 +165,17 @@ impl TestSessionRecord {
             video_privacy_enabled: false,
             video_privacy_masks: Vec::new(),
             notes: normalized_notes,
-            history_retention_mode: Some(normalize_history_retention_mode(options.history_retention_mode)),
-            history_retention_hours: Some(options.history_retention_hours.unwrap_or(24).clamp(1, 168)),
+            history_retention_mode: Some(normalize_history_retention_mode(
+                options.history_retention_mode,
+            )),
+            history_retention_hours: Some(
+                options.history_retention_hours.unwrap_or(24).clamp(1, 168),
+            ),
             history_retention_max_segments: Some(
-                options.history_retention_max_segments.unwrap_or(200).clamp(10, 2000),
+                options
+                    .history_retention_max_segments
+                    .unwrap_or(200)
+                    .clamp(10, 2000),
             ),
             target_process_name: normalized_target_process_name,
             target_pid: options.target_pid,

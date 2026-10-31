@@ -5,9 +5,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::SessionManager;
 use crate::session::models::{
-    TestSessionDefectMarkInput, TestSessionEventType, TestSessionLogInput,
-    TestSessionNoteInput, TestSessionRecord, TestSessionStartOptions, TestSessionStatus,
-    TestSessionStepEditInput, TestSessionSystemEventInput,
+    TestSessionDefectMarkInput, TestSessionEventType, TestSessionLogInput, TestSessionNoteInput,
+    TestSessionRecord, TestSessionStartOptions, TestSessionStatus, TestSessionStepEditInput,
+    TestSessionSystemEventInput,
 };
 use crate::session::operation_models::{
     OperationOutcomeStatus, OperationOverrideChanges, TestSessionOperationEditInput,
@@ -436,8 +436,7 @@ fn defect_workflow_marks_rebuilds_renders_and_exports_pack() {
         .join("vs-display-primary")
         .join("seg-window.mp4");
     let segment_path = session_dir.join(&segment_relative);
-    fs::create_dir_all(segment_path.parent().expect("segment parent"))
-        .expect("create segment dir");
+    fs::create_dir_all(segment_path.parent().expect("segment parent")).expect("create segment dir");
     fs::write(&segment_path, b"fake mp4 bytes").expect("write segment");
     let mut segment = fake_video_segment(
         &started.session_id,
@@ -540,10 +539,9 @@ fn defect_workflow_marks_rebuilds_renders_and_exports_pack() {
         serde_json::from_str(&fs::read_to_string(&pack.steps_path).expect("read steps json"))
             .expect("parse exported steps");
     assert!(!exported_steps.is_empty());
-    let summary: serde_json::Value = serde_json::from_str(
-        &fs::read_to_string(&pack.summary_path).expect("read summary json"),
-    )
-    .expect("parse summary");
+    let summary: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(&pack.summary_path).expect("read summary json"))
+            .expect("parse summary");
     assert_eq!(
         summary["stepCount"].as_u64(),
         Some(u64::from(pack.step_count))

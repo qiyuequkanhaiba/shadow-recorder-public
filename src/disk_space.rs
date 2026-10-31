@@ -97,22 +97,15 @@ fn existing_ancestor(path: &Path) -> Option<PathBuf> {
 fn platform_disk_free_bytes(path: &Path) -> io::Result<u64> {
     use std::os::windows::ffi::OsStrExt;
 
-    let existing = existing_ancestor(path).ok_or_else(|| {
-        io::Error::new(io::ErrorKind::NotFound, "disk path does not exist")
-    })?;
+    let existing = existing_ancestor(path)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "disk path does not exist"))?;
     let mut wide: Vec<u16> = existing.as_os_str().encode_wide().collect();
     wide.push(0);
     let mut available = 0u64;
     let mut total = 0u64;
     let mut total_free = 0u64;
-    let ok = unsafe {
-        GetDiskFreeSpaceExW(
-            wide.as_ptr(),
-            &mut available,
-            &mut total,
-            &mut total_free,
-        )
-    };
+    let ok =
+        unsafe { GetDiskFreeSpaceExW(wide.as_ptr(), &mut available, &mut total, &mut total_free) };
     if ok == 0 {
         return Err(io::Error::last_os_error());
     }

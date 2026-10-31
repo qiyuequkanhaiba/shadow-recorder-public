@@ -7,12 +7,16 @@ use std::ffi::c_void;
 use std::mem::size_of;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::thread;
 use std::time::Duration;
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::UpdateWindow;
+use windows::Win32::System::Com::{
+    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
+};
+use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_MOUSE, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP, MOUSEINPUT, SendInput,
 };
@@ -21,12 +25,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
     DispatchMessageW, GetClassNameW, GetForegroundWindow, GetWindowRect, GetWindowTextW,
     IsWindowVisible, MSG, PM_REMOVE, PeekMessageW, PostQuitMessage, RegisterClassW, SW_SHOWNORMAL,
     SetCursorPos, SetForegroundWindow, ShowWindow, TranslateMessage, WINDOW_EX_STYLE, WINDOW_STYLE,
-    WM_CLOSE, WM_DESTROY, WS_CHILD, WS_OVERLAPPEDWINDOW, WS_VISIBLE, WNDCLASSW, WindowFromPoint,
+    WM_CLOSE, WM_DESTROY, WNDCLASSW, WS_CHILD, WS_OVERLAPPEDWINDOW, WS_VISIBLE, WindowFromPoint,
 };
-use windows::Win32::System::Com::{
-    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
-};
-use windows::Win32::UI::Accessibility::{CUIAutomation, IUIAutomation};
 use windows::core::{PCWSTR, w};
 
 use crate::config::RecorderConfig;
@@ -184,10 +184,7 @@ fn pump_until(stop: &AtomicBool) {
 fn control_center(hwnd: HWND) -> Result<(i32, i32), String> {
     let mut rect = RECT::default();
     unsafe { GetWindowRect(hwnd, &mut rect) }.map_err(|err| format!("GetWindowRect: {err:?}"))?;
-    Ok((
-        (rect.left + rect.right) / 2,
-        (rect.top + rect.bottom) / 2,
-    ))
+    Ok(((rect.left + rect.right) / 2, (rect.top + rect.bottom) / 2))
 }
 
 fn click_screen(x: i32, y: i32) -> Result<(), String> {
@@ -315,8 +312,16 @@ fn live_win32_button_and_checkbox_have_l2_identity() {
     eprintln!("probe frame {}", describe_hwnd(probe.hwnd.hwnd()));
     eprintln!("probe save {}", describe_hwnd(probe.save.hwnd()));
     eprintln!("probe toggle {}", describe_hwnd(probe.toggle.hwnd()));
-    eprintln!("foreground {}", describe_hwnd(unsafe { GetForegroundWindow() }));
-    let at_save = unsafe { WindowFromPoint(windows::Win32::Foundation::POINT { x: save_pt.0, y: save_pt.1 }) };
+    eprintln!(
+        "foreground {}",
+        describe_hwnd(unsafe { GetForegroundWindow() })
+    );
+    let at_save = unsafe {
+        WindowFromPoint(windows::Win32::Foundation::POINT {
+            x: save_pt.0,
+            y: save_pt.1,
+        })
+    };
     eprintln!("WindowFromPoint(save) {}", describe_hwnd(at_save));
     eprintln!(
         "UIA ElementFromHandle(save)={:?}",
@@ -442,16 +447,17 @@ fn live_win32_button_and_checkbox_have_l2_identity() {
         );
     }
 
-    let l2 = operations.iter().filter(|op| {
-        op.action.target.as_ref().is_some_and(|target| {
-            target
-                .name
-                .as_deref()
-                .is_some_and(|name| name.contains('保') || name.contains("同步") || name.contains("Save"))
-                || target.control_type.as_deref() == Some("Button")
-                || target.control_type.as_deref() == Some("CheckBox")
+    let l2 = operations
+        .iter()
+        .filter(|op| {
+            op.action.target.as_ref().is_some_and(|target| {
+                target.name.as_deref().is_some_and(|name| {
+                    name.contains('保') || name.contains("同步") || name.contains("Save")
+                }) || target.control_type.as_deref() == Some("Button")
+                    || target.control_type.as_deref() == Some("CheckBox")
+            })
         })
-    }).count();
+        .count();
 
     assert!(
         l2 >= 1,
@@ -462,7 +468,10 @@ fn live_win32_button_and_checkbox_have_l2_identity() {
 }
 
 fn dump_visible_windows() {
-    unsafe extern "system" fn enum_proc(hwnd: HWND, _lparam: LPARAM) -> windows::Win32::Foundation::BOOL {
+    unsafe extern "system" fn enum_proc(
+        hwnd: HWND,
+        _lparam: LPARAM,
+    ) -> windows::Win32::Foundation::BOOL {
         if unsafe { IsWindowVisible(hwnd) }.as_bool() {
             let mut rect = RECT::default();
             let ok = unsafe { GetWindowRect(hwnd, &mut rect) }.is_ok();
@@ -487,7 +496,10 @@ fn find_window_title_contains(needle: &str) -> Option<HWND> {
         needle: String,
         hwnd: HWND,
     }
-    unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> windows::Win32::Foundation::BOOL {
+    unsafe extern "system" fn enum_proc(
+        hwnd: HWND,
+        lparam: LPARAM,
+    ) -> windows::Win32::Foundation::BOOL {
         let search = unsafe { &mut *(lparam.0 as *mut Search) };
         if !unsafe { IsWindowVisible(hwnd) }.as_bool() {
             return windows::Win32::Foundation::BOOL(1);
@@ -521,7 +533,10 @@ fn find_main_window_for_pid(pid: u32) -> Option<HWND> {
         pid: u32,
         hwnd: HWND,
     }
-    unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> windows::Win32::Foundation::BOOL {
+    unsafe extern "system" fn enum_proc(
+        hwnd: HWND,
+        lparam: LPARAM,
+    ) -> windows::Win32::Foundation::BOOL {
         let search = unsafe { &mut *(lparam.0 as *mut Search) };
         let mut window_pid = 0u32;
         unsafe {
@@ -674,13 +689,14 @@ fn run_notepad_live_probe() {
         );
     }
 
-    let has_identity = snap.as_ref().is_some_and(|item| item.has_identity())
-        || operations.iter().any(|op| {
-            op.precision_level.starts_with('l') && op.precision_level != "l0"
-                || op.action.target.as_ref().is_some_and(|target| {
-                    target.name.is_some() || target.control_type.is_some()
-                })
-        });
+    let has_identity =
+        snap.as_ref().is_some_and(|item| item.has_identity())
+            || operations.iter().any(|op| {
+                op.precision_level.starts_with('l') && op.precision_level != "l0"
+                    || op.action.target.as_ref().is_some_and(|target| {
+                        target.name.is_some() || target.control_type.is_some()
+                    })
+            });
     assert!(
         has_identity,
         "notepad live probe should produce a control identity via enricher or operations"

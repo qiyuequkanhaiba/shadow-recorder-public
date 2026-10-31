@@ -10,6 +10,7 @@ use windows::Win32::Graphics::Direct3D11::{
     D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
 };
+use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
     DXGI_ERROR_MORE_DATA, DXGI_ERROR_WAIT_TIMEOUT, DXGI_OUTDUPL_FRAME_INFO, IDXGIAdapter1,
@@ -23,7 +24,6 @@ use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW,
 };
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
-use windows::Win32::Graphics::Dwm::{DWMWA_CLOAKED, DwmGetWindowAttribute};
 use windows::Win32::UI::WindowsAndMessaging::{
     GA_ROOT, GW_HWNDNEXT, GetAncestor, GetClassNameW, GetForegroundWindow, GetTopWindow, GetWindow,
     GetWindowRect, GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsIconic,
@@ -417,7 +417,10 @@ pub fn top_level_window_rect_at_point(x: i32, y: i32, ignore_hwnd: isize) -> Opt
 }
 
 fn window_frame_contains_point(hwnd: HWND, x: i32, y: i32) -> bool {
-    if hwnd.0.is_null() || unsafe { !IsWindowVisible(hwnd).as_bool() } || unsafe { IsIconic(hwnd).as_bool() } {
+    if hwnd.0.is_null()
+        || unsafe { !IsWindowVisible(hwnd).as_bool() }
+        || unsafe { IsIconic(hwnd).as_bool() }
+    {
         return false;
     }
     if window_is_cloaked(hwnd) || is_desktop_window(hwnd) {
@@ -427,7 +430,10 @@ fn window_frame_contains_point(hwnd: HWND, x: i32, y: i32) -> bool {
     if unsafe { GetWindowRect(hwnd, &mut rect) }.is_err() {
         return false;
     }
-    x >= rect.left && x < rect.right && y >= rect.top && y < rect.bottom
+    x >= rect.left
+        && x < rect.right
+        && y >= rect.top
+        && y < rect.bottom
         && rect.right - rect.left > 1
         && rect.bottom - rect.top > 1
 }

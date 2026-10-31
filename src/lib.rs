@@ -1,6 +1,7 @@
 mod capture_policy;
 mod config;
 mod context_reset;
+mod disk_space;
 mod dxgi;
 mod error;
 pub mod evidence_manifest;
@@ -13,7 +14,6 @@ mod raw_input;
 mod recorder;
 mod retry;
 mod screenshot;
-mod disk_space;
 mod session;
 mod sha256;
 mod storage;
@@ -814,26 +814,27 @@ pub struct JsScreenshotCaptureResult {
 pub fn capture_screenshot(
     request: JsScreenshotCaptureRequest,
 ) -> Result<JsScreenshotCaptureResult> {
-    let output = crate::screenshot::capture_screenshot(crate::screenshot::ScreenshotCaptureRequest {
-        mode: request.mode,
-        x: request.x,
-        y: request.y,
-        width: request.width,
-        height: request.height,
-        privacy_enabled: request.privacy_enabled,
-        masks: request
-            .masks
-            .into_iter()
-            .map(|mask| crate::privacy::MaskRegion {
-                x: mask.x,
-                y: mask.y,
-                width: mask.width,
-                height: mask.height,
-                label: String::new(),
-            })
-            .collect(),
-    })
-    .map_err(napi::Error::from_reason)?;
+    let output =
+        crate::screenshot::capture_screenshot(crate::screenshot::ScreenshotCaptureRequest {
+            mode: request.mode,
+            x: request.x,
+            y: request.y,
+            width: request.width,
+            height: request.height,
+            privacy_enabled: request.privacy_enabled,
+            masks: request
+                .masks
+                .into_iter()
+                .map(|mask| crate::privacy::MaskRegion {
+                    x: mask.x,
+                    y: mask.y,
+                    width: mask.width,
+                    height: mask.height,
+                    label: String::new(),
+                })
+                .collect(),
+        })
+        .map_err(napi::Error::from_reason)?;
     Ok(JsScreenshotCaptureResult {
         png_base64: output.png_base64,
         width: output.width,

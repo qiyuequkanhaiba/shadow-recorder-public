@@ -5,8 +5,8 @@ use image::ImageEncoder;
 use image::codecs::png::PngEncoder;
 
 use crate::dxgi::{
-    capture_monitor_bgra_for_screenshot, list_monitor_rects, monitor_rect_at_point,
-    window_rect_at_point, ScreenshotMonitorFrame,
+    ScreenshotMonitorFrame, capture_monitor_bgra_for_screenshot, list_monitor_rects,
+    monitor_rect_at_point, window_rect_at_point,
 };
 use crate::privacy::MaskRegion;
 
@@ -71,12 +71,7 @@ pub fn capture_screenshot(
         return Err("选区太大".to_string());
     }
     if let Ok(pixels) = capture_rect_gdi(&selection) {
-        return finish_screenshot(
-            selection,
-            pixels,
-            request.privacy_enabled,
-            &request.masks,
-        );
+        return finish_screenshot(selection, pixels, request.privacy_enabled, &request.masks);
     }
     capture_region_across_monitors(selection, request.privacy_enabled, &request.masks)
 }
@@ -120,9 +115,9 @@ fn capture_rect_gdi(selection: &ScreenshotRect) -> Result<Vec<u8>, String> {
 
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::{
-        BitBlt, CreateCompatibleDC, CreateDIBSection, DeleteDC, DeleteObject, GetDC, HGDIOBJ,
-        ReleaseDC, SelectObject, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CAPTUREBLT, DIB_RGB_COLORS,
-        SRCCOPY,
+        BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CAPTUREBLT, CreateCompatibleDC,
+        CreateDIBSection, DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, HGDIOBJ, ReleaseDC,
+        SRCCOPY, SelectObject,
     };
 
     let width = i32::try_from(selection.width).map_err(|_| "选区太大")?;
@@ -155,14 +150,7 @@ fn capture_rect_gdi(selection: &ScreenshotRect) -> Result<Vec<u8>, String> {
             ..Default::default()
         };
         let mut bits: *mut c_void = std::ptr::null_mut();
-        let bitmap = match CreateDIBSection(
-            memory,
-            &info,
-            DIB_RGB_COLORS,
-            &mut bits,
-            None,
-            0,
-        ) {
+        let bitmap = match CreateDIBSection(memory, &info, DIB_RGB_COLORS, &mut bits, None, 0) {
             Ok(bitmap) if !bits.is_null() => bitmap,
             _ => {
                 let _ = DeleteDC(memory);
@@ -397,7 +385,13 @@ pub fn composite_screenshot_png(
         );
     }
     let png = encode_png_from_bgra(&pixels, selection.width, selection.height)?;
-    Ok((png, selection.width, selection.height, selection.x, selection.y))
+    Ok((
+        png,
+        selection.width,
+        selection.height,
+        selection.x,
+        selection.y,
+    ))
 }
 
 fn selection_intersects_bounds(
@@ -499,12 +493,7 @@ fn encode_png_from_bgra(bgra: &[u8], width: u32, height: u32) -> Result<Vec<u8>,
     }
     let mut png = Vec::new();
     PngEncoder::new(Cursor::new(&mut png))
-        .write_image(
-            &rgba,
-            width,
-            height,
-            image::ExtendedColorType::Rgba8,
-        )
+        .write_image(&rgba, width, height, image::ExtendedColorType::Rgba8)
         .map_err(|err| err.to_string())?;
     Ok(png)
 }
@@ -649,10 +638,9 @@ mod tests {
         assert_eq!(masked.get_pixel(0, 0).0, [3, 2, 1, 255]);
         assert_eq!(masked.get_pixel(1, 0).0, [0, 0, 0, 255]);
 
-        let (plain, _, _, _, _) = compose_screenshot_png(
-            &pixels, 2, 2, 10, 10, selection, false, &[mask],
-        )
-        .expect("plain png");
+        let (plain, _, _, _, _) =
+            compose_screenshot_png(&pixels, 2, 2, 10, 10, selection, false, &[mask])
+                .expect("plain png");
         let decoded = image::load_from_memory(&plain)
             .expect("decode plain png")
             .to_rgba8();

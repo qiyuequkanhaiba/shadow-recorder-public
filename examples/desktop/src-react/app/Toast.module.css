@@ -1,0 +1,57 @@
+.toast {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: 900;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 220px;
+  max-width: 420px;
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  box-shadow: var(--shadow-md);
+}
+
+.toneInfo {
+  border-color: var(--border-default);
+}
+
+.toneSuccess {
+  border-color: var(--status-ok-border);
+  background: var(--bg-elevated);
+}
+
+.toneWarning {
+  border-color: var(--status-warn-border);
+}
+
+.toneError {
+  border-color: var(--status-danger-border);
+  color: var(--status-danger);
+}
+
+.toneProgress {
+  border-color: var(--accent-border);
+}
+
+.progressTrack {
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface-3);
+  overflow: hidden;
+}
+
+.progressFill {
+  display: block;
+  height: 100%;
+  background: var(--accent-default);
+  transition: width var(--duration-fast) var(--ease-standard);
+}

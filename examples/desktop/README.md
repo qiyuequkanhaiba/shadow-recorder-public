@@ -41,8 +41,10 @@ Removed from the public product surface:
 Main renderer modules:
 
 - `examples/desktop/src-react/components/RecorderPlaybackStage.tsx`
-- `examples/desktop/src-react/components/RecorderSessionTimelinePanel.tsx`
-- `examples/desktop/src-react/components/RecorderControlPanel.tsx`
+- `examples/desktop/src-react/components/StudioTimelineDock.tsx`
+- `examples/desktop/src-react/features/evidence/HistorySessionPanel.tsx`
+- `examples/desktop/src-react/features/evidence/RecordingReviewPanel.tsx`
+- `examples/desktop/src-react/features/settings/SettingsWorkspace.tsx`
 - `examples/desktop/src-react/hooks/useRecorderRuntime.ts`
 - `examples/desktop/src-react/hooks/useRecorderBootstrap.ts`
 - `examples/desktop/src-react/hooks/useTuningAdvisor.ts`

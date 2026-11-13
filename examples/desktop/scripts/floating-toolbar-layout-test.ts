@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createFloatingToolbarHtml } from '../src-electron/floating-toolbar';
+import { createScreenshotOverlayHtml } from '../src-electron/screenshot-overlay-html';
 import {
   FLOATING_TOOLBAR_LAYOUT,
   getFloatingToolbarCoreSize,
@@ -880,9 +881,9 @@ function testFloatingToolbarUsesVisualStatusWithoutVisibleClock(): void {
   assert.match(html, /class="capsule-clock-digits status-time sr-only" id="status-time"/);
   assert.match(html, /class="collapsed-time sr-only" id="collapsed-time"/);
   assert.match(html, /aria-describedby="status-label status-time"/);
-  assert.match(html, /#22c55e/);
-  assert.match(html, /#f59e0b/);
-  assert.match(html, /#64748b/);
+  assert.match(html, /--status-ok|#22c55e/);
+  assert.match(html, /--status-warn|#f59e0b/);
+  assert.match(html, /--status-neutral|#64748b/);
   assert.match(html, /featheredRingExpand/);
   assert.match(html, /waveformPulse/);
   assert.match(html, /prefers-reduced-motion/);
@@ -1072,18 +1073,6 @@ function testFloatingToolbarCanQuickFlagDefectWithExistingApis(): void {
 function testRecorderPlaybackStageUsesFluidTransportDock(): void {
   const source = readFileSync(join(__dirname, '../src-react/components/RecorderPlaybackStage.tsx'), 'utf8');
 
-  assert.match(source, /recorder-stage-transport-dock/);
-  assert.match(source, /recorder-stage-transport-track/);
-  assert.match(source, /aria-label="后退 5 秒"/);
-  assert.match(source, /aria-label="前进 5 秒"/);
-  assert.match(source, /aria-label="上一帧"/);
-  assert.match(source, /aria-label="下一帧"/);
-  assert.match(source, /aria-label=\{`播放速度/);
-  assert.match(source, /recorder-stage-quick-defect/);
-  assert.match(source, /aria-label="标记当前回放位置为缺陷"/);
-  assert.match(source, /标记瞬时/);
-  assert.match(source, /recorder-stage-scrubber/);
-  assert.match(source, /recorder-stage-scrubber-mark/);
   assert.match(source, /markTestDefect/);
   assert.match(source, /appendNoteForActiveQuickDefect/);
   assert.match(source, /quickDefectPendingRef/);
@@ -1094,71 +1083,50 @@ function testRecorderPlaybackStageUsesFluidTransportDock(): void {
 
 function testRecorderPageUsesSlimHeaderAndRecPill(): void {
   const source = readFileSync(join(__dirname, '../src-react/pages/RecorderPage.tsx'), 'utf8');
-  const css = readFileSync(join(__dirname, '../src-react/styles/theme-surfaces.css'), 'utf8');
-  const stage = readFileSync(join(__dirname, '../src-react/components/RecorderPlaybackStage.tsx'), 'utf8');
 
-  assert.match(source, /className=\{`rec-pill-state rec-pill-indicator is-\$\{recPillState\}`\}/);
-  assert.match(source, /scheme-b-final/);
-  assert.match(source, /header-center-capsule/);
-  assert.match(source, /唤起悬浮岛/);
-  assert.match(source, /📌 悬浮窗/);
-  assert.match(source, /记录与回顾/);
-  assert.match(source, /实时遥测与负载/);
-  assert.match(source, /mac-toast/);
-  assert.match(source, /evidence-session-rail/);
-  assert.match(source, /删除所选/);
-  assert.match(source, /evidence-session-copy/);
-  assert.match(source, /dashboard.deleteSessions/);
+  assert.match(source, /dashboard\.deleteSessions/);
   assert.doesNotMatch(source, /event-row-meta/);
-  assert.match(source, /已唤起桌面极简透明悬浮窗/);
   assert.doesNotMatch(source, /action\.startRecording/);
   assert.doesNotMatch(source, /action\.minimizeTray/);
   assert.doesNotMatch(source, /traffic-lights|light-close/);
-
-  assert.match(css, /\.scheme-b-final \.app-tabbar \{[\s\S]*height:\s*50px/);
-  assert.match(css, /grid-template-columns:\s*minmax\(0,\s*1fr\)\s*340px/);
-  assert.match(css, /grid-template-columns:\s*280px minmax\(0,\s*1fr\)/);
-  assert.match(css, /grid-template-columns:\s*200px minmax\(0,\s*1fr\)/);
-
-  assert.match(stage, /stage-top-meta/);
-  assert.match(stage, /meta-micro-tag/);
-}
-
-function testCompactTimelineUsesMiniEventRows(): void {
-  const source = readFileSync(join(__dirname, '../src-react/components/RecorderSessionTimelinePanel.tsx'), 'utf8');
-  assert.match(source, /实时事件流/);
-  assert.match(source, /mini-event-row/);
-  assert.match(source, /is-flagged/);
-  assert.match(source, /formatTimeOfDay/);
-  assert.match(source, /onClearEvents/);
-  assert.match(source, /清除/);
 }
 
 function testPhase3StudioAndFloatingToolbarUiPolish(): void {
   const html = createFloatingToolbarHtml({ initialCollapsed: false });
-  const stage = readFileSync(join(__dirname, '../src-react/components/RecorderPlaybackStage.tsx'), 'utf8');
   const timeline = readFileSync(join(__dirname, '../src-react/components/StudioTimelineDock.tsx'), 'utf8');
-  const historyPanel = readFileSync(join(__dirname, '../src-react/features/evidence/HistorySessionPanel.tsx'), 'utf8');
-  const recorderPage = readFileSync(join(__dirname, '../src-react/pages/RecorderPage.tsx'), 'utf8');
 
   assert.match(html, /dragHandle\.addEventListener\('mouseenter'/);
   assert.match(html, /录制中 · /);
   assert.match(html, /buttons\.export\.classList\.add\('is-switching'\)/);
   assert.match(html, /\.btn-export\.is-switching/);
 
-  assert.match(stage, /hud-telemetry-pill-toggle/);
-  assert.match(stage, /telemetryCollapsed/);
-  assert.match(stage, /btn-dock-pill/);
-
-  assert.match(timeline, /timeline-header-selection-bar/);
-  assert.match(timeline, /timeline-selection-duration-badge/);
-  assert.match(timeline, /selection-handle-grip/);
   assert.match(timeline, /handleTrackPointerDown/);
   assert.match(timeline, /onDoubleClick=/);
+}
 
-  assert.match(historyPanel, /strip-inline-action-bar/);
-  assert.match(historyPanel, /is-in-range/);
-  assert.match(recorderPage, /录制会话 #\$\{session\.sessionId\.slice\(0, 6\)\}/);
+function testScreenshotAnnotationColorsAreUnchanged(): void {
+  const html = createScreenshotOverlayHtml();
+  const expectedColors = [
+    '#ff3b30',
+    '#ffcc00',
+    '#34c759',
+    '#0a84ff',
+    '#ffffff',
+  ];
+  for (const color of expectedColors) {
+    assert.match(
+      html,
+      new RegExp(`data-color="${color}"`),
+      `Screenshot overlay must contain data-color="${color}" literal`
+    );
+  }
+}
+
+function testFloatingToolbarLightThemeUsesLightInkOnDarkGlass(): void {
+  const html = createFloatingToolbarHtml({ initialCollapsed: false, initialTheme: 'light' });
+  assert.match(html, /--text-on-glass:\s*#f8fafc/);
+  assert.match(html, /--ink:\s*var\(--text-on-glass,\s*#f8fafc\)/);
+  assert.doesNotMatch(html, /--ink:\s*var\(--text-primary/);
 }
 
 function run(): void {
@@ -1193,8 +1161,9 @@ function run(): void {
   testFloatingToolbarCanQuickFlagDefectWithExistingApis();
   testRecorderPlaybackStageUsesFluidTransportDock();
   testRecorderPageUsesSlimHeaderAndRecPill();
-  testCompactTimelineUsesMiniEventRows();
   testPhase3StudioAndFloatingToolbarUiPolish();
+  testScreenshotAnnotationColorsAreUnchanged();
+  testFloatingToolbarLightThemeUsesLightInkOnDarkGlass();
   console.log('[floating-toolbar-layout-test] PASS');
 }
 

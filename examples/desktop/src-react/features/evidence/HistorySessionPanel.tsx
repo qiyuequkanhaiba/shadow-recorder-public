@@ -1,84 +1,112 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TestSessionState, TestSessionVideoSegment } from '../../../types/contracts';
 import { STUDIO_SEGMENT_LIMIT } from '../../lib/studio-segment-window';
+import { Badge } from '../../ui/Badge';
+import { Button } from '../../ui/Button';
+import { IconButton } from '../../ui/IconButton';
+import { useVideoElementController } from '../player/useVideoElementController';
+import { HistoryExportMenu } from './HistoryExportMenu';
+import { HistoryTransportDock } from './HistoryTransportDock';
+import styles from './HistorySessionPanel.module.css';
 
-type HistorySessionPanelProps = {
+export type HistorySessionPanelProps = {
   session: TestSessionState | null;
   semanticEnabled?: boolean;
   onOpenSemanticReview?: () => void;
   onError: (message: string) => void;
-  onNotice: (message: string, tone?: 'info' | 'success' | 'error') => void;
+  onNotice?: (message: string, tone?: 'info' | 'success' | 'warning' | 'error') => void;
   onMetaSaved?: () => void;
 };
 
-function formatClock(durationMs: number): string {
-  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+function formatWhen(timestampMs?: number): string {
+  if (!timestampMs) return '未知时间';
+  return new Intl.DateTimeFormat('zh-CN', {
+    dateStyle: 'short',
+    timeStyle: 'medium',
+  }).format(new Date(timestampMs));
+}
+
+function formatClock(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function formatWhen(startedAtMs: number): string {
-  return new Date(startedAtMs).toLocaleString('zh-CN', { hour12: false });
-}
-
 export function HistorySessionPanel(props: HistorySessionPanelProps) {
-  const sessionId = props.session?.sessionId ?? null;
-  const isLive = props.session?.status === 'active' || props.session?.status === 'paused';
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const stageRef = useRef<HTMLDivElement | null>(null);
-  const loadedSegmentIdRef = useRef<string | null>(null);
-
   const [segments, setSegments] = useState<TestSessionVideoSegment[]>([]);
   const [segmentIndex, setSegmentIndex] = useState(0);
+  const [segmentRangeStartIndex, setSegmentRangeStartIndex] = useState<number | null>(null);
+  const [segmentRangeEndIndex, setSegmentRangeEndIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [playing, setPlaying] = useState(false);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [copiedId, setCopiedId] = useState(false);
-  const [operationCount, setOperationCount] = useState(0);
+  const [operationCount, setOperationCount] = useState<number>(0);
 
-  // Video playback position state
-  const [currentTimeMs, setCurrentTimeMs] = useState(0);
-  const [segmentDurationMs, setSegmentDurationMs] = useState(0);
-  const [segmentRangeEndIndex, setSegmentRangeEndIndex] = useState<number | null>(null);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const sessionId = props.session?.sessionId ?? null;
+  const isLive = props.session?.status === 'active' || props.session?.status === 'paused';
+  const loadedSegmentIdRef = useRef<string | null>(null);
+  const pendingAutoPlayRef = useRef(false);
+
+  const controller = useVideoElementController({
+    onEnded: () => {
+      const rangeMax =
+        segmentRangeEndIndex !== null
+          ? Math.max(segmentRangeStartIndex ?? segmentIndex, segmentRangeEndIndex)
+          : segments.length - 1;
+      if (segmentIndex + 1 <= rangeMax && segmentIndex + 1 < segments.length) {
+        pendingAutoPlayRef.current = true;
+        setSegmentIndex(segmentIndex + 1);
+      }
+    },
+  });
+  const { videoRef, play, reset } = controller;
 
   useEffect(() => {
-    setEditing(false);
-    setName(props.session?.name ?? '');
-    setNotes(props.session?.notes ?? '');
-    setSegmentIndex(0);
+    loadedSegmentIdRef.current = null;
+    pendingAutoPlayRef.current = false;
+    setSegmentRangeStartIndex(null);
     setSegmentRangeEndIndex(null);
-    setPlaying(false);
-    setCurrentTimeMs(0);
-    setSegmentDurationMs(0);
-  }, [props.session?.name, props.session?.notes, sessionId]);
+    reset();
+  }, [reset, sessionId]);
 
   useEffect(() => {
-    if (!sessionId || !window.reqcaseShadowRecorder.getTestSessionVideoSegments) {
+    if (!props.session) {
+      setName('');
+      setNotes('');
+      setEditing(false);
+      return;
+    }
+    setName(props.session.name ?? '');
+    setNotes(props.session.notes ?? '');
+    setEditing(false);
+  }, [props.session]);
+
+  useEffect(() => {
+    const api = window.reqcaseShadowRecorder;
+    if (!sessionId || !api.getTestSessionVideoSegments) {
       setSegments([]);
+      setSegmentIndex(0);
+      setSegmentRangeStartIndex(null);
+      setSegmentRangeEndIndex(null);
       return undefined;
     }
+
     let cancelled = false;
     setLoading(true);
-    void window.reqcaseShadowRecorder.getTestSessionVideoSegments({
-      sessionId,
-      limit: STUDIO_SEGMENT_LIMIT,
-    }).then((items) => {
-      if (cancelled) {
-        return;
-      }
-      const playable = items
-        .filter((segment) => segment.isPlayable && !!segment.playbackUrl)
-        .sort((left, right) => left.startedAtMs - right.startedAtMs);
+    void api.getTestSessionVideoSegments({ sessionId, limit: STUDIO_SEGMENT_LIMIT }).then((result) => {
+      if (cancelled) return;
+      const playable = (Array.isArray(result) ? result : [])
+        .filter((segment) => segment.isPlayable && Boolean(segment.playbackUrl))
+        .slice()
+        .sort((a, b) => a.startedAtMs - b.startedAtMs);
       setSegments(playable);
       setSegmentIndex(0);
+      setSegmentRangeStartIndex(null);
       setSegmentRangeEndIndex(null);
     }).catch((error) => {
       if (!cancelled) {
@@ -86,10 +114,9 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
         setSegments([]);
       }
     }).finally(() => {
-      if (!cancelled) {
-        setLoading(false);
-      }
+      if (!cancelled) setLoading(false);
     });
+
     return () => {
       cancelled = true;
     };
@@ -103,15 +130,11 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
     }
     let cancelled = false;
     void api.getTestSessionOperations({ sessionId, limit: 1 }).then((result) => {
-      if (cancelled) {
-        return;
-      }
+      if (cancelled) return;
       const total = typeof result?.totalCount === 'number' ? result.totalCount : result?.items?.length ?? 0;
       setOperationCount(total);
     }).catch(() => {
-      if (!cancelled) {
-        setOperationCount(0);
-      }
+      if (!cancelled) setOperationCount(0);
     });
     return () => {
       cancelled = true;
@@ -126,90 +149,32 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) {
-      return;
-    }
     if (!activeSegment?.playbackUrl) {
       loadedSegmentIdRef.current = null;
-      video.removeAttribute('src');
-      setCurrentTimeMs(0);
-      setSegmentDurationMs(0);
+      pendingAutoPlayRef.current = false;
+      reset();
+      if (video) {
+        video.removeAttribute('src');
+      }
       return;
     }
+    if (!video) return;
     if (loadedSegmentIdRef.current !== activeSegment.segmentId) {
       loadedSegmentIdRef.current = activeSegment.segmentId;
+      reset();
       video.src = activeSegment.playbackUrl;
-      setCurrentTimeMs(0);
-      setSegmentDurationMs(activeSegment.durationMs || 0);
     }
-    if (playing) {
-      void video.play().catch(() => setPlaying(false));
-      return;
+    if (pendingAutoPlayRef.current) {
+      pendingAutoPlayRef.current = false;
+      void play();
     }
-    video.pause();
-  }, [activeSegment?.durationMs, activeSegment?.playbackUrl, activeSegment?.segmentId, playing]);
-
-  const togglePlayback = useCallback(() => {
-    const video = videoRef.current;
-    if (!video || !activeSegment) {
-      return;
-    }
-    if (video.paused) {
-      void video.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
-      return;
-    }
-    video.pause();
-    setPlaying(false);
-  }, [activeSegment]);
-
-  const handleSeekDelta = useCallback((deltaSeconds: number) => {
-    const video = videoRef.current;
-    if (!video) return;
-    const target = Math.max(0, Math.min(video.duration || 0, video.currentTime + deltaSeconds));
-    video.currentTime = target;
-    setCurrentTimeMs(Math.round(target * 1000));
-  }, []);
-
-  const handleScrubberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    if (!video || !video.duration) return;
-    const seekFraction = parseFloat(e.target.value);
-    const targetSeconds = seekFraction * video.duration;
-    video.currentTime = targetSeconds;
-    setCurrentTimeMs(Math.round(targetSeconds * 1000));
-  }, []);
-
-  const toggleMute = useCallback(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    const nextMuted = !video.muted;
-    video.muted = nextMuted;
-    setIsMuted(nextMuted);
-  }, []);
-
-  const toggleFullscreen = useCallback(() => {
-    const stage = stageRef.current;
-    if (!stage) return;
-    if (!document.fullscreenElement) {
-      void stage.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => undefined);
-    } else {
-      void document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => undefined);
-    }
-  }, []);
-
-  useEffect(() => {
-    const onFsChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    return () => document.removeEventListener('fullscreenchange', onFsChange);
-  }, []);
+  }, [activeSegment?.playbackUrl, activeSegment?.segmentId, play, reset, sessionId, videoRef]);
 
   const handleCopySessionId = useCallback(() => {
     if (!sessionId) return;
     void navigator.clipboard.writeText(sessionId).then(() => {
       setCopiedId(true);
-      props.onNotice(`已复制会话ID: ${sessionId}`);
+      props.onNotice?.(`已复制会话ID: ${sessionId}`);
       setTimeout(() => setCopiedId(false), 1600);
     });
   }, [props, sessionId]);
@@ -238,7 +203,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
       }
       setEditing(false);
       props.onMetaSaved?.();
-      props.onNotice('会话信息已保存', 'success');
+      props.onNotice?.('会话信息已保存', 'success');
     } catch (error) {
       props.onError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -268,7 +233,7 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
         clipMode: options?.clipMode,
       });
     } catch {
-      // 完成、取消和失败只由主窗口的导出进度通知显示一次。
+      // Handled by toast
     } finally {
       setBusy(false);
       setIsExporting(false);
@@ -277,9 +242,9 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
 
   if (!props.session) {
     return (
-      <section className="history-session-panel" aria-label="历史记录">
-        <div className="history-session-empty-card">
-          <div className="empty-icon" aria-hidden="true">🎬</div>
+      <section className={styles.panel} data-ui-scope="review" aria-label="历史记录">
+        <div className={styles.emptyCard}>
+          <div style={{ fontSize: 40 }} aria-hidden="true">🎬</div>
           <h3>未选择会话</h3>
           <p>请在左侧列表中点击选择一条会话以回放录像、检视切片或导出证据。</p>
         </div>
@@ -287,38 +252,32 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
     );
   }
 
-  const durationForDisplay = segmentDurationMs || (activeSegment?.durationMs ?? 0);
-  const seekFraction = durationForDisplay > 0 ? Math.min(1, Math.max(0, currentTimeMs / durationForDisplay)) : 0;
+  const durationForDisplay = controller.durationMs || (activeSegment?.durationMs ?? 0);
+  const rangeMinIdx = segmentRangeStartIndex !== null && segmentRangeEndIndex !== null
+    ? Math.min(segmentRangeStartIndex, segmentRangeEndIndex)
+    : segmentIndex;
+  const rangeMaxIdx = segmentRangeEndIndex !== null ? Math.max(rangeMinIdx, segmentRangeEndIndex) : segmentIndex;
+  const hasMultiple = rangeMinIdx !== rangeMaxIdx && segments.length > 0;
+  const startSeg = segments[rangeMinIdx] || activeSegment;
+  const endSeg = segments[rangeMaxIdx] || activeSegment;
 
   return (
-    <section className="history-session-panel" aria-label="历史记录">
-      {/* 1. Session Information Header Card */}
-      <header className="history-session-header">
-        <div className="history-session-meta-lead">
-          <div className="history-session-title-line">
-            <h3 className="history-session-heading">
-              {props.session.name?.trim() || '未命名会话'}
-            </h3>
-            <span className={`history-session-status-badge ${isLive ? 'is-live' : 'is-archived'}`}>
-              {isLive ? '🔴 录制中' : '⚪ 已归档'}
-            </span>
+    <section className={styles.panel} data-ui-scope="review" aria-label="历史记录">
+      <header className={styles.header}>
+        <div className={styles.metaLead}>
+          <div className={styles.titleLine}>
+            <h3 className={styles.heading}>{props.session.name?.trim() || '未命名会话'}</h3>
+            <Badge tone={isLive ? 'danger' : 'neutral'}>{isLive ? '🔴 录制中' : '⚪ 已归档'}</Badge>
           </div>
-
-          <div className="history-session-meta-chips">
-            <span className="history-meta-chip" title="会话开始时间">
-              📅 {formatWhen(props.session.startedAtMs)}
-            </span>
+          <div className={styles.metaChips}>
+            <span className={styles.metaChip} title="会话开始时间">📅 {formatWhen(props.session.startedAtMs)}</span>
             {totalDurationMs > 0 ? (
-              <span className="history-meta-chip" title="总录制时长">
-                ⏱️ {formatClock(totalDurationMs)}
-              </span>
+              <span className={styles.metaChip} title="总录制时长">⏱️ {formatClock(totalDurationMs)}</span>
             ) : null}
-            <span className="history-meta-chip" title="视频切片总数">
-              📑 {segments.length} 个切片
-            </span>
+            <span className={styles.metaChip} title="视频切片总数">📑 {segments.length} 个切片</span>
             <button
               type="button"
-              className="history-meta-copy-btn"
+              className={styles.copyBtn}
               onClick={handleCopySessionId}
               title={`复制会话 ID: ${sessionId}`}
             >
@@ -327,168 +286,105 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
           </div>
         </div>
 
-        <div className="history-session-actions">
-          <button
-            type="button"
-            className="btn btn-secondary btn-sm"
-            disabled={busy}
-            onClick={() => setEditing((current) => !current)}
-          >
+        <div className={styles.actions}>
+          <Button variant="secondary" size="sm" disabled={busy || isLive} onClick={() => setEditing((curr) => !curr)}>
             {editing ? '取消编辑' : '✏️ 编辑'}
-          </button>
+          </Button>
           {(operationCount > 0 || (props.semanticEnabled && isLive)) && props.onOpenSemanticReview ? (
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              onClick={props.onOpenSemanticReview}
-            >
+            <Button variant="secondary" size="sm" onClick={props.onOpenSemanticReview}>
               语义步骤
-            </button>
+            </Button>
           ) : null}
-          {activeSegment ? (() => {
-            const rangeMinIdx = segmentRangeEndIndex !== null ? Math.min(segmentIndex, segmentRangeEndIndex) : segmentIndex;
-            const rangeMaxIdx = segmentRangeEndIndex !== null ? Math.max(segmentIndex, segmentRangeEndIndex) : segmentIndex;
-            const hasMultiple = rangeMinIdx !== rangeMaxIdx && segments.length > 0;
-            const startSeg = segments[rangeMinIdx] || activeSegment;
-            const endSeg = segments[rangeMaxIdx] || activeSegment;
-            return (
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                disabled={busy || isLive || isExporting}
-                onClick={() => {
-                  void exportSession({
-                    range: {
-                      startMs: startSeg.startedAtMs,
-                      endMs: endSeg.endedAtMs,
-                    },
-                    clipMode: "precise",
-                  });
-                }}
-                title={hasMultiple ? `导出切片 #${rangeMinIdx + 1} 至 #${rangeMaxIdx + 1} 对应的时间片段` : "导出当前选中切片对应的时间片段"}
-              >
-                {hasMultiple ? `导出切片 (#${rangeMinIdx + 1}-#${rangeMaxIdx + 1})` : "导出当前切片"}
-              </button>
-            );
-          })() : null}
-          <button
-            type="button"
-            className="btn btn-primary btn-sm history-export-btn"
-            disabled={busy || isLive || isExporting}
-            onClick={() => { void exportSession(); }}
-            title="导出整场会话全部切片"
-          >
-            {isExporting ? '正在导出…' : '导出全部'}
-          </button>
+          <HistoryExportMenu
+            disabled={busy || isLive}
+            isExporting={isExporting}
+            hasSegment={Boolean(activeSegment)}
+            segmentLabel={hasMultiple ? `导出切片 (#${rangeMinIdx + 1}-#${rangeMaxIdx + 1})` : '导出当前切片'}
+            onExportAll={() => { void exportSession(); }}
+            onExportSegment={() => {
+              if (!startSeg || !endSeg) return;
+              void exportSession({
+                range: { startMs: startSeg.startedAtMs, endMs: endSeg.endedAtMs },
+                clipMode: 'precise',
+              });
+            }}
+          />
         </div>
       </header>
 
-      {/* 2. Metadata Editing Form */}
       {editing ? (
-        <div className="history-session-form-card">
-          <div className="history-form-group">
-            <div className="history-form-label-row">
-              <label htmlFor="history-name-input">会话名称</label>
-              <span className="history-char-counter">{name.length} / 80</span>
-            </div>
+        <div className={styles.formCard}>
+          <div>
+            <label htmlFor="history-name-input">会话名称</label>
             <input
               id="history-name-input"
-              className="history-form-input"
               value={name}
               maxLength={80}
               placeholder="输入简明易记的测试会话名称..."
-              onChange={(event) => setName(event.target.value)}
+              onChange={(e) => setName(e.target.value)}
             />
           </div>
-
-          <div className="history-form-group">
-            <div className="history-form-label-row">
-              <label htmlFor="history-notes-input">会话备注 / 缺陷说明</label>
-              <span className="history-char-counter">{notes.length} / 2000</span>
-            </div>
+          <div>
+            <label htmlFor="history-notes-input">会话备注 / 缺陷说明</label>
             <textarea
               id="history-notes-input"
-              className="history-form-textarea"
               value={notes}
               maxLength={2000}
               rows={3}
               placeholder="记录测试用例编号、前置条件或缺陷概要..."
-              onChange={(event) => setNotes(event.target.value)}
+              onChange={(e) => setNotes(e.target.value)}
             />
           </div>
-
-          <div className="history-form-actions">
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              disabled={busy}
-              onClick={() => { void saveMeta(); }}
-            >
-              保存修改
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
-              disabled={busy}
-              onClick={() => setEditing(false)}
-            >
-              取消
-            </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="primary" size="sm" disabled={busy} onClick={() => { void saveMeta(); }}>保存修改</Button>
+            <Button variant="ghost" size="sm" disabled={busy} onClick={() => setEditing(false)}>取消</Button>
           </div>
-        </div>
-      ) : props.session.notes ? (
-        <div className="history-session-notes-card">
-          <span className="notes-kicker">会话备注</span>
-          <p className="notes-body">{props.session.notes}</p>
         </div>
       ) : null}
 
-      {/* 3. Cinema Video Stage */}
-      <div className={`history-session-stage${isFullscreen ? ' is-fullscreen' : ''}`} ref={stageRef}>
+      {/* 3. Primary Video Playback Stage */}
+      <div className={styles.stage}>
         {loading ? (
-          <div className="history-stage-center-msg">
-            <div className="history-stage-spinner" aria-hidden="true" />
+          <div className={styles.stageMessage}>
+            <span className={styles.stageMessageIcon} aria-hidden="true">⌛</span>
             <p>正在读取录像切片…</p>
           </div>
         ) : null}
 
-        {!loading && !activeSegment ? (
-          <div className="history-stage-center-msg">
-            <span className="stage-empty-icon" aria-hidden="true">🎬</span>
+        {controller.hasError ? (
+          <div className={styles.stageMessage}>
+            <span className={styles.stageMessageIcon} aria-hidden="true">⚠️</span>
+            <p>{controller.errorMessage || '当前录像加载失败'}</p>
+          </div>
+        ) : null}
+
+        {!loading && !activeSegment && !controller.hasError ? (
+          <div className={styles.stageMessage}>
+            <span className={styles.stageMessageIcon} aria-hidden="true">🎬</span>
             <p>{isLive ? '正在写入当前切片，已封口的片段将在此就绪。' : '当前会话没有可播放的视频切片。'}</p>
           </div>
         ) : null}
 
         {activeSegment?.playbackUrl ? (
-          <div className="history-video-container" onClick={togglePlayback}>
+          <div
+            className={styles.videoContainer}
+            onClick={controller.togglePlay}
+            style={{ display: controller.hasError ? 'none' : undefined }}
+          >
             <video
-              ref={videoRef}
+              ref={controller.videoRef}
+              className={styles.videoElement}
               controls={false}
-              onTimeUpdate={(e) => {
-                setCurrentTimeMs(Math.round(e.currentTarget.currentTime * 1000));
-              }}
-              onDurationChange={(e) => {
-                if (Number.isFinite(e.currentTarget.duration)) {
-                  setSegmentDurationMs(Math.round(e.currentTarget.duration * 1000));
-                }
-              }}
-              onPlay={() => setPlaying(true)}
-              onPause={() => setPlaying(false)}
-              onEnded={() => {
-                setSegmentIndex((current) => {
-                  const rangeMax = segmentRangeEndIndex !== null ? Math.max(segmentIndex, segmentRangeEndIndex) : segments.length - 1;
-                  if (current + 1 <= rangeMax && current + 1 < segments.length) {
-                    return current + 1;
-                  }
-                  setPlaying(false);
-                  return current;
-                });
-              }}
+              onError={controller.handleError}
+              onLoadedMetadata={controller.handleLoadedMetadata}
+              onTimeUpdate={controller.handleTimeUpdate}
+              onPlay={controller.handlePlay}
+              onPause={controller.handlePause}
+              onEnded={controller.handleEnded}
             />
-            {/* Play / Pause Center Overlay Indicator */}
-            {!playing ? (
-              <div className="history-video-center-overlay" aria-hidden="true">
-                <div className="center-play-glyph">▶</div>
+            {!controller.isPlaying ? (
+              <div className={styles.centerOverlay} aria-hidden="true">
+                ▶
               </div>
             ) : null}
           </div>
@@ -496,196 +392,72 @@ export function HistorySessionPanel(props: HistorySessionPanelProps) {
       </div>
 
       {/* 4. Integrated Video Transport Controls */}
-      <div className="history-session-transport-dock" role="toolbar" aria-label="视频回放控制">
-        <div className="transport-controls-left">
-          <button
-            type="button"
-            className="transport-btn transport-btn-step"
-            disabled={!activeSegment}
-            onClick={() => handleSeekDelta(-5)}
-            title="后退 5 秒"
-            aria-label="后退 5 秒"
-          >
-            -5s
-          </button>
+      <HistoryTransportDock
+        controller={controller}
+        hasActiveSegment={Boolean(activeSegment)}
+        segmentIndex={segmentIndex}
+        totalSegments={segments.length}
+        durationMs={durationForDisplay}
+        onPrevSegment={() => {
+          if (segmentIndex <= 0) return;
+          setSegmentRangeStartIndex(null);
+          setSegmentRangeEndIndex(null);
+          pendingAutoPlayRef.current =
+            controller.isPlaying || Boolean(videoRef.current && !videoRef.current.paused);
+          setSegmentIndex((current) => Math.max(0, current - 1));
+        }}
+        onNextSegment={() => {
+          if (segmentIndex >= segments.length - 1) return;
+          setSegmentRangeStartIndex(null);
+          setSegmentRangeEndIndex(null);
+          pendingAutoPlayRef.current =
+            controller.isPlaying || Boolean(videoRef.current && !videoRef.current.paused);
+          setSegmentIndex((current) => Math.min(segments.length - 1, current + 1));
+        }}
+      />
 
-          <button
-            type="button"
-            className="transport-btn transport-btn-play"
-            disabled={!activeSegment}
-            onClick={togglePlayback}
-            title={playing ? '暂停播放 (空格)' : '播放视频 (空格)'}
-            aria-label={playing ? '暂停' : '播放'}
-          >
-            {playing ? '⏸' : '▶'}
-          </button>
-
-          <button
-            type="button"
-            className="transport-btn transport-btn-step"
-            disabled={!activeSegment}
-            onClick={() => handleSeekDelta(5)}
-            title="前进 5 秒"
-            aria-label="前进 5 秒"
-          >
-            +5s
-          </button>
-
-          <div className="transport-segment-nav">
-            <button
-              type="button"
-              className="transport-btn transport-btn-segment"
-              disabled={segmentIndex <= 0}
-              onClick={() => {
-                setSegmentRangeEndIndex(null);
-                setSegmentIndex((current) => Math.max(0, current - 1));
-              }}
-              title="切换至上一段"
-              aria-label="上一段"
-            >
-              ⏮ 上一段
-            </button>
-            <button
-              type="button"
-              className="transport-btn transport-btn-segment"
-              disabled={segmentIndex >= segments.length - 1}
-              onClick={() => {
-                setSegmentRangeEndIndex(null);
-                setSegmentIndex((current) => Math.min(segments.length - 1, current + 1));
-              }}
-              title="切换至下一段"
-              aria-label="下一段"
-            >
-              下一段 ⏭
-            </button>
-          </div>
+      {/* 5. Segment Selection Strip */}
+      {segments.length > 1 ? (
+        <div className={styles.segmentStrip} aria-label="切片导航">
+          {segments.map((seg, idx) => {
+            const isCurrent = idx === segmentIndex;
+            const isInRange = hasMultiple && idx >= rangeMinIdx && idx <= rangeMaxIdx;
+            return (
+              <button
+                key={seg.segmentId}
+                type="button"
+                className={`${styles.segmentChip} ${isCurrent || isInRange ? styles.segmentChipActive : ''}`}
+                onClick={(e) => {
+                  if (e.shiftKey) {
+                    const anchorIdx = segmentRangeStartIndex ?? segmentIndex;
+                    const minIdx = Math.min(anchorIdx, idx);
+                    const maxIdx = Math.max(anchorIdx, idx);
+                    setSegmentIndex(minIdx);
+                    setSegmentRangeStartIndex(minIdx === maxIdx ? null : minIdx);
+                    setSegmentRangeEndIndex(minIdx === maxIdx ? null : maxIdx);
+                    if (minIdx !== maxIdx) {
+                      props.onNotice?.(`已选取切片 #${minIdx + 1} 至 #${maxIdx + 1}`);
+                    }
+                  } else {
+                    setSegmentRangeStartIndex(null);
+                    setSegmentRangeEndIndex(null);
+                    if (idx === segmentIndex) {
+                      void play();
+                    } else {
+                      pendingAutoPlayRef.current = true;
+                      setSegmentIndex(idx);
+                    }
+                  }
+                }}
+                title={`切片 #${idx + 1} (${formatClock(seg.durationMs || 0)}) · 按住 Shift 连续多选`}
+              >
+                <span>#{idx + 1}</span>
+                <span>{formatClock(seg.durationMs || 0)}</span>
+              </button>
+            );
+          })}
         </div>
-
-        {/* Time Progress Scrubber */}
-        <div className="transport-scrubber-track">
-          <span className="transport-time-readout">
-            {formatClock(currentTimeMs)} / {formatClock(durationForDisplay)}
-          </span>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.001}
-            value={seekFraction}
-            disabled={!activeSegment || durationForDisplay === 0}
-            onChange={handleScrubberChange}
-            className="history-scrubber-slider"
-            aria-label="播放进度调节"
-          />
-        </div>
-
-        <div className="transport-controls-right">
-          <button
-            type="button"
-            className="transport-btn transport-btn-icon"
-            onClick={toggleMute}
-            title={isMuted ? '解除静音' : '静音'}
-            aria-label={isMuted ? '解除静音' : '静音'}
-          >
-            {isMuted ? '🔇' : '🔊'}
-          </button>
-          <button
-            type="button"
-            className="transport-btn transport-btn-icon"
-            onClick={toggleFullscreen}
-            title={isFullscreen ? '退出全屏' : '全屏播放'}
-            aria-label={isFullscreen ? '退出全屏' : '全屏播放'}
-          >
-            {isFullscreen ? '⤓' : '⤢'}
-          </button>
-        </div>
-      </div>
-
-      {/* 5. Segment Playlist Strip (切片切换导航条) */}
-      {segments.length > 1 ? (() => {
-        const rangeMinIdx = segmentRangeEndIndex !== null ? Math.min(segmentIndex, segmentRangeEndIndex) : segmentIndex;
-        const rangeMaxIdx = segmentRangeEndIndex !== null ? Math.max(segmentIndex, segmentRangeEndIndex) : segmentIndex;
-        const isMultiSelect = segmentRangeEndIndex !== null && rangeMinIdx !== rangeMaxIdx;
-        const startSeg = segments[rangeMinIdx] || activeSegment;
-        const endSeg = segments[rangeMaxIdx] || activeSegment;
-
-        return (
-          <div className="history-segments-strip" aria-label="切片列表">
-            <div className="strip-header-row">
-              <span className="strip-title">录像切片 ({segments.length})</span>
-              {isMultiSelect ? (
-                <div className="strip-inline-action-bar">
-                  <span className="strip-selection-summary">
-                    ✂️ 已选 #{rangeMinIdx + 1} - #{rangeMaxIdx + 1} ({rangeMaxIdx - rangeMinIdx + 1} 段 · {formatClock(Math.max(0, endSeg.endedAtMs - startSeg.startedAtMs))})
-                  </span>
-                  <button
-                    type="button"
-                    className="btn-strip-action btn-strip-export"
-                    disabled={busy || isLive || isExporting}
-                    onClick={() => {
-                      void exportSession({
-                        range: {
-                          startMs: startSeg.startedAtMs,
-                          endMs: endSeg.endedAtMs,
-                        },
-                        clipMode: 'precise',
-                      });
-                    }}
-                    title={`导出切片 #${rangeMinIdx + 1} 至 #${rangeMaxIdx + 1} 对应的时间片段`}
-                  >
-                    {isExporting ? '导出中…' : `导出切片 (#${rangeMinIdx + 1}-#${rangeMaxIdx + 1})`}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-strip-action btn-strip-reset"
-                    onClick={() => setSegmentRangeEndIndex(null)}
-                    title="取消多选"
-                  >
-                    重置
-                  </button>
-                </div>
-              ) : (
-                <span className="strip-hint">
-                  💡 按住 Shift 点击切片可连续多选导出
-                </span>
-              )}
-            </div>
-            <div className="strip-items-scroll">
-              {segments.map((seg, idx) => {
-                const isSelected = idx === segmentIndex;
-                const isInRange = isMultiSelect && idx >= rangeMinIdx && idx <= rangeMaxIdx;
-                return (
-                  <button
-                    key={seg.segmentId || idx}
-                    type="button"
-                    className={`segment-strip-chip ${isSelected ? 'is-active' : ''} ${isInRange ? 'is-in-range' : ''}`}
-                    onClick={(e) => {
-                      if (e.shiftKey) {
-                        const minIdx = Math.min(segmentIndex, idx);
-                        const maxIdx = Math.max(segmentIndex, idx);
-                        setSegmentIndex(minIdx);
-                        setSegmentRangeEndIndex(minIdx === maxIdx ? null : maxIdx);
-                        if (minIdx !== maxIdx) {
-                          props.onNotice?.(`已选取切片 #${minIdx + 1} 至 #${maxIdx + 1}`);
-                        }
-                      } else {
-                        setSegmentIndex(idx);
-                        setSegmentRangeEndIndex(null);
-                        setPlaying(true);
-                      }
-                    }}
-                    title={`切片 #${idx + 1} (${formatClock(seg.durationMs || 0)}) · 按住 Shift 连续多选`}
-                  >
-                    <span className="chip-idx">#{idx + 1}</span>
-                    <span className="chip-duration">{formatClock(seg.durationMs || 0)}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })() : null}
+      ) : null}
     </section>
   );
 }
-

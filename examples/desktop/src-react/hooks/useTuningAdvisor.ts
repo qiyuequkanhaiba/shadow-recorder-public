@@ -20,6 +20,7 @@ export type UseTuningAdvisorInput = {
   metrics: RecorderMetrics | null;
   toUiErrorMessage: (error: unknown) => string;
   onError: (message: string) => void;
+  onConfigCommitted?: (committed: RecorderConfigPayload) => void;
 };
 
 export type UseTuningAdvisorResult = {
@@ -61,6 +62,7 @@ export function useTuningAdvisor(input: UseTuningAdvisorInput): UseTuningAdvisor
     setSnapshotResult,
     onError: input.onError,
     toUiErrorMessage: input.toUiErrorMessage,
+    onConfigCommitted: input.onConfigCommitted,
   });
 
   return {

@@ -1,0 +1,498 @@
+/* Workbench, Cinema Stage, Timeline Dock, and Studio Drawer */
+
+.stage {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-canvas);
+}
+
+.viewportShell {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-canvas);
+  overflow: hidden;
+}
+
+.screenFrame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  max-width: min(100%, calc((100vh - 280px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+  background: var(--bg-surface-1);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.isFullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  aspect-ratio: auto;
+  width: 100vw;
+  height: 100vh;
+  max-width: 100vw;
+  max-height: 100vh;
+  border-radius: 0;
+  border: none;
+}
+
+.controlsHidden {
+  cursor: none;
+}
+
+.controlsHidden .hudTopLeft,
+.controlsHidden .hudTopRight,
+.controlsHidden .transportDock {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.videoElement {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: var(--bg-canvas);
+}
+
+.badgeCorner {
+  position: absolute;
+  top: 64px;
+  left: 16px;
+  z-index: 25;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Top-Left & Top-Right HUD */
+.hudTopLeft {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 55%;
+  transition: opacity var(--duration) var(--ease-out);
+}
+
+.streamRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+}
+
+.streamDisplay {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.streamResolution {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.streamSelect {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: var(--text-xs);
+}
+
+.encoderRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.metaChip {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+}
+
+.hudTopRight {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  transition: opacity var(--duration) var(--ease-out);
+}
+
+.telemetryPillToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.telemetryPillDot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: var(--status-ok);
+}
+
+.telemetryPillText {
+  font-family: var(--font-mono);
+}
+
+.telemetryPillArrow {
+  color: var(--text-muted);
+}
+
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(92px, auto));
+  gap: 6px;
+  padding: 8px;
+  border-radius: var(--radius-md);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+}
+
+.metricBox {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.metricKicker {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+
+.metricNum {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.metricAccent {
+  color: var(--accent-default);
+}
+
+.backendBadge {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+/* Center Stage States */
+.centerState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.recordPulse {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.recordPulseRing {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--status-ok);
+  opacity: 0.45;
+}
+
+.recordPulseCore {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+  background: var(--status-ok);
+}
+
+.emptyIcon {
+  font-size: 24px;
+}
+
+.stateTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.stateSub {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.playerError {
+  position: absolute;
+  top: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 35;
+  padding: 6px 14px;
+  border-radius: var(--radius-md);
+  background: var(--status-danger-bg);
+  border: 1px solid var(--status-danger-border);
+  color: var(--status-danger);
+  font-size: var(--text-xs);
+}
+
+/* Screen Marker Overlay */
+.overlayLayer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 20;
+  overflow: hidden;
+}
+
+.overlayBoundingBox {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--status-danger);
+  background: var(--status-danger-bg);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
+.overlayBoxLabel {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  background: var(--status-danger);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlayClickPoint {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.clickPulseRing {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-full);
+  border: 2px solid var(--accent-default);
+}
+
+.clickDot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  background: var(--accent-default);
+}
+
+.overlayPointLabel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--accent-default);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Transport Dock */
+.transportDock {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(94%, 820px);
+  padding: 6px 10px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-glass);
+  border: 1px solid var(--border-default);
+  box-shadow: var(--shadow-md);
+  transition: opacity var(--duration) var(--ease-out);
+}
+
+.btnDockStep,
+.btnDockPlay,
+.btnDockPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.btnDockPlay {
+  background: var(--accent-default);
+  border-color: var(--accent-default);
+}
+
+.btnDockStep:hover:not(:disabled),
+.btnDockPill:hover:not(:disabled) {
+  background: var(--bg-surface-3);
+  border-color: var(--border-strong);
+}
+
+.btnDockPlay:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.btnDockStep:disabled,
+.btnDockPlay:disabled,
+.btnDockPill:disabled,
+.btnDockQuickDefect:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.timeTrack {
+  flex: 1 1 auto;
+  min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clockReadout {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.scrubberShell {
+  position: relative;
+  flex: 1 1 auto;
+  height: 20px;
+  display: flex;
+  align-items: center;
+}
+
+.scrubberBar {
+  width: 100%;
+  height: 4px;
+  border-radius: var(--radius-full);
+  background: var(--bg-surface-3);
+  overflow: hidden;
+}
+
+.scrubberFill {
+  height: 100%;
+  background: var(--accent-default);
+}
+
+.scrubberInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.btnGroupRange {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btnDockQuickDefect {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--status-danger-border);
+  background: var(--status-danger-bg);
+  color: var(--status-danger);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}

@@ -436,6 +436,7 @@ export function useRecorderDashboardSnapshot(
       selectedSessionIdRef.current = null;
       setSelectedSessionId(null);
     }
+    snapshotSignatureRef.current = '';
     setSessions((current) => current.filter((session) => !sessionIds.includes(session.sessionId)));
   }, []);
 
@@ -449,6 +450,7 @@ export function useRecorderDashboardSnapshot(
       await api.deleteTestSession({ sessionId });
     } catch (error) {
       hiddenSessionIdsRef.current.delete(sessionId);
+      snapshotSignatureRef.current = '';
       throw error;
     }
     await refresh();
@@ -464,19 +466,45 @@ export function useRecorderDashboardSnapshot(
       throw new Error('当前版本不支持删除历史会话');
     }
     forgetSessions(uniqueIds);
-    const result = await api.deleteTestSession({ sessionIds: uniqueIds });
-    const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
-    for (const sessionId of skipped) {
-      hiddenSessionIdsRef.current.delete(sessionId);
+    try {
+      const result = await api.deleteTestSession({ sessionIds: uniqueIds });
+      const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+      for (const sessionId of skipped) {
+        hiddenSessionIdsRef.current.delete(sessionId);
+      }
+      if (skipped.length > 0) {
+        snapshotSignatureRef.current = '';
+      }
+      if (inFlightRefreshRef.current) {
+        try {
+          await inFlightRefreshRef.current;
+        } catch {
+          // ignore in-flight error
+        }
+      }
+      await refresh();
+      if (Array.isArray(result?.deleted)) {
+        return { deleted: result.deleted, skipped };
+      }
+      return {
+        deleted: result?.deleted === true && result.sessionId ? [result.sessionId] : uniqueIds,
+        skipped,
+      };
+    } catch (error) {
+      for (const sessionId of uniqueIds) {
+        hiddenSessionIdsRef.current.delete(sessionId);
+      }
+      snapshotSignatureRef.current = '';
+      if (inFlightRefreshRef.current) {
+        try {
+          await inFlightRefreshRef.current;
+        } catch {
+          // ignore
+        }
+      }
+      await refresh().catch(() => undefined);
+      throw error;
     }
-    await refresh();
-    if (Array.isArray(result?.deleted)) {
-      return { deleted: result.deleted, skipped };
-    }
-    return {
-      deleted: result?.deleted === true && result.sessionId ? [result.sessionId] : uniqueIds,
-      skipped,
-    };
   }, [forgetSessions, refresh]);
 
   return {

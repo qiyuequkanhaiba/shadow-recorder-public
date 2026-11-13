@@ -28,6 +28,7 @@ type UseTuningAdvisorCommandsInput = {
   setSnapshotResult: Dispatch<SetStateAction<TuningSnapshotExportResult | null>>;
   onError: (message: string) => void;
   toUiErrorMessage: (error: unknown) => string;
+  onConfigCommitted?: (committed: RecorderConfigPayload) => void;
 };
 
 type UseTuningAdvisorCommandsResult = {
@@ -59,6 +60,7 @@ export function useTuningAdvisorCommands(
       try {
         input.setConfig(nextConfig);
         await window.reqcaseShadowRecorder.setConfig(nextConfig);
+        input.onConfigCommitted?.(nextConfig);
         const settings = buildPersistedTuningSettings({
           nextConfig,
           profile,
@@ -74,6 +76,7 @@ export function useTuningAdvisorCommands(
     [
       input.autoApplyRecommendedOnStartup,
       input.config,
+      input.onConfigCommitted,
       input.onError,
       input.recommendation.profile,
       input.recommendation.reason,

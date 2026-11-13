@@ -1,6 +1,6 @@
 {
   "name": "shadow-recorder-desktop-example",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "private": true,
   "author": "ReqCase",
   "description": "Electron + React demo for shadow_recorder napi plugin",
@@ -18,6 +18,7 @@
     "clean:safe": "powershell -ExecutionPolicy Bypass -File ../../scripts/safe-clean-workspace.ps1",
     "clean:safe:dry-run": "powershell -ExecutionPolicy Bypass -File ../../scripts/safe-clean-workspace.ps1 -DryRun",
     "test:metrics-stream": "tsx scripts/metrics-stream-test.ts",
+    "test:ui-behavior": "tsx scripts/ui-behavior/recorder-actions.test.ts && tsx scripts/ui-behavior/player-states.test.ts",
     "test:recorder-page-bindings": "tsx scripts/recorder-page-bindings-test.ts",
     "test:tuning-advisor-commands": "tsx scripts/tuning-advisor-commands-test.ts",
     "test:recorder-bootstrap-bindings": "tsx scripts/recorder-bootstrap-bindings-test.ts",
@@ -60,9 +61,11 @@
     "check:quality:quick": "powershell -ExecutionPolicy Bypass -File ../../scripts/quality-gate.ps1 -SkipWindowsEnvCheck -SkipBuild",
     "typecheck:react": "tsc -p tsconfig.json --noEmit",
     "typecheck:electron": "tsc -p tsconfig.electron.json --noEmit",
+    "generate:overlay-theme": "tsx scripts/generate-overlay-theme.ts",
+    "check:overlay-theme": "tsx scripts/generate-overlay-theme.ts --check",
     "build": "npm run build:react && npm run build:electron",
     "build:react": "npm run typecheck:react && vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "npm run generate:overlay-theme && tsc -p tsconfig.electron.json",
     "pack": "npm run build:native:release && npm run prepare:ffmpeg && npm run build && npm run clean:release-output && electron-builder --dir",
     "dist:nsis": "npm run build:native:release && npm run prepare:ffmpeg && npm run build && npm run clean:release-output && electron-builder --win nsis",
     "dist:wix-msi": "npm run pack && powershell -ExecutionPolicy Bypass -File scripts/build-wix-msi.ps1 -SkipPack",
@@ -118,11 +121,16 @@
     }
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^1.72.0",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.9",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^24.3.0",
     "@types/react": "^19.1.11",
     "@types/react-dom": "^19.1.7",
@@ -131,6 +139,7 @@
     "cross-env": "^10.1.0",
     "electron": "^37.1.0",
     "electron-builder": "^26.8.1",
+    "jsdom": "^31.0.0",
     "ts-node": "^10.9.2",
     "tsx": "^4.20.4",
     "typescript": "^5.9.2",

@@ -356,28 +356,39 @@ async function captureScreenshot(client, outputPath) {
   writeFileSync(outputPath, Buffer.from(result.data, 'base64'));
 }
 
-async function selectSession(client, sessionId) {
+async function selectSession(client, sessionId, timeoutMs = 15_000) {
+  await evaluate(client, `(() => {
+    const tab = document.getElementById('tab-evidence');
+    if (tab instanceof HTMLElement && tab.getAttribute('aria-selected') !== 'true') {
+      tab.click();
+    }
+  })()`);
+  await waitForExpression(
+    client,
+    `(() => {
+      if (document.querySelector('#tab-evidence')?.getAttribute('aria-selected') !== 'true') return false;
+      if (!document.querySelector('#panel-evidence')) return false;
+      const rows = Array.from(document.querySelectorAll('[data-ui-scope="review"] [data-session-id]'));
+      return rows.some((el) => el.getAttribute('data-session-id') === ${JSON.stringify(sessionId)});
+    })()`,
+    timeoutMs,
+  );
   return evaluate(client, `(() => {
-    const select = document.querySelector('select.recorder-log-select');
-    if (!(select instanceof HTMLSelectElement)) {
-      return { changed: false, reason: 'session select missing' };
+    const rows = Array.from(document.querySelectorAll('[data-ui-scope="review"] [data-session-id]'));
+    const targetRow = rows.find((el) => el.getAttribute('data-session-id') === ${JSON.stringify(sessionId)}) ?? null;
+    if (targetRow instanceof HTMLElement) {
+      targetRow.click();
+      return { changed: true };
     }
-    const option = Array.from(select.options).find((candidate) => candidate.value === ${JSON.stringify(sessionId)});
-    if (!option) {
-      return { changed: false, reason: 'session option missing' };
-    }
-    select.value = option.value;
-    select.dispatchEvent(new Event('change', { bubbles: true }));
-    return { changed: true };
+    return { changed: false, reason: 'session row not found' };
   })()`);
 }
 
 async function readUiSnapshot(client) {
   return evaluate(client, `(() => {
     const root = document.getElementById('root');
-    const sessionSelect = document.querySelector('select.recorder-log-select');
-    const timelineItems = document.querySelectorAll('.event-timeline-item');
     const rootText = root?.innerText ?? '';
+    const selectedRow = document.querySelector('[data-ui-scope="review"] [data-session-id][aria-pressed="true"]');
     return {
       readyState: document.readyState,
       rootTextLength: rootText.trim().length,
@@ -385,9 +396,7 @@ async function readUiSnapshot(client) {
       rootErrorVisible: !!document.querySelector('.root-error-panel'),
       mainPanelVisible: !!document.querySelector('#panel-main'),
       evidencePanelVisible: !!document.querySelector('#panel-evidence'),
-      selectedSessionId: sessionSelect instanceof HTMLSelectElement ? sessionSelect.value : null,
-      sessionOptionCount: sessionSelect instanceof HTMLSelectElement ? sessionSelect.options.length : 0,
-      timelineItemCount: timelineItems.length,
+      selectedSessionId: selectedRow?.getAttribute('data-session-id') ?? null,
       videoCount: document.querySelectorAll('video').length,
     };
   })()`);
@@ -461,8 +470,7 @@ async function run() {
     await waitForExpression(
       client,
       `document.querySelector('#tab-main')?.getAttribute('aria-selected') === 'true'
-        && document.querySelector('#panel-main')
-        && document.querySelector('select.recorder-log-select') instanceof HTMLSelectElement`,
+        && !!document.querySelector('#panel-main')`,
       options.timeoutMs,
     );
 
@@ -480,20 +488,20 @@ async function run() {
     const realSessions = sessions.filter((session) => !fixtureSessionIds.has(session.sessionId));
     const selectedSessions = options.maxSessions > 0 ? realSessions.slice(0, options.maxSessions) : realSessions;
     for (const session of selectedSessions) {
-      const change = await selectSession(client, session.sessionId);
+      const change = await selectSession(client, session.sessionId, options.timeoutMs);
       assert(change.changed, `${session.sessionId}: ${change.reason}`);
       await delay(450);
       const snapshot = await readUiSnapshot(client);
       assert(snapshot.rootTextLength > 20, `${session.sessionId}: renderer root is blank`);
       assert.equal(snapshot.rootErrorVisible, false, `${session.sessionId}: root error boundary is visible`);
-      assert.equal(snapshot.mainPanelVisible, true, `${session.sessionId}: main history panel disappeared`);
+      assert.equal(snapshot.evidencePanelVisible, true, `${session.sessionId}: evidence history panel disappeared`);
       assert.equal(snapshot.selectedSessionId, session.sessionId, `${session.sessionId}: selection did not settle`);
     }
 
     const firstTimelineClick = await evaluate(client, `(() => {
-      const button = document.querySelector('.event-timeline-item');
-      if (!(button instanceof HTMLButtonElement)) return false;
-      button.click();
+      const opRow = document.querySelector('[data-operation-id]');
+      if (!(opRow instanceof HTMLElement)) return false;
+      opRow.click();
       return true;
     })()`);
     if (firstTimelineClick) {
@@ -501,35 +509,27 @@ async function run() {
     }
 
     for (const fixture of fixtures) {
-      const change = await selectSession(client, fixture.sessionId);
+      const change = await selectSession(client, fixture.sessionId, options.timeoutMs);
       assert(change.changed, `${fixture.sessionId}: ${change.reason}`);
       await delay(500);
       const snapshot = await readUiSnapshot(client);
       assert(snapshot.rootTextLength > 20, `${fixture.kind}: renderer root is blank`);
       assert.equal(snapshot.rootErrorVisible, false, `${fixture.kind}: root error boundary is visible`);
-      assert.equal(snapshot.mainPanelVisible, true, `${fixture.kind}: main history panel disappeared`);
+      assert.equal(snapshot.evidencePanelVisible, true, `${fixture.kind}: evidence history panel disappeared`);
       assert.equal(snapshot.selectedSessionId, fixture.sessionId, `${fixture.kind}: selection did not settle`);
-
-      await evaluate(client, `document.getElementById('tab-evidence')?.click()`);
-      await waitForExpression(
-        client,
-        `document.querySelector('#tab-evidence')?.getAttribute('aria-selected') === 'true'
-          && !!document.querySelector('#panel-evidence')`,
-        options.timeoutMs,
-      );
-      const evidenceSnapshot = await readUiSnapshot(client);
-      assert(evidenceSnapshot.rootTextLength > 20, `${fixture.kind}: evidence renderer root is blank`);
-      assert.equal(evidenceSnapshot.rootErrorVisible, false, `${fixture.kind}: evidence root error boundary is visible`);
-      assert.equal(evidenceSnapshot.evidencePanelVisible, true, `${fixture.kind}: evidence panel disappeared`);
       await captureScreenshot(client, path.join(outputDir, `history-${fixture.kind}.png`));
 
       await evaluate(client, `document.getElementById('tab-main')?.click()`);
       await waitForExpression(
         client,
         `document.querySelector('#tab-main')?.getAttribute('aria-selected') === 'true'
-          && document.querySelector('select.recorder-log-select') instanceof HTMLSelectElement`,
+          && !!document.querySelector('#panel-main')`,
         options.timeoutMs,
       );
+      const mainSnapshot = await readUiSnapshot(client);
+      assert(mainSnapshot.rootTextLength > 20, `${fixture.kind}: main renderer root is blank`);
+      assert.equal(mainSnapshot.rootErrorVisible, false, `${fixture.kind}: main root error boundary is visible`);
+      assert.equal(mainSnapshot.mainPanelVisible, true, `${fixture.kind}: main panel disappeared`);
     }
 
     const problems = rendererProblems(client.events);

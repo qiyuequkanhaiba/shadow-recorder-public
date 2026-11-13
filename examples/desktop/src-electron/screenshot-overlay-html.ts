@@ -1,28 +1,31 @@
+import { OVERLAY_THEME_CSS } from './generated/overlay-theme';
+
 export function createScreenshotOverlayHtml(): string {
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <style>
+${OVERLAY_THEME_CSS}
     html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; cursor: crosshair; user-select: none; -webkit-user-select: none; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif; }
-    #dim { position: fixed; inset: 0; background: rgba(2, 6, 23, 0.38); }
-    #box { position: fixed; display: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.85), 0 12px 40px rgba(0, 0, 0, 0.18); box-sizing: border-box; }
+    #dim { position: fixed; inset: 0; background: var(--bg-overlay, rgba(2, 6, 23, 0.38)); }
+    #box { position: fixed; display: none; border: 1.5px solid #fff; box-shadow: 0 0 0 1px var(--accent-default, rgba(14, 165, 233, 0.85)), var(--shadow-lg, 0 12px 40px rgba(0, 0, 0, 0.18)); box-sizing: border-box; }
     #draw { display: none; width: 100%; height: 100%; touch-action: none; -webkit-user-drag: none; }
-    #size { position: absolute; right: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; color: #fff; background: rgba(15, 23, 42, 0.82); font: 12px/1.4 sans-serif; letter-spacing: 0.02em; pointer-events: none; }
-    #editor { position: absolute; z-index: 5; display: none; min-width: 120px; max-width: 280px; padding: 4px 8px; border: 1px solid #fff; border-radius: 8px; background: rgba(15, 23, 42, 0.94); color: #fff; caret-color: #fff; font: 16px/1.4 sans-serif; outline: none; cursor: text; user-select: text; -webkit-user-select: text; }
+    #size { position: absolute; right: 8px; bottom: 8px; padding: 3px 8px; border-radius: 999px; color: var(--text-primary, #fff); background: var(--bg-glass, rgba(15, 23, 42, 0.82)); font: 12px/1.4 sans-serif; letter-spacing: 0.02em; pointer-events: none; }
+    #editor { position: absolute; z-index: 5; display: none; min-width: 120px; max-width: 280px; padding: 4px 8px; border: 1px solid var(--border-subtle, #fff); border-radius: 8px; background: var(--bg-glass, rgba(15, 23, 42, 0.94)); color: var(--text-primary, #fff); caret-color: var(--accent-default, #fff); font: 16px/1.4 sans-serif; outline: none; cursor: text; user-select: text; -webkit-user-select: text; }
     #chrome { position: absolute; left: 0; top: calc(100% + 10px); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-    #tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; width: max-content; max-width: calc(100vw - 16px); padding: 4px; border-radius: 12px; background: rgba(15, 23, 42, 0.88); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); box-sizing: border-box; }
+    #tools { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; width: max-content; max-width: calc(100vw - 16px); padding: 4px; border-radius: 12px; background: var(--bg-glass, rgba(15, 23, 42, 0.88)); box-shadow: var(--shadow-md, 0 10px 30px rgba(0, 0, 0, 0.28)); box-sizing: border-box; }
     #colors { display: flex; align-items: center; flex: 0 0 auto; flex-wrap: nowrap; gap: 4px; margin-left: 2px; }
     #colors button { width: 16px; height: 16px; padding: 0; border-radius: 50%; border: 2px solid transparent; }
-    #tools button { flex: 0 0 auto; color: #e2e8f0; background: transparent; border: 0; border-radius: 8px; padding: 6px 8px; font: 12px/1.4 sans-serif; cursor: pointer; white-space: nowrap; }
-    #tools button:hover { background: rgba(255, 255, 255, 0.08); }
-    #tools button[data-active="true"] { color: #fff; background: #0284c7; }
+    #tools button { flex: 0 0 auto; color: var(--text-secondary, #e2e8f0); background: transparent; border: 0; border-radius: 8px; padding: 6px 8px; font: 12px/1.4 sans-serif; cursor: pointer; white-space: nowrap; }
+    #tools button:hover { background: var(--bg-surface-3, rgba(255, 255, 255, 0.08)); }
+    #tools button[data-active="true"] { color: #fff; background: var(--accent-default, #0284c7); }
     #colors button[data-active="true"] { border-color: #fff; }
     #pin { margin-left: 4px; background: rgba(255, 255, 255, 0.08); }
     #accept, #dismiss { font: 16px/1 sans-serif; min-width: 28px; }
-    #accept { color: #4ade80; }
-    #dismiss { color: #f87171; }
-    #hint { padding: 4px 8px; border-radius: 999px; color: #cbd5e1; background: rgba(15, 23, 42, 0.82); font: 12px/1.4 sans-serif; white-space: nowrap; }
+    #accept { color: var(--status-ok, #4ade80); }
+    #dismiss { color: var(--status-danger, #f87171); }
+    #hint { padding: 4px 8px; border-radius: 999px; color: var(--text-muted, #cbd5e1); background: var(--bg-glass, rgba(15, 23, 42, 0.82)); font: 12px/1.4 sans-serif; white-space: nowrap; }
   </style>
 </head>
 <body>

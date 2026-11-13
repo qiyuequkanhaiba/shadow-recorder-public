@@ -65,6 +65,9 @@ function Get-CommandPath {
   if ($null -eq $cmd) {
     return ''
   }
+  if ($cmd.Path) {
+    return $cmd.Path
+  }
   return $cmd.Source
 }
 

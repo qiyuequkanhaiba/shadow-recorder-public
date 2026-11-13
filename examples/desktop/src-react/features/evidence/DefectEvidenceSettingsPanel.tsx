@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type Dispatch, type SetStateAction } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type Dispatch,
+  type SetStateAction,
+} from 'react';
+import clsx from 'clsx';
 
-import type { RecorderConfigPayload, SemanticProfileImportRecord } from '../../../types/contracts';
+import type {
+  RecorderConfigPayload,
+  SemanticProfileImportRecord,
+} from '../../../types/contracts';
 import { isSemanticRecordingEnabled } from '../../lib/recorder-page-bindings';
+import { Badge, Button, Field } from '../../ui';
+import styles from '../settings/SettingsSection.module.css';
 import {
   SemanticProfileEditor,
   type EditableSemanticProfile,
@@ -10,12 +24,27 @@ import {
 type DefectEvidenceSettingsPanelProps = {
   config: RecorderConfigPayload;
   setConfig: Dispatch<SetStateAction<RecorderConfigPayload>>;
+  error?: string;
 };
 
 type ProfileLibraryItem = SemanticProfileImportRecord;
 
-function getApi(): any {
-  return (window as any).reqcaseShadowRecorder;
+interface ElectronBridgeSettingsApi {
+  getSettings?: () => Promise<{
+    semanticProfiles?: unknown[];
+    semanticProfile?: unknown;
+    activeSemanticProfileId?: string;
+  }>;
+  getSemanticProfileJson?: () => Promise<unknown>;
+  importSemanticProfile?: () => Promise<unknown>;
+  setActiveSemanticProfile?: (id: string) => Promise<unknown>;
+  setSemanticProfileJson?: (data: { id?: string; profile: unknown }) => Promise<unknown>;
+  removeSemanticProfile?: (id: string) => Promise<unknown>;
+  clearSemanticProfile?: () => Promise<unknown>;
+}
+
+function getApi(): ElectronBridgeSettingsApi {
+  return window.reqcaseShadowRecorder as unknown as ElectronBridgeSettingsApi;
 }
 
 function clampSeconds(value: number, min: number, max: number, fallback: number): number {
@@ -73,7 +102,10 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
   const [profileBusy, setProfileBusy] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
 
-  function update<K extends keyof RecorderConfigPayload>(key: K, value: RecorderConfigPayload[K]) {
+  function update<K extends keyof RecorderConfigPayload>(
+    key: K,
+    value: RecorderConfigPayload[K],
+  ) {
     props.setConfig((current) => ({ ...current, [key]: value }));
   }
 
@@ -106,7 +138,7 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
             ...item,
             id: recordId(item, index),
           }));
-        } else if (settings?.semanticProfile?.profile) {
+        } else if (settings?.semanticProfile && typeof settings.semanticProfile === 'object') {
           const legacy = settings.semanticProfile as ProfileLibraryItem;
           nextLibrary = [{ ...legacy, id: recordId(legacy, 0) }];
         }
@@ -120,7 +152,9 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
       setActiveId(nextActive);
 
       const selected =
-        nextLibrary.find((item, i) => recordId(item, i) === nextActive) ?? nextLibrary[0] ?? null;
+        nextLibrary.find((item, i) => recordId(item, i) === nextActive) ??
+        nextLibrary[0] ??
+        null;
       if (selected?.profile) {
         setProfileDraft(selected.profile as EditableSemanticProfile);
       } else if (typeof api?.getSemanticProfileJson === 'function') {
@@ -192,7 +226,6 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
         }
         setProfileStatus(`已切换到画像「${parsed?.name || id}」，录制将使用该画像。`);
       } else {
-        // fallback: local only
         const item = library.find((entry, i) => recordId(entry, i) === id);
         setActiveId(id);
         setProfileDraft((item?.profile as EditableSemanticProfile) ?? null);
@@ -279,115 +312,118 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
   }
 
   return (
-    <section className="settings-form-panel settings-form-panel-fluid" aria-label="步骤记录设置">
-      <header className="settings-form-header">
-        <h3>步骤记录</h3>
-        <p>
-          可选功能。开启后在录制中补充控件识别与语义步骤。可导入多个软件的画像 JSON，用 Tab 切换当前生效画像。
-        </p>
+    <section className={styles.pane} aria-label="步骤记录设置">
+      <header className={styles.header}>
+        <div className={styles.headerCopy}>
+          <h2 className={styles.headerTitle}>步骤记录</h2>
+          <p className={styles.headerDesc}>
+            可选功能。开启后在录制中补充控件识别与语义步骤。可导入多个软件的画像
+            JSON，用 Tab 切换当前生效画像。
+          </p>
+        </div>
       </header>
 
-      <div className="steps-settings-section">
-        <label className="settings-toggle">
-          <span>
-            <strong>启用语义记录</strong>
-            <small>UIA 控件补全 · 键盘摘要 · 步骤聚合 · 记录包导出</small>
-          </span>
+      <div className={styles.section}>
+        <label className={styles.toggleLabel}>
           <input
             type="checkbox"
+            className={styles.toggleInput}
             checked={enabled}
             onChange={(event: ChangeEvent<HTMLInputElement>) => {
               updateSemanticRecordingEnabled(event.target.checked);
             }}
           />
+          <span className={styles.toggleCopy}>
+            <strong className={styles.toggleTitle}>启用语义记录</strong>
+            <small className={styles.toggleSub}>
+              UIA 控件补全 · 键盘摘要 · 步骤聚合 · 记录包导出
+            </small>
+          </span>
         </label>
 
-        <div
-          className={`settings-form-grid settings-form-grid-fluid ${enabled ? '' : 'is-disabled'}`}
-          style={{ marginTop: 14 }}
-        >
-          <label>
-            <span>标记前窗口（秒）</span>
-            <input
-              type="number"
-              min={5}
-              max={600}
-              value={pre}
-              disabled={!enabled}
-              onChange={(event) => {
-                update(
-                  'defectPreWindowSeconds',
-                  clampSeconds(Number(event.target.value), 5, 600, 60),
-                );
-              }}
-            />
-          </label>
-          <label>
-            <span>标记后窗口（秒）</span>
-            <input
-              type="number"
-              min={0}
-              max={300}
-              value={post}
-              disabled={!enabled}
-              onChange={(event) => {
-                update(
-                  'defectPostWindowSeconds',
-                  clampSeconds(Number(event.target.value), 0, 300, 20),
-                );
-              }}
-            />
-          </label>
+        <div className={clsx(styles.fieldGrid, !enabled && styles.sectionDisabled)}>
+          <Field
+            label="标记前窗口"
+            type="number"
+            min={5}
+            max={600}
+            unit="秒"
+            value={pre}
+            disabled={!enabled}
+            onChange={(event) => {
+              update(
+                'defectPreWindowSeconds',
+                clampSeconds(Number(event.target.value), 5, 600, 60),
+              );
+            }}
+          />
+
+          <Field
+            label="标记后窗口"
+            type="number"
+            min={0}
+            max={300}
+            unit="秒"
+            value={post}
+            disabled={!enabled}
+            onChange={(event) => {
+              update(
+                'defectPostWindowSeconds',
+                clampSeconds(Number(event.target.value), 0, 300, 20),
+              );
+            }}
+          />
         </div>
       </div>
 
-      <div className={`steps-settings-section ${enabled ? '' : 'is-disabled'}`}>
-        <div className="profile-library-header">
+      <div className={clsx(styles.section, !enabled && styles.sectionDisabled)}>
+        <div className={styles.sectionHeader}>
           <div>
-            <h4 className="steps-settings-section-title">语义画像库</h4>
-            <p className="steps-settings-section-desc">
+            <h3 className={styles.sectionTitle}>语义画像库</h3>
+            <p className={styles.sectionDesc}>
               支持导入多个软件的 semantic-profile / qttimer 快照 /{' '}
-              <code>elements_selected_*.json</code>。每个软件一个 Tab；当前 Tab 为录制时生效的画像。
+              <code>elements_selected_*.json</code>。每个软件一个 Tab；当前 Tab
+              为录制时生效的画像。
             </p>
           </div>
-          <div className="defect-evidence-actions profile-library-actions">
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
+          <div className={styles.actionRow}>
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={!enabled || profileBusy}
               onClick={() => void handleImportProfile()}
             >
               导入画像…
-            </button>
-            <button
-              type="button"
-              className="btn btn-secondary btn-sm"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={!enabled || profileBusy || !profileDraft}
               onClick={() => setEditorOpen((open) => !open)}
             >
               {editorOpen ? '收起编辑' : '编辑当前'}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={!enabled || profileBusy || !activeId}
               onClick={() => void handleRemoveActive()}
             >
               移除当前
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={!enabled || profileBusy || library.length === 0}
               onClick={() => void handleClearAll()}
             >
               清空全部
-            </button>
+            </Button>
           </div>
         </div>
 
         {library.length > 0 ? (
-          <div className="profile-tabs" role="tablist" aria-label="已导入的语义画像">
+          <div className={styles.profileTabs} role="tablist" aria-label="已导入的语义画像">
             {library.map((item, index) => {
               const id = recordId(item, index);
               const selected = id === (activeId ?? recordId(library[0], 0));
@@ -397,36 +433,40 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
                   type="button"
                   role="tab"
                   aria-selected={selected}
-                  className={`profile-tab${selected ? ' is-active' : ''}`}
+                  className={clsx(styles.profileTab, selected && styles.profileTabActive)}
                   disabled={!enabled || profileBusy}
                   onClick={() => void handleSelectTab(id)}
                   title={tabSubLabel(item)}
                 >
-                  <span className="profile-tab-title">{tabLabel(item)}</span>
-                  <span className="profile-tab-meta">{tabSubLabel(item)}</span>
+                  <span className={styles.profileTabTitle}>{tabLabel(item)}</span>
+                  <span className={styles.profileTabMeta}>{tabSubLabel(item)}</span>
                 </button>
               );
             })}
           </div>
         ) : (
-          <p className="steps-settings-section-desc" style={{ marginTop: 4 }}>
+          <p className={styles.hintText}>
             尚未导入画像。导入后可在此以 Tab 管理多款被测软件。
           </p>
         )}
 
         {activeItem && profileDraft ? (
-          <div className="profile-active-summary" aria-label="当前生效画像">
-            <div className="profile-active-summary-main">
-              <strong>{profileDraft.name || profileDraft.profileId || activeItem.id}</strong>
-              <span className="profile-active-badge">当前生效</span>
+          <div className={styles.profileSummary} aria-label="当前生效画像">
+            <div className={styles.profileSummaryMain}>
+              <strong>
+                {profileDraft.name || profileDraft.profileId || activeItem.id}
+              </strong>
+              <Badge tone="success">当前生效</Badge>
             </div>
-            <div className="profile-active-summary-meta">
+            <div className={styles.profileSummaryMeta}>
               目标进程 {profileDraft.targetProcessName || '未指定'}
               {' · '}
               别名 {profileDraft.aliasRules?.length ?? 0}
               {' · '}
               场景{' '}
-              {Array.isArray(profileDraft.scenarioRules) ? profileDraft.scenarioRules.length : 0}
+              {Array.isArray(profileDraft.scenarioRules)
+                ? profileDraft.scenarioRules.length
+                : 0}
               {profileDraft.source ? ` · ${profileDraft.source}` : ''}
               {activeItem.sourceFileName ? ` · ${activeItem.sourceFileName}` : ''}
             </div>
@@ -443,14 +483,16 @@ export function DefectEvidenceSettingsPanel(props: DefectEvidenceSettingsPanelPr
           />
         ) : null}
 
-        {profileStatus ? <p className="defect-evidence-status">{profileStatus}</p> : null}
+        {profileStatus ? <p className={styles.hintText}>{profileStatus}</p> : null}
       </div>
 
-      <div className="steps-settings-section">
-        <p className="steps-settings-section-desc" style={{ marginBottom: 0 }}>
-          切换 Tab 会立即对应画像；录制开始时使用当前生效画像。请在设置页点击「保存并应用」以同步语义记录开关等配置。
+      <div className={styles.section}>
+        <p className={styles.hintText}>
+          切换 Tab 会立即对应画像；录制开始时使用当前生效画像。请在底部栏点击「保存并应用配置」以同步语义记录开关等配置。
         </p>
       </div>
+
+      {props.error ? <p className={styles.errorBanner}>{props.error}</p> : null}
     </section>
   );
 }

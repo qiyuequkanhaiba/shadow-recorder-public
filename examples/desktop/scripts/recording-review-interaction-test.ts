@@ -152,24 +152,8 @@ function main(): void {
   assert.doesNotMatch(repro, /保存成功提示出现成功/);
   assert.match(repro, /金额未刷新/);
 
-  const panelSource = readFileSync(
-    join(__dirname, '../src-react/features/evidence/RecordingReviewPanel.tsx'),
-    'utf8',
-  );
-  assert.match(panelSource, /记录与回顾/);
-  assert.match(panelSource, /getTestSessionOperations/);
-  assert.match(panelSource, /aria-expanded/);
-  assert.match(panelSource, /技术详情/);
-  assert.match(panelSource, /恢复自动判断/);
-  assert.match(panelSource, /recording-op-node/);
-  assert.doesNotMatch(panelSource, /defect-step-card/);
-
   const pageSource = readFileSync(join(__dirname, '../src-react/pages/RecorderPage.tsx'), 'utf8');
   assert.match(pageSource, /RecordingReviewPanel/);
-
-  const cssSource = readFileSync(join(__dirname, '../src-react/styles/evidence.css'), 'utf8');
-  assert.match(cssSource, /recording-op-node/);
-  assert.match(cssSource, /prefers-reduced-motion/);
 
   console.log('recording-review-interaction-test: ok');
 }

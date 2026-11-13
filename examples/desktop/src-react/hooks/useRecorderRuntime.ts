@@ -14,6 +14,7 @@ export type UseRecorderRuntimeInput = {
   config: RecorderConfigPayload;
   toUiErrorMessage: (error: unknown) => string;
   onError: (message: string) => void;
+  onConfigCommitted?: (committed: RecorderConfigPayload) => void;
 };
 
 export type UseRecorderRuntimeResult = {
@@ -80,6 +81,7 @@ export function useRecorderRuntime(input: UseRecorderRuntimeInput): UseRecorderR
     setIsPaused,
     setMetrics,
     setResourceUsage,
+    onConfigCommitted: input.onConfigCommitted,
   });
 
   const syncRuntimeState = useCallback(async (): Promise<void> => {

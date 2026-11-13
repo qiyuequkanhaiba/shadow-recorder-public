@@ -13,6 +13,7 @@ type UseRecorderRuntimeCommandsInput = {
   setIsPaused: Dispatch<SetStateAction<boolean>>;
   setMetrics: Dispatch<SetStateAction<RecorderMetrics | null>>;
   setResourceUsage: Dispatch<SetStateAction<RecorderResourceUsage | null>>;
+  onConfigCommitted?: (committed: RecorderConfigPayload) => void;
 };
 
 export type UseRecorderRuntimeCommandsResult = {
@@ -39,16 +40,20 @@ export function useRecorderRuntimeCommands(
   }, [input.setIsPaused, input.setMetrics]);
 
   const applyConfig = useCallback(async (): Promise<void> => {
-    await window.reqcaseShadowRecorder.setConfig(input.config);
-  }, [input.config]);
+    const committed = input.config;
+    await window.reqcaseShadowRecorder.setConfig(committed);
+    input.onConfigCommitted?.(committed);
+  }, [input.config, input.onConfigCommitted]);
 
   const startRecording = useCallback(async (): Promise<void> => {
-    await window.reqcaseShadowRecorder.setConfig(input.config);
+    const committed = input.config;
+    await window.reqcaseShadowRecorder.setConfig(committed);
+    input.onConfigCommitted?.(committed);
     await window.reqcaseShadowRecorder.start();
     input.setIsRecording(true);
     input.setIsPaused(false);
     input.setResourceUsage(null);
-  }, [input.config, input.setIsPaused, input.setIsRecording]);
+  }, [input.config, input.onConfigCommitted, input.setIsPaused, input.setIsRecording]);
 
   const stopRecording = useCallback(async (): Promise<void> => {
     await window.reqcaseShadowRecorder.stop();

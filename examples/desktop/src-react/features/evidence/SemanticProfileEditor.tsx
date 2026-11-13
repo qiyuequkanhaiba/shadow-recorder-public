@@ -1,5 +1,8 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
 
+import { Button, Field } from '../../ui';
+import styles from '../settings/SettingsSection.module.css';
+
 export type EditableAliasRule = {
   ruleId?: string | null;
   alias?: string | null;
@@ -128,72 +131,62 @@ export function SemanticProfileEditor(props: SemanticProfileEditorProps) {
   }
 
   return (
-    <div className="semantic-profile-editor" aria-label="语义画像编辑">
-      <div className="spe-meta-grid">
-        <label>
-          画像名称
-          <input
-            type="text"
-            disabled={locked}
-            value={asText(profile.name)}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => patchMeta('name', e.target.value)}
-          />
-        </label>
-        <label>
-          画像 ID
-          <input
-            type="text"
-            disabled={locked}
-            value={asText(profile.profileId)}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => patchMeta('profileId', e.target.value)}
-          />
-        </label>
-        <label>
-          目标进程
-          <input
-            type="text"
-            disabled={locked}
-            placeholder="例如 QtApp.exe / notepad.exe"
-            value={asText(profile.targetProcessName)}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              patchMeta('targetProcessName', e.target.value || null)
-            }
-          />
-        </label>
-        <label>
-          优先级
-          <input
-            type="number"
-            disabled={locked}
-            value={Number(profile.priority ?? 0)}
-            onChange={(e: ChangeEvent<HTMLInputElement>) =>
-              patchMeta('priority', Number(e.target.value) || 0)
-            }
-          />
-        </label>
-        <label className="spe-span-2">
-          描述
-          <input
-            type="text"
+    <div className={styles.editorContainer} aria-label="语义画像编辑">
+      <div className={styles.fieldGrid}>
+        <Field
+          label="画像名称"
+          disabled={locked}
+          value={asText(profile.name)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) => patchMeta('name', e.target.value)}
+        />
+        <Field
+          label="画像 ID"
+          disabled={locked}
+          value={asText(profile.profileId)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+            patchMeta('profileId', e.target.value)
+          }
+        />
+        <Field
+          label="目标进程"
+          disabled={locked}
+          placeholder="例如 QtApp.exe / notepad.exe"
+          value={asText(profile.targetProcessName)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+            patchMeta('targetProcessName', e.target.value || null)
+          }
+        />
+        <Field
+          label="优先级"
+          type="number"
+          disabled={locked}
+          value={Number(profile.priority ?? 0)}
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+            patchMeta('priority', Number(e.target.value) || 0)
+          }
+        />
+        <div className={styles.fieldSpan}>
+          <Field
+            label="描述"
             disabled={locked}
             value={asText(profile.description)}
             onChange={(e: ChangeEvent<HTMLInputElement>) =>
               patchMeta('description', e.target.value || null)
             }
           />
-        </label>
+        </div>
       </div>
 
-      <div className="spe-rules-toolbar">
-        <h4>
+      <div className={styles.editorToolbar}>
+        <div className={styles.editorToolbarTitle}>
           别名规则
-          <span className="spe-rules-count"> · {rules.length}</span>
+          <span className={styles.hintText}> · 共 {rules.length} 条</span>
           {filter.trim() ? (
-            <span className="spe-rules-count">（筛选后 {filtered.length}）</span>
+            <span className={styles.hintText}>（筛选后 {filtered.length} 条）</span>
           ) : null}
-        </h4>
+        </div>
         <input
-          className="spe-filter"
+          className={styles.editorSearch}
           type="search"
           placeholder="筛选别名、AutomationId、模块…"
           value={filter}
@@ -201,77 +194,68 @@ export function SemanticProfileEditor(props: SemanticProfileEditorProps) {
           onChange={(e) => setFilter(e.target.value)}
           aria-label="筛选别名规则"
         />
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          disabled={locked}
-          onClick={addRule}
-        >
+        <Button variant="ghost" size="sm" disabled={locked} onClick={addRule}>
           新增规则
-        </button>
+        </Button>
       </div>
 
-      <div className="spe-workbench">
-        <div className="spe-rule-list" role="listbox" aria-label="别名规则列表">
-          <div className="spe-rule-list-scroll">
-            {filtered.length === 0 ? (
-              <p className="spe-rule-list-empty">
-                {rules.length === 0 ? '暂无别名规则，可点击「新增规则」。' : '无匹配规则，请调整筛选条件。'}
-              </p>
-            ) : (
-              filtered.map(({ rule, index }) => {
-                const id = ruleKey(rule, index);
-                const selectedRow = selectedRuleId === id;
-                const autoId = rule.automationId || rule.matchAutomationId || rule.controlName || '—';
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="option"
-                    aria-selected={selectedRow}
-                    className={`spe-rule-row${selectedRow ? ' is-selected' : ''}`}
-                    disabled={locked}
-                    onClick={() => setSelectedRuleId(id)}
-                  >
-                    <span className="spe-rule-index">{index + 1}</span>
-                    <span className="spe-rule-main">
-                      <span className="spe-rule-alias">{rule.alias || '(无别名)'}</span>
-                      <span className="spe-rule-id">{autoId}</span>
-                      {rule.moduleName || rule.controlType || rule.actionType ? (
-                        <span className="spe-rule-module">
-                          {[rule.moduleName, rule.controlType, rule.actionType]
-                            .filter(Boolean)
-                            .join(' · ')}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
+      <div className={styles.editorWorkbench}>
+        <div className={styles.ruleList} role="listbox" aria-label="别名规则列表">
+          {filtered.length === 0 ? (
+            <p className={styles.hintText}>
+              {rules.length === 0
+                ? '暂无别名规则，可点击「新增规则」。'
+                : '无匹配规则，请调整筛选条件。'}
+            </p>
+          ) : (
+            filtered.map(({ rule, index }) => {
+              const id = ruleKey(rule, index);
+              const selectedRow = selectedRuleId === id;
+              const autoId =
+                rule.automationId || rule.matchAutomationId || rule.controlName || '—';
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  role="option"
+                  aria-selected={selectedRow}
+                  className={`${styles.ruleRow}${selectedRow ? ` ${styles.ruleRowSelected}` : ''}`}
+                  disabled={locked}
+                  onClick={() => setSelectedRuleId(id)}
+                >
+                  <span className={styles.ruleIndex}>{index + 1}</span>
+                  <span className={styles.ruleMain}>
+                    <span className={styles.ruleAlias}>{rule.alias || '(无别名)'}</span>
+                    <span className={styles.ruleId}>{autoId}</span>
+                  </span>
+                </button>
+              );
+            })
+          )}
         </div>
 
-        <div className="spe-rule-detail" aria-label="规则详情">
+        <div className={styles.ruleDetail} aria-label="规则详情">
           {selected ? (
             <>
-              <p className="spe-rule-detail-title">编辑选中规则</p>
-              <div className="spe-detail-grid">
-                <label className="spe-span-2">
-                  业务别名
-                  <input
-                    type="text"
+              <h4 className={styles.sectionTitle}>编辑选中规则</h4>
+              <div className={styles.fieldGrid}>
+                <div className={styles.fieldSpan}>
+                  <Field
+                    label="业务别名"
                     disabled={locked}
                     value={asText(selected.rule.alias)}
-                    onChange={(e) => patchRule(selected.index, { alias: e.target.value })}
+                    onChange={(e) =>
+                      patchRule(selected.index, { alias: e.target.value })
+                    }
                   />
-                </label>
-                <label className="spe-span-2">
-                  AutomationId
-                  <input
-                    type="text"
+                </div>
+                <div className={styles.fieldSpan}>
+                  <Field
+                    label="AutomationId"
                     disabled={locked}
-                    value={asText(selected.rule.automationId || selected.rule.matchAutomationId)}
+                    value={asText(
+                      selected.rule.automationId || selected.rule.matchAutomationId,
+                    )}
                     onChange={(e) =>
                       patchRule(selected.index, {
                         automationId: e.target.value,
@@ -279,93 +263,79 @@ export function SemanticProfileEditor(props: SemanticProfileEditorProps) {
                       })
                     }
                   />
-                </label>
-                <label>
-                  控件名
-                  <input
-                    type="text"
-                    disabled={locked}
-                    value={asText(selected.rule.controlName || selected.rule.matchControlName)}
-                    onChange={(e) =>
-                      patchRule(selected.index, {
-                        controlName: e.target.value,
-                        matchControlName: e.target.value,
-                      })
-                    }
-                  />
-                </label>
-                <label>
-                  控件类型
-                  <input
-                    type="text"
-                    disabled={locked}
-                    value={asText(selected.rule.controlType)}
-                    onChange={(e) => patchRule(selected.index, { controlType: e.target.value })}
-                  />
-                </label>
-                <label>
-                  动作
-                  <input
-                    type="text"
-                    disabled={locked}
-                    value={asText(selected.rule.actionType)}
-                    onChange={(e) => patchRule(selected.index, { actionType: e.target.value })}
-                  />
-                </label>
-                <label>
-                  模块
-                  <input
-                    type="text"
-                    disabled={locked}
-                    value={asText(selected.rule.moduleName)}
-                    onChange={(e) => patchRule(selected.index, { moduleName: e.target.value })}
-                  />
-                </label>
-                <label>
-                  优先级
-                  <input
-                    type="number"
-                    disabled={locked}
-                    value={Number(selected.rule.priority ?? 0)}
-                    onChange={(e) =>
-                      patchRule(selected.index, { priority: Number(e.target.value) || 0 })
-                    }
-                  />
-                </label>
+                </div>
+                <Field
+                  label="控件名"
+                  disabled={locked}
+                  value={asText(
+                    selected.rule.controlName || selected.rule.matchControlName,
+                  )}
+                  onChange={(e) =>
+                    patchRule(selected.index, { controlName: e.target.value })
+                  }
+                />
+                <Field
+                  label="控件类型"
+                  disabled={locked}
+                  value={asText(selected.rule.controlType)}
+                  onChange={(e) =>
+                    patchRule(selected.index, { controlType: e.target.value })
+                  }
+                />
+                <Field
+                  label="动作"
+                  disabled={locked}
+                  value={asText(selected.rule.actionType)}
+                  onChange={(e) =>
+                    patchRule(selected.index, { actionType: e.target.value })
+                  }
+                />
+                <Field
+                  label="模块"
+                  disabled={locked}
+                  value={asText(selected.rule.moduleName)}
+                  onChange={(e) =>
+                    patchRule(selected.index, { moduleName: e.target.value })
+                  }
+                />
+                <Field
+                  label="优先级"
+                  type="number"
+                  disabled={locked}
+                  value={Number(selected.rule.priority ?? 0)}
+                  onChange={(e) =>
+                    patchRule(selected.index, {
+                      priority: Number(e.target.value) || 0,
+                    })
+                  }
+                />
               </div>
-              <div className="spe-detail-actions">
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
+              <div className={styles.actionRow}>
+                <Button
+                  variant="danger"
+                  size="sm"
                   disabled={locked}
                   onClick={() => removeRule(selected.index)}
                 >
                   删除此规则
-                </button>
+                </Button>
               </div>
             </>
           ) : (
-            <p className="spe-rule-detail-empty">
-              在左侧列表中选择一条规则进行编辑。
-              <br />
-              大量规则时可先用上方筛选定位。
+            <p className={styles.hintText}>
+              在左侧列表中选择一条规则进行编辑。大量规则时可先用上方筛选定位。
             </p>
           )}
         </div>
       </div>
 
-      <div className="spe-footer">
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
-          disabled={locked}
-          onClick={onSave}
-        >
+      <div className={styles.editorFooter}>
+        <Button variant="primary" size="sm" disabled={locked} onClick={onSave}>
           保存画像到配置
-        </button>
-        <p className="spe-footer-hint">
+        </Button>
+        <span className={styles.hintText}>
           保存后立即生效并写入本地配置；重启后自动恢复。建议填写目标进程名以便优先进程绑定。
-        </p>
+        </span>
       </div>
     </div>
   );

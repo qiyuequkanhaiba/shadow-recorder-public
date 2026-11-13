@@ -481,7 +481,7 @@ function run(): void {
   assert.equal(shouldHideScreenshotUiFromCapture(false, false), false);
   assert.match(read('src-react/lib/i18n.ts'), /截图界面不进录像/);
   assert.match(read('src-react/lib/i18n.ts'), /用远程桌面时，如果看不到截图框，请关掉/);
-  assert.match(read('src-react/components/RecorderControlPanel.tsx'), /hideScreenshotUiFromCapture !== false/);
+  assert.match(read('src-react/features/settings/ShortcutsSettingsSection.tsx'), /hideScreenshotUiFromCapture !== false/);
   const pinStart = session.indexOf('function openPin');
   const pinEnd = session.indexOf('export async function copyPinnedScreenshot');
   assert.ok(pinStart >= 0 && pinEnd > pinStart);

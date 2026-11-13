@@ -256,12 +256,14 @@ try {
   $benchmarkResultMd = Join-Path $benchmarkArtifactsDir "quality-gate-benchmark-compare-result.md"
   New-Item -ItemType Directory -Path $benchmarkArtifactsDir -Force | Out-Null
 
+  Invoke-NpmScript "check:overlay-theme"
   Invoke-NpmScript "typecheck:electron"
   Invoke-NpmScript "typecheck:react"
   Invoke-NpmScript "test:floating-toolbar"
   Invoke-NpmScript "test:metrics-stream"
   Invoke-NpmScript "test:quick-defect-fallback"
   Invoke-NpmScript "test:recorder-page-bindings"
+  Invoke-NpmScript "test:ui-behavior"
   Invoke-NpmScript "test:tuning-advisor-commands"
   Invoke-NpmScript "test:recorder-bootstrap-bindings"
   Invoke-NpmScript "test:recorder-bootstrap-loader"

@@ -11,6 +11,7 @@ import type {
 import { RecorderRootErrorBoundary } from './components/RecorderRootErrorBoundary';
 import { RecorderPage } from './pages/RecorderPage';
 import './styles.css';
+import './ui/tokens.css';
 import { initTheme } from './lib/theme';
 
 window.addEventListener('dragover', (event) => {
@@ -32,8 +33,8 @@ function createFallbackRecorderBridge(): Window['reqcaseShadowRecorder'] {
   const demoSession: TestSessionState = {
     schemaVersion: 1,
     kind: 'reqcase.test-session',
-    sessionId: 'session-cinema-demo',
-    name: 'Screen Studio Cinema Flow 验证会话',
+    sessionId: 'session-workbench-demo',
+    name: '桌面工作台回放验证会话',
     status: 'stopped',
     startedAtMs: baseTime,
     updatedAtMs: baseTime + 20000,
@@ -95,13 +96,15 @@ function createFallbackRecorderBridge(): Window['reqcaseShadowRecorder'] {
     canvas.height = 1080;
     const ctx = canvas.getContext('2d');
     if (ctx) {
+      const rootStyle = getComputedStyle(document.documentElement);
+      const token = (name: string) => rootStyle.getPropertyValue(name).trim();
       const grad = ctx.createLinearGradient(0, 0, 1920, 1080);
-      grad.addColorStop(0, '#0c1222');
-      grad.addColorStop(1, '#1e293b');
+      grad.addColorStop(0, token('--bg-canvas'));
+      grad.addColorStop(1, token('--bg-surface-2'));
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, 1920, 1080);
 
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.strokeStyle = token('--border-subtle');
       ctx.lineWidth = 1;
       for (let x = 0; x < 1920; x += 80) {
         ctx.beginPath();
@@ -116,36 +119,36 @@ function createFallbackRecorderBridge(): Window['reqcaseShadowRecorder'] {
         ctx.stroke();
       }
 
-      ctx.fillStyle = '#38bdf8';
+      ctx.fillStyle = token('--accent-hover');
       ctx.font = 'bold 36px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-      ctx.fillText('影子录制器 · Screen Studio Cinema 工作台回放验证', 120, 140);
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillText('影子录制器 · 桌面工作台回放验证', 120, 140);
+      ctx.fillStyle = token('--text-secondary');
       ctx.font = '20px monospace';
       ctx.fillText('1920 × 1080 · 14fps · NVENC H.264 · WGC 硬件捕获', 120, 190);
 
-      ctx.fillStyle = '#0f172a';
-      ctx.strokeStyle = '#334155';
+      ctx.fillStyle = token('--bg-surface-1');
+      ctx.strokeStyle = token('--border-default');
       ctx.lineWidth = 2;
       ctx.fillRect(400, 260, 1120, 620);
       ctx.strokeRect(400, 260, 1120, 620);
 
-      ctx.fillStyle = '#1e293b';
+      ctx.fillStyle = token('--bg-surface-2');
       ctx.fillRect(400, 260, 1120, 48);
-      ctx.fillStyle = '#e2e8f0';
+      ctx.fillStyle = token('--text-primary');
       ctx.font = 'bold 16px sans-serif';
       ctx.fillText('业务客户端 - 统一身份认证', 420, 292);
 
-      ctx.fillStyle = '#1e293b';
-      ctx.strokeStyle = '#475569';
+      ctx.fillStyle = token('--bg-surface-2');
+      ctx.strokeStyle = token('--border-strong');
       ctx.fillRect(480, 360, 360, 46);
       ctx.strokeRect(480, 360, 360, 46);
-      ctx.fillStyle = '#94a3b8';
+      ctx.fillStyle = token('--text-secondary');
       ctx.font = '16px sans-serif';
       ctx.fillText('账号: admin_test', 496, 390);
 
-      ctx.fillStyle = '#0284c7';
+      ctx.fillStyle = token('--accent-default');
       ctx.fillRect(480, 520, 200, 50);
-      ctx.fillStyle = '#ffffff';
+      ctx.fillStyle = token('--text-on-accent');
       ctx.font = 'bold 18px sans-serif';
       ctx.fillText('登录系统', 545, 552);
 

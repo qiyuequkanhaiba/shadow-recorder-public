@@ -1,0 +1,232 @@
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Typography */
+  --font-sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --font-mono: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+
+  /* Spacing (multiples of 4 and 8) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+
+  /* Radii (6 and 10) */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+
+  /* Radii aliases (scale stays 6 / 10; full is only for dots and pills) */
+  --radius-lg: var(--radius-md);
+  --radius-full: 9999px;
+  --radius-pill: var(--radius-full);
+
+  /* Type aliases */
+  --text-base: var(--text-md);
+  --leading-normal: 1.5;
+
+  /* Control heights */
+  --control-h: 36px;
+  --control-h-sm: 32px;
+
+  /* Motion (single 150ms duration) */
+  --duration-fast: 150ms;
+  --duration: var(--duration-fast);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: var(--ease-standard);
+  --transition-fast: color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    opacity var(--duration-fast) var(--ease-standard);
+  --transition: var(--transition-fast), transform var(--duration-fast) var(--ease-standard);
+
+  /* Surfaces (Dark) */
+  --bg-app: #0d1016;
+  --bg-canvas: #090b10;
+  --bg-surface-1: #131720;
+  --bg-surface-2: #191f2b;
+  --bg-surface-3: #212838;
+  --bg-elevated: #1c2230;
+  --bg-overlay: rgba(9, 11, 16, 0.78);
+  --bg-glass: rgba(19, 23, 32, 0.88);
+  --bg-video: #05070a;
+
+  /* Controls (Dark) */
+  --control-bg: #181e29;
+  --control-bg-hover: #212938;
+  --control-bg-active: #293244;
+  --control-bg-disabled: #141821;
+  --control-input-bg: #0f131b;
+  --control-input-hover: #141923;
+
+  /* Borders (Dark) */
+  --border-subtle: #222938;
+  --border-default: #2c3548;
+  --border-strong: #3b4760;
+  --border-focus: #3b82f6;
+
+  /* Text Hierarchy (Dark) */
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --text-disabled: #475569;
+  --text-on-accent: #ffffff;
+  --text-inverse: #0f172a;
+  --text-on-glass: #f8fafc;
+  --text-on-glass-secondary: #e2e8f0;
+  --text-on-glass-muted: #94a3b8;
+  --border-on-glass: rgba(255, 255, 255, 0.14);
+
+  /* Single Accent (Blue) */
+  --accent-default: #2563eb;
+  --accent-hover: #3b82f6;
+  --accent-active: #1d4ed8;
+  --accent-subtle: rgba(59, 130, 246, 0.14);
+  --accent-border: rgba(59, 130, 246, 0.42);
+  --focus-ring: rgba(59, 130, 246, 0.36);
+
+  /* Semantic Status (Green / Amber / Red only for Recording / Paused / Error & Delete) */
+  --status-ok: #22c55e;
+  --status-ok-bg: rgba(34, 197, 94, 0.14);
+  --status-ok-border: rgba(34, 197, 94, 0.4);
+
+  --status-warn: #f59e0b;
+  --status-warn-bg: rgba(245, 158, 11, 0.14);
+  --status-warn-border: rgba(245, 158, 11, 0.4);
+
+  --status-danger: #ef4444;
+  --status-danger-hover: #dc2626;
+  --status-danger-bg: rgba(239, 68, 68, 0.14);
+  --status-danger-border: rgba(239, 68, 68, 0.42);
+
+  --status-neutral: #64748b;
+  --status-neutral-bg: rgba(100, 116, 139, 0.16);
+  --status-neutral-border: rgba(100, 116, 139, 0.36);
+
+  /* Shadows */
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.28);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.42);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.56);
+
+  /* Timeline & Stage Tracks */
+  --track-video-bg: rgba(59, 130, 246, 0.2);
+  --track-video-border: rgba(59, 130, 246, 0.48);
+  --track-selection-bg: rgba(59, 130, 246, 0.18);
+  --track-selection-border: #3b82f6;
+  --track-playhead: #f1f5f9;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  /* Surfaces (Light) */
+  --bg-app: #f4f6f9;
+  --bg-canvas: #eef1f6;
+  --bg-surface-1: #ffffff;
+  --bg-surface-2: #f8fafc;
+  --bg-surface-3: #f1f5f9;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgba(15, 23, 42, 0.45);
+  --bg-glass: rgba(255, 255, 255, 0.9);
+  --bg-video: #090b10;
+
+  /* Controls (Light) */
+  --control-bg: #f1f5f9;
+  --control-bg-hover: #e2e8f0;
+  --control-bg-active: #cbd5e1;
+  --control-bg-disabled: #f8fafc;
+  --control-input-bg: #ffffff;
+  --control-input-hover: #f8fafc;
+
+  /* Borders (Light) */
+  --border-subtle: #e2e8f0;
+  --border-default: #cbd5e1;
+  --border-strong: #94a3b8;
+  --border-focus: #2563eb;
+
+  /* Text Hierarchy (Light) */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #64748b;
+  --text-disabled: #94a3b8;
+  --text-on-accent: #ffffff;
+  --text-inverse: #f8fafc;
+  --text-on-glass: #f8fafc;
+  --text-on-glass-secondary: #e2e8f0;
+  --text-on-glass-muted: #94a3b8;
+  --border-on-glass: rgba(255, 255, 255, 0.14);
+
+  /* Single Accent (Blue) */
+  --accent-default: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-active: #1e40af;
+  --accent-subtle: rgba(37, 99, 235, 0.1);
+  --accent-border: rgba(37, 99, 235, 0.36);
+  --focus-ring: rgba(37, 99, 235, 0.28);
+
+  /* Semantic Status (Green / Amber / Red) */
+  --status-ok: #16a34a;
+  --status-ok-bg: rgba(22, 163, 74, 0.1);
+  --status-ok-border: rgba(22, 163, 74, 0.35);
+
+  --status-warn: #d97706;
+  --status-warn-bg: rgba(217, 119, 6, 0.12);
+  --status-warn-border: rgba(217, 119, 6, 0.36);
+
+  --status-danger: #dc2626;
+  --status-danger-hover: #b91c1c;
+  --status-danger-bg: rgba(220, 38, 38, 0.1);
+  --status-danger-border: rgba(220, 38, 38, 0.36);
+
+  --status-neutral: #64748b;
+  --status-neutral-bg: rgba(100, 116, 139, 0.12);
+  --status-neutral-border: rgba(100, 116, 139, 0.3);
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 6px 18px rgba(15, 23, 42, 0.12);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.18);
+
+  /* Timeline & Stage Tracks */
+  --track-video-bg: rgba(37, 99, 235, 0.14);
+  --track-video-border: rgba(37, 99, 235, 0.42);
+  --track-selection-bg: rgba(37, 99, 235, 0.14);
+  --track-selection-border: #2563eb;
+  --track-playhead: #0f172a;
+}
+
+[data-ui-scope] {
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+  box-sizing: border-box;
+}
+
+[data-ui-scope] *,
+[data-ui-scope] *::before,
+[data-ui-scope] *::after {
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-ui-scope],
+  [data-ui-scope] *,
+  [data-ui-scope] *::before,
+  [data-ui-scope] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

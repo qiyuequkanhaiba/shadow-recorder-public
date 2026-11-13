@@ -58,19 +58,13 @@ function testCreateTuningAdvisorInput(): void {
 function testRecorderPageMountsRecordingReviewPanel(): void {
   const source = readFileSync(new URL('../src-react/pages/RecorderPage.tsx', import.meta.url), 'utf8');
 
-  assert.match(
-    source,
-    /activeTab === 'evidence'\s*\?\s*\(\s*<section[\s\S]*id="panel-evidence"[\s\S]*aria-labelledby="tab-evidence"[\s\S]*<HistorySessionPanel/,
-  );
+  assert.ok(source.includes('id="panel-evidence"'));
+  assert.ok(source.includes('aria-labelledby="tab-evidence"'));
+  assert.ok(source.includes('<HistorySessionPanel'));
+  assert.ok(source.includes('<RecordingReviewPanel'));
   assert.ok(source.includes('const historySession = dashboard.selectedSession ?? dashboard.activeSession'));
   assert.ok(source.includes('session={historySession}'));
-  assert.ok(!source.includes('enabled={semanticRecordingEnabled}'));
-  assert.ok(source.includes('onNotice={showToast}'));
-  assert.ok(source.includes('onMetaSaved={() => { void dashboard.refresh(); }}'));
-  assert.ok(source.includes('onClearEvents'));
-  assert.ok(source.includes('onNotice={showToast}'));
   assert.ok(source.includes('dashboard.deleteSessions'));
-  assert.ok(source.includes('删除所选'));
 }
 function testDefectEvidenceBridgeIsWired(): void {
   const panelSource = readFileSync(new URL('../src-react/features/evidence/RecordingReviewPanel.tsx', import.meta.url), 'utf8');

@@ -2,6 +2,7 @@ import {
   scaleFloatingToolbarCoreSize,
   type FloatingToolbarVisualState,
 } from './floating-toolbar-layout';
+import { OVERLAY_THEME_CSS } from './generated/overlay-theme';
 
 function createIconSvg(paths: string, extraClass = '', filled = false): string {
   const className = extraClass ? `toolbar-icon ${extraClass}` : 'toolbar-icon';
@@ -80,6 +81,7 @@ export function createFloatingToolbarHtml(input: {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="light" />
     <style>
+${OVERLAY_THEME_CSS}
       :root {
         color-scheme: only light;
       }
@@ -114,16 +116,16 @@ export function createFloatingToolbarHtml(input: {
         --glass-base-hover: rgba(12, 17, 28, 0.76);
         --glass-specular: rgba(255, 255, 255, 0.16);
         --glass-rim: rgba(255, 255, 255, 0.08);
-        --ink: #f8fafc;
-        --ink-secondary: #e2e8f0;
-        --ink-tertiary: #64748b;
-        --ink-divider: rgba(255, 255, 255, 0.14);
-        --rec: #22c55e;
-        --pause: #f59e0b;
-        --idle: #64748b;
-        --stop: #f87171;
-        --flag: #ef4444;
-        --flag-bg: rgba(239, 68, 68, 0.24);
+        --ink: var(--text-on-glass, #f8fafc);
+        --ink-secondary: var(--text-on-glass-secondary, #e2e8f0);
+        --ink-tertiary: var(--text-on-glass-muted, #94a3b8);
+        --ink-divider: var(--border-on-glass, rgba(255, 255, 255, 0.14));
+        --rec: var(--status-ok, #22c55e);
+        --pause: var(--status-warn, #f59e0b);
+        --idle: var(--status-neutral, #64748b);
+        --stop: var(--status-danger, #ef4444);
+        --flag: var(--status-danger, #ef4444);
+        --flag-bg: var(--status-danger-bg, rgba(239, 68, 68, 0.24));
       }
       * { box-sizing: border-box; }
       html, body {
